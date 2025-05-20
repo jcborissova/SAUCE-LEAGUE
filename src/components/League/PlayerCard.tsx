@@ -29,29 +29,38 @@ const PlayerCard: React.FC<Props> = ({ player, onDelete, onDoubleClick }) => {
     <div
       ref={setNodeRef}
       style={style}
-      {...listeners}
       {...attributes}
-      onDoubleClick={onDoubleClick}
       className="relative bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 text-center text-sm sm:text-base font-medium text-blue-950 cursor-move hover:shadow-md transition w-full"
+      onDoubleClick={onDoubleClick}
     >
+      {/* Botón Eliminar */}
       {onDelete && (
-        <button
-          onClick={() => onDelete(player.id)}
-          className="absolute top-1 right-1 text-gray-400 hover:text-red-600"
-        >
-          <XMarkIcon className="w-5 h-5" />
-        </button>
+        <div className="absolute top-1 right-1 z-10">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(player.id);
+            }}
+            className="text-gray-400 hover:text-red-600"
+          >
+            <XMarkIcon className="w-5 h-5 pointer-events-none" />
+          </button>
+        </div>
       )}
 
-      <p className="truncate font-semibold text-blue-950">{player.name}</p>
-      {player.isGuest && (
-        <p className="text-xs text-gray-500 font-normal">(Invitado)</p>
-      )}
-      {arrivalTimeFormatted && (
-        <p className="text-xs text-gray-400 font-normal mt-1">
-          🕒 {arrivalTimeFormatted}
-        </p>
-      )}
+      {/* Contenido */}
+      <div {...listeners} className="pointer-events-auto">
+        <p className="truncate font-semibold text-blue-950">{player.name}</p>
+        {player.isGuest && (
+          <p className="text-xs text-gray-500 font-normal">(Invitado)</p>
+        )}
+        {arrivalTimeFormatted && (
+          <p className="text-xs text-gray-400 font-normal mt-1">
+            🕒 {arrivalTimeFormatted}
+          </p>
+        )}
+      </div>
     </div>
   );
 };

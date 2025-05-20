@@ -21,7 +21,7 @@ const LeagueBoard: React.FC<Props> = ({ id, team, label, onRemove }) => {
       }`}
     >
       <h4 className="font-bold mb-3">{label}</h4>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {team.map((p) => (
           <PlayerCard key={p.id} player={p} onDelete={onRemove} />
         ))}

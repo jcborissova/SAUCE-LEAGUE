@@ -23,7 +23,7 @@ const TeamList: React.FC<Props> = ({ players }) => {
           <h4 className="font-semibold text-blue-950">
             🏀 Quinteto {index + 1}
           </h4>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             {team.map((player) => (
               <PlayerCard key={player.id} player={player} />
             ))}

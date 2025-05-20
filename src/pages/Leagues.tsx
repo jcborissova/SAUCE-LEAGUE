@@ -65,7 +65,7 @@ const Leagues: React.FC = () => {
           <section className="bg-white p-4 sm:p-6 rounded-xl shadow-md">
             <h3 className="text-lg font-semibold text-blue-950 mb-3">Jugadores de la Liga</h3>
             <div className="max-h-[300px] overflow-y-auto pr-1 custom-scroll">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                 {available.map((p) => (
                   <PlayerCard
                     key={p.id}
