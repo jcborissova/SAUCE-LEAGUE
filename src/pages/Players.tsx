@@ -1,35 +1,25 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import PlayerCard from "../components/PlayerCard";
 import PlayerTable from "../components/PlayerTable";
 import AddPlayerModal from "../components/AddPlayerModal";
 import { Squares2X2Icon, TableCellsIcon } from "@heroicons/react/24/solid";
-
-interface Player {
-  id: number;
-  name: string;
-  number: number;
-  description: string;
-  photo?: string;
-}
+import type { Player, PlayerFormState } from "../types/player";
 
 const Players: React.FC = () => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
-
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"add" | "edit">("add");
   const [viewPlayer, setViewPlayer] = useState<Player | null>(null);
+  const [editingPlayerId, setEditingPlayerId] = useState<number | null>(null);
 
-  const [newPlayer, setNewPlayer] = useState<{
-    id: number;
-    name: string;
-    number: string;
-    description: string;
-    photo: string | File;
-  }>({
+  const [newPlayer, setNewPlayer] = useState<PlayerFormState>({
     id: 0,
-    name: "",
-    number: "",
+    names: "",
+    lastnames: "",
+    backJerseyName: "",
+    jerseyNumber: "",
+    cedula: "",
     description: "",
     photo: "",
   });
@@ -42,26 +32,58 @@ const Players: React.FC = () => {
       reader.readAsDataURL(file);
     });
 
+  const fetchPlayers = async () => {
+    const res = await fetch("http://localhost:3001/api/players");
+    const data = await res.json();
+    setPlayers(data);
+  };
+
+  useEffect(() => {
+    fetchPlayers();
+  }, []);
+
   const openAddModal = () => {
-    setNewPlayer({ id: 0, name: "", number: "", description: "", photo: "" });
+    setNewPlayer({
+      id: 0,
+      names: "",
+      lastnames: "",
+      backJerseyName: "",
+      jerseyNumber: "",
+      cedula: "",
+      description: "",
+      photo: "",
+    });
     setModalMode("add");
+    setEditingPlayerId(null);
     setModalOpen(true);
   };
 
   const openEditModal = (player: Player) => {
     setNewPlayer({
       id: player.id,
-      name: player.name,
-      number: player.number.toString(),
+      names: player.names,
+      lastnames: player.lastnames,
+      backJerseyName: player.backJerseyName,
+      jerseyNumber: player.jerseyNumber.toString(),
+      cedula: player.cedula,
       description: player.description,
       photo: player.photo || "",
     });
+    setEditingPlayerId(player.id);
     setModalMode("edit");
     setModalOpen(true);
   };
 
   const handleAddOrEditPlayer = async () => {
-    if (!newPlayer.name || !newPlayer.number) return;
+    if (
+      !newPlayer.names.trim() ||
+      !newPlayer.lastnames.trim() ||
+      !newPlayer.backJerseyName.trim() ||
+      !newPlayer.jerseyNumber.trim() ||
+      !newPlayer.cedula.trim()
+    ) {
+      return;
+    }
 
     let photoToSave = "";
     if (typeof newPlayer.photo === "string") {
@@ -70,26 +92,49 @@ const Players: React.FC = () => {
       photoToSave = await fileToBase64(newPlayer.photo);
     }
 
-    const newPlayerData: Player = {
-      id: newPlayer.id || Date.now(),
-      name: newPlayer.name,
-      number: parseInt(newPlayer.number),
+    const payload = {
+      names: newPlayer.names,
+      lastnames: newPlayer.lastnames,
+      backJerseyName: newPlayer.backJerseyName,
+      jerseyNumber: parseInt(newPlayer.jerseyNumber),
+      cedula: newPlayer.cedula,
       description: newPlayer.description,
       photo: photoToSave,
     };
 
     if (modalMode === "add") {
-      setPlayers([...players, newPlayerData]);
-    } else {
-      setPlayers(players.map((p) => (p.id === newPlayerData.id ? newPlayerData : p)));
+      await fetch("http://localhost:3001/api/players", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } else if (editingPlayerId) {
+      await fetch(`http://localhost:3001/api/players/${editingPlayerId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
     }
 
     setModalOpen(false);
-    setNewPlayer({ id: 0, name: "", number: "", description: "", photo: "" });
+    setNewPlayer({
+      id: 0,
+      names: "",
+      lastnames: "",
+      backJerseyName: "",
+      jerseyNumber: "",
+      cedula: "",
+      description: "",
+      photo: "",
+    });
+    fetchPlayers();
   };
 
-  const handleDeletePlayer = (id: number) => {
-    setPlayers(players.filter((player) => player.id !== id));
+  const handleDeletePlayer = async (id: number) => {
+    await fetch(`http://localhost:3001/api/players/${id}`, {
+      method: "DELETE",
+    });
+    fetchPlayers();
   };
 
   return (
@@ -128,10 +173,10 @@ const Players: React.FC = () => {
               />
             )}
             <h2 className="text-xl font-bold text-blue-950 mb-1">
-              {viewPlayer.name}
+              {viewPlayer.names} {viewPlayer.lastnames}
             </h2>
             <p className="text-sm text-gray-600 mb-2">
-              Jersey #{viewPlayer.number}
+              Jersey #{viewPlayer.jerseyNumber}
             </p>
             <p className="text-gray-500 text-sm mb-4">
               {viewPlayer.description}

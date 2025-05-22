@@ -1,13 +1,6 @@
 import React from "react";
 import { TrashIcon } from "@heroicons/react/24/solid";
-
-interface Player {
-  id: number;
-  name: string;
-  number: number;
-  description: string;
-  photo?: string;
-}
+import type { Player } from "../types/player"; // Asegúrate de tener esta interfaz compartida
 
 interface PlayerCardProps {
   player: Player;
@@ -21,22 +14,26 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, onDelete }) => {
         {player.photo ? (
           <img
             src={player.photo}
-            alt={player.name}
+            alt={`${player.names} ${player.lastnames}`}
             className="w-12 h-12 rounded-full object-cover border border-gray-300"
           />
         ) : (
           <div className="w-12 h-12 bg-red-900 text-white rounded-full flex items-center justify-center font-bold">
-            #{player.number}
+            #{player.jerseyNumber}
           </div>
         )}
         <div>
-          <h3 className="text-lg font-bold">{player.name}</h3>
-          <p className="text-gray-600 text-sm">{player.description}</p>
+          <h3 className="text-lg font-bold">
+            {player.names} {player.lastnames}
+          </h3>
+          <p className="text-sm text-gray-600">{player.description}</p>
+          <p className="text-xs text-gray-400">Cédula: {player.cedula}</p>
         </div>
       </div>
       <button
         onClick={() => onDelete(player.id)}
         className="text-red-600 hover:text-red-800 flex items-center gap-1 transition"
+        title="Eliminar jugador"
       >
         <TrashIcon className="h-5 w-5" />
       </button>

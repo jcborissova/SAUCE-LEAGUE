@@ -3,8 +3,14 @@ import type { Player } from "../../types/player";
 import { useDraggable } from "@dnd-kit/core";
 import { XMarkIcon } from "@heroicons/react/24/solid";
 
+// Extendemos Player con propiedades específicas para la liga
+type LeaguePlayer = Player & {
+  arrivalTime?: number;
+  isGuest?: boolean;
+};
+
 interface Props {
-  player: Player;
+  player: LeaguePlayer;
   onDelete?: (id: number) => void;
   onDoubleClick?: () => void;
 }
@@ -51,7 +57,9 @@ const PlayerCard: React.FC<Props> = ({ player, onDelete, onDoubleClick }) => {
 
       {/* Contenido */}
       <div {...listeners} className="pointer-events-auto">
-        <p className="truncate font-semibold text-blue-950">{player.name}</p>
+        <p className="truncate font-semibold text-blue-950">
+          {player.names} {player.lastnames}
+        </p>
         {player.isGuest && (
           <p className="text-xs text-gray-500 font-normal">(Invitado)</p>
         )}

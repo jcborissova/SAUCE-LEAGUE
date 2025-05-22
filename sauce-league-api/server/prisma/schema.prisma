@@ -1,0 +1,22 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Player {
+  id              Int      @id @default(autoincrement())
+  names           String
+  lastnames       String
+  backJerseyName  String
+  jerseyNumber    Int
+  cedula          String
+  description     String
+  photo           String
+  createdAt       DateTime @default(now())
+}
+

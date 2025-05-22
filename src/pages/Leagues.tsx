@@ -1,5 +1,4 @@
-// Leagues.tsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import type { Player } from "../types/player";
 import LeagueBoard from "../components/League/LeagueBoard";
 import GuestInput from "../components/League/GuestInput";
@@ -8,24 +7,32 @@ import PlayerCard from "../components/League/PlayerCard";
 import GameModal from "../components/League/GameModal";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 
-const leagueRoster: Player[] = [
-  "Brian Del Pilar", "Jeremy Devers", "Xiolin Ramírez", "Angel Martinez", "Richard Almengo",
-  "Manuel Medina", "Geny Fernandez", "Rafael Almonte", "Juan Carlos Borissova", "Victor Veloz",
-  "Jhoan Santos", "Jesús Aquino", "Angel Mojica", "Diego Paula", "Cristopher Herasme",
-  "Manny Alexander", "Darwin Capellan", "Angel Rafael López Durán", "Alberto Lorenzo",
-  "Carlos Lorenzo", "Emmanuel Guillen Beltran", "Hector Angel Mateo", "Moises Ramirez",
-  "Danilo Soto Araujo", "Carlos Susanna"
-].map((name, i) => ({
-  id: i + 1,
-  name,
-}));
+// Solo en este componente:
+type LeaguePlayer = Player & {
+  arrivalTime?: number;
+  isGuest?: boolean;
+};
 
 const Leagues: React.FC = () => {
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [available, setAvailable] = useState<Player[]>(leagueRoster);
+  const [players, setPlayers] = useState<LeaguePlayer[]>([]);
+  const [available, setAvailable] = useState<LeaguePlayer[]>([]);
   const [showModal, setShowModal] = useState(false);
-  const [gameQueue, setGameQueue] = useState<Player[][]>([]);
-  const [winnerStreak, setWinnerStreak] = useState<{ team: Player[]; wins: number } | null>(null);
+  const [gameQueue, setGameQueue] = useState<LeaguePlayer[][]>([]);
+  const [winnerStreak, setWinnerStreak] = useState<{ team: LeaguePlayer[]; wins: number } | null>(null);
+
+  useEffect(() => {
+    const fetchPlayers = async () => {
+      try {
+        const res = await fetch("http://localhost:3001/api/players");
+        const data = await res.json();
+        console.log(data);
+        setAvailable(data);
+      } catch (err) {
+        console.error("Failed to fetch players:", err);
+      }
+    };
+    fetchPlayers();
+  }, []);
 
   const handleAddGuest = (player: Player) => {
     const arrival = Date.now();
@@ -50,7 +57,7 @@ const Leagues: React.FC = () => {
 
   const generateGames = () => {
     const ordered = [...players].sort((a, b) => (a.arrivalTime ?? 0) - (b.arrivalTime ?? 0));
-    const groups: Player[][] = [];
+    const groups: LeaguePlayer[][] = [];
     for (let i = 0; i < ordered.length; i += 5) {
       if (i + 5 <= ordered.length) {
         groups.push(ordered.slice(i, i + 5));
@@ -60,7 +67,7 @@ const Leagues: React.FC = () => {
     setShowModal(true);
   };
 
-  const handleGameEnd = (winningTeam: Player[] | null) => {
+  const handleGameEnd = (winningTeam: LeaguePlayer[] | null) => {
     const newQueue = [...gameQueue];
     if (
       winningTeam &&
@@ -69,10 +76,9 @@ const Leagues: React.FC = () => {
     ) {
       const newWins = winnerStreak.wins + 1;
       if (newWins >= 2 && players.length - 10 >= 10) {
-        // Remove winning team
         const idsToRemove = winningTeam.map((p) => p.id);
         setPlayers((prev) => prev.filter((p) => !idsToRemove.includes(p.id)));
-        newQueue.shift(); // remove current game
+        newQueue.shift();
         setWinnerStreak(null);
       } else {
         setWinnerStreak({ team: winningTeam, wins: newWins });
@@ -80,8 +86,8 @@ const Leagues: React.FC = () => {
         const nextTeam = newQueue.shift();
         if (nextTeam) newQueue.push(nextTeam);
       }
+    } else {
       setWinnerStreak(winningTeam ? { team: winningTeam, wins: 1 } : null);
-      setWinnerStreak({ team: winningTeam, wins: 1 });
       newQueue.shift();
       const nextTeam = newQueue.shift();
       if (nextTeam) newQueue.push(nextTeam);

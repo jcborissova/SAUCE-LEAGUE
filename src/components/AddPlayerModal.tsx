@@ -1,25 +1,12 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
+import type { PlayerFormState } from "../types/player"; // Asegúrate de que esta ruta sea correcta
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: () => void;
-  newPlayer: {
-    id: number;
-    name: string;
-    number: string;
-    description: string;
-    photo: File | string;
-  };
-  setNewPlayer: React.Dispatch<
-    React.SetStateAction<{
-      id: number;
-      name: string;
-      number: string;
-      description: string;
-      photo: File | string;
-    }>
-  >;
+  newPlayer: PlayerFormState;
+  setNewPlayer: React.Dispatch<React.SetStateAction<PlayerFormState>>;
   mode: "add" | "edit";
 }
 
@@ -32,7 +19,7 @@ const AddPlayerModal: React.FC<Props> = ({
   mode,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [previewURL, setPreviewURL] = React.useState<string | null>(null);
+  const [previewURL, setPreviewURL] = useState<string | null>(null);
 
   useEffect(() => {
     if (newPlayer.photo instanceof File) {
@@ -44,19 +31,19 @@ const AddPlayerModal: React.FC<Props> = ({
     } else {
       setPreviewURL(null);
     }
-  }, [newPlayer.photo]);
+  }, [newPlayer.photo]);  
 
   if (!isOpen) return null;
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setNewPlayer((prev) => ({
-        ...prev,
-        photo: file,
-      }));
+      setNewPlayer((prev) => ({ ...prev, photo: file }));
     }
   };
+
+  const inputStyle =
+    "w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-950";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -92,30 +79,45 @@ const AddPlayerModal: React.FC<Props> = ({
 
           <input
             type="text"
-            placeholder="Name"
-            className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-950"
-            value={newPlayer.name}
-            onChange={(e) =>
-              setNewPlayer({ ...newPlayer, name: e.target.value })
-            }
+            placeholder="First Names"
+            className={inputStyle}
+            value={newPlayer.names}
+            onChange={(e) => setNewPlayer((p) => ({ ...p, names: e.target.value }))}
+          />
+          <input
+            type="text"
+            placeholder="Last Names"
+            className={inputStyle}
+            value={newPlayer.lastnames}
+            onChange={(e) => setNewPlayer((p) => ({ ...p, lastnames: e.target.value }))}
+          />
+          <input
+            type="text"
+            placeholder="Back Jersey Name"
+            className={inputStyle}
+            value={newPlayer.backJerseyName}
+            onChange={(e) => setNewPlayer((p) => ({ ...p, backJerseyName: e.target.value }))}
           />
           <input
             type="number"
             placeholder="Jersey Number"
-            className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-950"
-            value={newPlayer.number}
-            onChange={(e) =>
-              setNewPlayer({ ...newPlayer, number: e.target.value })
-            }
+            className={inputStyle}
+            value={newPlayer.jerseyNumber}
+            onChange={(e) => setNewPlayer((p) => ({ ...p, jerseyNumber: e.target.value }))}
+          />
+          <input
+            type="text"
+            placeholder="Cédula"
+            className={inputStyle}
+            value={newPlayer.cedula}
+            onChange={(e) => setNewPlayer((p) => ({ ...p, cedula: e.target.value }))}
           />
           <input
             type="text"
             placeholder="Description"
-            className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-950"
+            className={inputStyle}
             value={newPlayer.description}
-            onChange={(e) =>
-              setNewPlayer({ ...newPlayer, description: e.target.value })
-            }
+            onChange={(e) => setNewPlayer((p) => ({ ...p, description: e.target.value }))}
           />
         </div>
 

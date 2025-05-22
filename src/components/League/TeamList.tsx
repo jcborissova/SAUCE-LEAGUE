@@ -2,8 +2,14 @@ import React from "react";
 import type { Player } from "../../types/player";
 import PlayerCard from "./PlayerCard";
 
+// Extendemos Player para incluir campos usados solo en liga
+type LeaguePlayer = Player & {
+  arrivalTime?: number;
+  isGuest?: boolean;
+};
+
 interface Props {
-  players: Player[];
+  players: LeaguePlayer[];
 }
 
 const TeamList: React.FC<Props> = ({ players }) => {
@@ -11,7 +17,7 @@ const TeamList: React.FC<Props> = ({ players }) => {
     (a, b) => (a.arrivalTime ?? 0) - (b.arrivalTime ?? 0)
   );
 
-  const teams = [];
+  const teams: LeaguePlayer[][] = [];
   for (let i = 0; i < ordered.length; i += 5) {
     teams.push(ordered.slice(i, i + 5));
   }

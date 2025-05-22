@@ -1,12 +1,6 @@
 import React from "react";
 import { TrashIcon, PencilIcon, EyeIcon, UserPlusIcon } from "@heroicons/react/24/solid";
-
-interface Player {
-  id: number;
-  name: string;
-  number: number;
-  description: string;
-}
+import type { Player } from "../types/player"; // Asegúrate de tener esta interfaz centralizada
 
 interface PlayerTableProps {
   players: Player[];
@@ -42,43 +36,35 @@ const PlayerTable: React.FC<PlayerTableProps> = ({
             <tr>
               <th className="p-3 text-left font-semibold">#</th>
               <th className="p-3 text-left font-semibold">Name</th>
+              <th className="p-3 text-left font-semibold hidden lg:table-cell">Back Name</th>
               <th className="p-3 text-left font-semibold hidden md:table-cell">Description</th>
-              <th className="p-3 text-center font-semibold">Action</th>
+              <th className="p-3 text-left font-semibold hidden xl:table-cell">Cédula</th>
+              <th className="p-3 text-center font-semibold">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {players.length === 0 ? (
               <tr>
-                <td colSpan={4} className="p-10 text-center text-gray-600 font-semibold">
+                <td colSpan={6} className="p-10 text-center text-gray-600 font-semibold">
                   🚫 No players registered.
                 </td>
               </tr>
             ) : (
-              players.map((player) => (
-                <tr key={player.id} className="hover:bg-gray-50">
-                  <td className="p-3 font-medium text-gray-800">#{player.number}</td>
-                  <td className="p-3 text-gray-700">{player.name}</td>
-                  <td className="p-3 text-gray-600 hidden md:table-cell">{player.description}</td>
-                  <td className="p-3 text-center space-x-2 flex justify-center">
-                    <button
-                      onClick={() => onView(player)}
-                      className="text-blue-500 hover:text-blue-700 transition"
-                      title="View"
-                    >
+              players.map((p) => (
+                <tr key={p.id} className="hover:bg-gray-50">
+                  <td className="p-3 font-medium text-gray-800">#{p.jerseyNumber}</td>
+                  <td className="p-3 text-gray-700">{p.names} {p.lastnames}</td>
+                  <td className="p-3 text-gray-700 hidden lg:table-cell">{p.backJerseyName}</td>
+                  <td className="p-3 text-gray-600 hidden md:table-cell">{p.description}</td>
+                  <td className="p-3 text-gray-600 hidden xl:table-cell">{p.cedula}</td>
+                  <td className="p-3 flex justify-center gap-2 text-center">
+                    <button onClick={() => onView(p)} className="text-blue-500 hover:text-blue-700" title="View">
                       <EyeIcon className="h-5 w-5" />
                     </button>
-                    <button
-                      onClick={() => onEdit(player)}
-                      className="text-yellow-500 hover:text-yellow-600 transition"
-                      title="Edit"
-                    >
+                    <button onClick={() => onEdit(p)} className="text-yellow-500 hover:text-yellow-600" title="Edit">
                       <PencilIcon className="h-5 w-5" />
                     </button>
-                    <button
-                      onClick={() => onDelete(player.id)}
-                      className="text-red-600 hover:text-red-800 transition"
-                      title="Delete"
-                    >
+                    <button onClick={() => onDelete(p.id)} className="text-red-600 hover:text-red-800" title="Delete">
                       <TrashIcon className="h-5 w-5" />
                     </button>
                   </td>
