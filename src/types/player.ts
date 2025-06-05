@@ -11,7 +11,14 @@ export interface Player {
   photo?: string;
 }
 
-export interface PlayerFormState extends Omit<Player, "jerseyNumber" | "photo"> {
+export interface PlayerFormState extends Omit<Player, "jerseyNumber" | "cedula" | "photo"> {
   jerseyNumber: string;
+  cedula: string;
   photo: string | File;
 }
+
+export type LeaguePlayer = Player & {
+  arrivalTime?: number;
+  isGuest?: boolean;
+};
+

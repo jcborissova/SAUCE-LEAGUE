@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-import type { Player } from "../../types/player";
+import type { LeaguePlayer } from "../../types/player";
 
 interface Props {
-  onAddGuest: (player: Player) => void;
+  onAddGuest: (player: LeaguePlayer) => void;
 }
 
 const GuestInput: React.FC<Props> = ({ onAddGuest }) => {
@@ -12,7 +12,13 @@ const GuestInput: React.FC<Props> = ({ onAddGuest }) => {
     if (!name.trim()) return;
     onAddGuest({
       id: Date.now(),
-      name,
+      names: name,
+      lastnames: "",
+      backJerseyName: name,
+      jerseyNumber: 0,
+      cedula: "",
+      description: "",
+      photo: "",
       isGuest: true,
       arrivalTime: Date.now(),
     });

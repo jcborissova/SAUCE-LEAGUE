@@ -1,6 +1,6 @@
 import React from "react";
 import { TrashIcon, PencilIcon, EyeIcon, UserPlusIcon } from "@heroicons/react/24/solid";
-import type { Player } from "../types/player"; // Asegúrate de tener esta interfaz centralizada
+import type { Player } from "../types/player";
 
 interface PlayerTableProps {
   players: Player[];
@@ -36,16 +36,17 @@ const PlayerTable: React.FC<PlayerTableProps> = ({
             <tr>
               <th className="p-3 text-left font-semibold">#</th>
               <th className="p-3 text-left font-semibold">Name</th>
-              <th className="p-3 text-left font-semibold hidden lg:table-cell">Back Name</th>
-              <th className="p-3 text-left font-semibold hidden md:table-cell">Description</th>
-              <th className="p-3 text-left font-semibold hidden xl:table-cell">Cédula</th>
+              <th className="p-3 text-left font-semibold hidden md:table-cell">Back Name</th>
+              <th className="p-3 text-left font-semibold hidden lg:table-cell">Description</th>
+              <th className="p-3 text-left font-semibold hidden lg:table-cell">Cédula</th>
+              <th className="p-3 text-left font-semibold hidden xl:table-cell">Photo</th>
               <th className="p-3 text-center font-semibold">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {players.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-10 text-center text-gray-600 font-semibold">
+                <td colSpan={7} className="p-10 text-center text-gray-600 font-semibold">
                   🚫 No players registered.
                 </td>
               </tr>
@@ -54,9 +55,20 @@ const PlayerTable: React.FC<PlayerTableProps> = ({
                 <tr key={p.id} className="hover:bg-gray-50">
                   <td className="p-3 font-medium text-gray-800">#{p.jerseyNumber}</td>
                   <td className="p-3 text-gray-700">{p.names} {p.lastnames}</td>
-                  <td className="p-3 text-gray-700 hidden lg:table-cell">{p.backJerseyName}</td>
-                  <td className="p-3 text-gray-600 hidden md:table-cell">{p.description}</td>
-                  <td className="p-3 text-gray-600 hidden xl:table-cell">{p.cedula}</td>
+                  <td className="p-3 text-gray-700 hidden md:table-cell">{p.backJerseyName}</td>
+                  <td className="p-3 text-gray-600 hidden lg:table-cell">{p.description}</td>
+                  <td className="p-3 text-gray-600 hidden lg:table-cell">{p.cedula}</td>
+                  <td className="p-3 hidden xl:table-cell">
+                    {p.photo ? (
+                      <img
+                        src={p.photo}
+                        alt="Photo"
+                        className="w-8 h-8 rounded-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-gray-400 italic">No photo</span>
+                    )}
+                  </td>
                   <td className="p-3 flex justify-center gap-2 text-center">
                     <button onClick={() => onView(p)} className="text-blue-500 hover:text-blue-700" title="View">
                       <EyeIcon className="h-5 w-5" />

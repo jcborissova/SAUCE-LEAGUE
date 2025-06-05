@@ -1,12 +1,6 @@
 import React from "react";
-import type { Player } from "../../types/player";
+import type { LeaguePlayer } from "../../types/player";
 import PlayerCard from "./PlayerCard";
-
-// Extendemos Player para incluir campos usados solo en liga
-type LeaguePlayer = Player & {
-  arrivalTime?: number;
-  isGuest?: boolean;
-};
 
 interface Props {
   players: LeaguePlayer[];

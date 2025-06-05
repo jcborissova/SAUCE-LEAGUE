@@ -1,0 +1,309 @@
+[
+    {
+      "id": 1,
+      "names": "Xiolin",
+      "lastnames": "Ramírez",
+      "backJerseyName": "XIOLIN",
+      "jerseyNumber": 1,
+      "cedula": "40233984380",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 2,
+      "names": "Angel",
+      "lastnames": "Martinez",
+      "backJerseyName": "ANGEL",
+      "jerseyNumber": 2,
+      "cedula": "40200751770",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 3,
+      "names": "Richard",
+      "lastnames": "Almengo",
+      "backJerseyName": "RICHARD",
+      "jerseyNumber": 3,
+      "cedula": "40218357164",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 4,
+      "names": "Manuel",
+      "lastnames": "Medina",
+      "backJerseyName": "MEDINA",
+      "jerseyNumber": 4,
+      "cedula": "40230496669",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 5,
+      "names": "Geny",
+      "lastnames": "Fernandez",
+      "backJerseyName": "GENY",
+      "jerseyNumber": 5,
+      "cedula": "40229705591",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 6,
+      "names": "Rafael",
+      "lastnames": "Almonte",
+      "backJerseyName": "RAFA",
+      "jerseyNumber": 6,
+      "cedula": "40233896725",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 7,
+      "names": "Juan Carlos",
+      "lastnames": "Borissova",
+      "backJerseyName": "JC",
+      "jerseyNumber": 7,
+      "cedula": "40200624605",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 8,
+      "names": "Victor",
+      "lastnames": "Veloz",
+      "backJerseyName": "VELOZ",
+      "jerseyNumber": 8,
+      "cedula": "40209499850",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 9,
+      "names": "Jhoan",
+      "lastnames": "Santos",
+      "backJerseyName": "SANTOS",
+      "jerseyNumber": 9,
+      "cedula": "40212393454",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 10,
+      "names": "Jesús",
+      "lastnames": "Aquino",
+      "backJerseyName": "AQUINO",
+      "jerseyNumber": 10,
+      "cedula": "40234036651",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 11,
+      "names": "Angel",
+      "lastnames": "Mojica",
+      "backJerseyName": "MOJICA",
+      "jerseyNumber": 11,
+      "cedula": "40200456024",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 12,
+      "names": "Diego",
+      "lastnames": "Paula",
+      "backJerseyName": "PAULA",
+      "jerseyNumber": 12,
+      "cedula": "40210537862",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 13,
+      "names": "Cristopher",
+      "lastnames": "Herasme",
+      "backJerseyName": "CHERASME",
+      "jerseyNumber": 13,
+      "cedula": "40209991765",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 14,
+      "names": "Manny",
+      "lastnames": "Alexander",
+      "backJerseyName": "MANNY",
+      "jerseyNumber": 14,
+      "cedula": "22300741943",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 15,
+      "names": "Darwin",
+      "lastnames": "Capellan",
+      "backJerseyName": "DARWIN",
+      "jerseyNumber": 15,
+      "cedula": "40212605063",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 16,
+      "names": "Kevin",
+      "lastnames": "Rodriguez",
+      "backJerseyName": "KEVIN",
+      "jerseyNumber": 16,
+      "cedula": "40236901035",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 17,
+      "names": "Cristopher",
+      "lastnames": "Gonzalez",
+      "backJerseyName": "CGONZALEZ",
+      "jerseyNumber": 17,
+      "cedula": "40211890013",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 18,
+      "names": "Robert",
+      "lastnames": "Batista",
+      "backJerseyName": "BATISTA",
+      "jerseyNumber": 18,
+      "cedula": "40236156887",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 19,
+      "names": "Angel Rafael",
+      "lastnames": "López Durán",
+      "backJerseyName": "ARLD",
+      "jerseyNumber": 19,
+      "cedula": "40200714455",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 20,
+      "names": "John Manuel",
+      "lastnames": "Rodríguez Marion",
+      "backJerseyName": "JMRM",
+      "jerseyNumber": 20,
+      "cedula": "40200674543",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 21,
+      "names": "Elías",
+      "lastnames": "Calderon De La Cruz",
+      "backJerseyName": "ELIAS",
+      "jerseyNumber": 21,
+      "cedula": "40229764549",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 22,
+      "names": "Francis",
+      "lastnames": "Tavera",
+      "backJerseyName": "TAVERA",
+      "jerseyNumber": 22,
+      "cedula": "40240532552",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 23,
+      "names": "Alberto",
+      "lastnames": "Lorenzo",
+      "backJerseyName": "ALBERTO",
+      "jerseyNumber": 23,
+      "cedula": "40215330503",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 24,
+      "names": "Carlos",
+      "lastnames": "Lorenzo",
+      "backJerseyName": "CARLOS",
+      "jerseyNumber": 24,
+      "cedula": "40231547825",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 25,
+      "names": "Jean Carlos",
+      "lastnames": "Hernandez",
+      "backJerseyName": "JEAN",
+      "jerseyNumber": 25,
+      "cedula": "40200660385",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 26,
+      "names": "Emmanuel",
+      "lastnames": "Guillen Beltran",
+      "backJerseyName": "EMMANUEL",
+      "jerseyNumber": 26,
+      "cedula": "40208752259",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 27,
+      "names": "Héctor Angel",
+      "lastnames": "Mateo",
+      "backJerseyName": "HECTOR",
+      "jerseyNumber": 27,
+      "cedula": "40200396592",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 28,
+      "names": "Moises",
+      "lastnames": "Ramirez",
+      "backJerseyName": "MOISES",
+      "jerseyNumber": 28,
+      "cedula": "40232060554",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 29,
+      "names": "David",
+      "lastnames": "Arias",
+      "backJerseyName": "DAVID",
+      "jerseyNumber": 29,
+      "cedula": "40229395781",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 30,
+      "names": "Jose",
+      "lastnames": "Valdez",
+      "backJerseyName": "JOSE",
+      "jerseyNumber": 30,
+      "cedula": "40214968170",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 31,
+      "names": "Carlos",
+      "lastnames": "Caseres",
+      "backJerseyName": "CASERES",
+      "jerseyNumber": 31,
+      "cedula": "",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 32,
+      "names": "Victor",
+      "lastnames": "Aybar",
+      "backJerseyName": "AYBAR",
+      "jerseyNumber": 32,
+      "cedula": "",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 33,
+      "names": "Raymer",
+      "lastnames": "Calderon",
+      "backJerseyName": "RAYMER",
+      "jerseyNumber": 33,
+      "cedula": "",
+      "description": "Jugador de liga"
+    },
+    {
+      "id": 34,
+      "names": "Danilo",
+      "lastnames": "Soto Araujo",
+      "backJerseyName": "DANILO",
+      "jerseyNumber": 34,
+      "cedula": "",
+      "description": "Jugador de liga"
+    }
+  ]
+  
