@@ -15,6 +15,7 @@ const Players: React.FC = () => {
   const [viewPlayer, setViewPlayer] = useState<Player | null>(null);
   const [editingPlayerId, setEditingPlayerId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const [newPlayer, setNewPlayer] = useState<PlayerFormState>({
     id: 0,
@@ -178,30 +179,55 @@ const Players: React.FC = () => {
         mode={modalMode}
       />
 
-      {viewPlayer && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full text-center">
-            {viewPlayer.photo && (
-              <img
-                src={viewPlayer.photo}
-                alt="Player"
-                className="w-24 h-24 object-cover rounded-full mx-auto mb-4"
-              />
-            )}
-            <h2 className="text-xl font-bold text-blue-950 mb-1">
-              {viewPlayer.names} {viewPlayer.lastnames}
-            </h2>
-            <p className="text-sm text-gray-600 mb-2">Jersey #{viewPlayer.jerseyNumber}</p>
-            <p className="text-gray-500 text-sm mb-4">{viewPlayer.description}</p>
-            <button
-              onClick={() => setViewPlayer(null)}
-              className="px-4 py-2 rounded bg-blue-950 text-white hover:bg-blue-800 transition"
-            >
-              Cerrar
-            </button>
-          </div>
-        </div>
-      )}
+{viewPlayer && (
+  <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="relative bg-white rounded-3xl shadow-xl w-full max-w-sm p-6 pt-20 text-center">
+
+      {/* Círculo con sombra flotante (foto) */}
+      <div className="absolute -top-14 left-1/2 -translate-x-1/2 w-28 h-28 rounded-full border-4 border-white shadow-lg overflow-hidden cursor-pointer transition transform hover:scale-105">
+        <img
+          src={viewPlayer.photo}
+          alt="Jugador"
+          className="w-full h-full object-cover"
+          onClick={() => setExpanded(true)}
+        />
+      </div>
+
+      {/* Botón cerrar (X) */}
+      <button
+        onClick={() => setViewPlayer(null)}
+        className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 text-xl font-bold"
+      >
+        ×
+      </button>
+
+      {/* Contenido del jugador */}
+      <div>
+        <h2 className="text-xl font-semibold text-blue-950">
+          {viewPlayer.names} {viewPlayer.lastnames}
+        </h2>
+        <p className="text-sm text-gray-500 mt-1">Jersey #{viewPlayer.jerseyNumber}</p>
+        <p className="text-xs text-gray-400 mt-1 italic">{viewPlayer.description || "Jugador de liga"}</p>
+      </div>
+    </div>
+
+    {/* Foto expandida */}
+    {expanded && (
+      <div
+        className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
+        onClick={() => setExpanded(false)}
+      >
+        <img
+          src={viewPlayer.photo}
+          alt="Jugador"
+          className="max-w-full max-h-full object-contain"
+        />
+      </div>
+    )}
+  </div>
+)}
+
+
 
       {loading ? (
         <div className="flex justify-center py-10">

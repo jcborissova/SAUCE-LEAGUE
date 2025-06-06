@@ -53,27 +53,29 @@ const AddPlayerModal: React.FC<Props> = ({
         </h3>
 
         <div className="space-y-4">
-          {previewURL && (
-            <img
-              src={previewURL}
-              alt="Preview"
-              className="w-24 h-24 object-cover rounded-full mx-auto"
-            />
-          )}
-          <div className="text-center">
-            <input
-              type="file"
-              accept="image/*"
-              ref={fileInputRef}
-              onChange={handlePhotoChange}
-              className="hidden"
-            />
+        {previewURL && (
+          <img
+            src={previewURL}
+            alt="Preview"
+            className="w-24 h-24 object-cover rounded-full mx-auto"
+          />
+        )}
+
+        <div className="text-center">
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            ref={fileInputRef}
+            onChange={handlePhotoChange}
+            className="hidden"
+          />
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               className="text-sm text-blue-900 hover:underline"
             >
-              {previewURL ? "Change Photo" : "Upload Photo"}
+              {previewURL ? "Cambiar Foto" : "Subir Foto"}
             </button>
           </div>
 
