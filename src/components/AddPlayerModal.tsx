@@ -65,19 +65,18 @@ const AddPlayerModal: React.FC<Props> = ({
           <input
             type="file"
             accept="image/*"
-            capture="environment"
             ref={fileInputRef}
             onChange={handlePhotoChange}
             className="hidden"
           />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="text-sm text-blue-900 hover:underline"
-            >
-              {previewURL ? "Cambiar Foto" : "Subir Foto"}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="text-sm text-blue-900 hover:underline"
+          >
+            {previewURL ? "Cambiar Foto" : "Subir Foto"}
+          </button>
+        </div>
 
           <input
             type="text"
