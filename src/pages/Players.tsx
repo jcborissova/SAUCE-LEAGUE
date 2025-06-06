@@ -16,16 +16,16 @@ const Players: React.FC = () => {
   const [editingPlayerId, setEditingPlayerId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const [newPlayer, setNewPlayer] = useState<Player>({
+  const [newPlayer, setNewPlayer] = useState<PlayerFormState>({
     id: 0,
     names: "",
     lastnames: "",
     backJerseyName: "",
-    jerseyNumber: 0,
+    jerseyNumber: "",
     cedula: "",
     description: "",
     photo: "",
-  });
+  });  
 
   const resetPlayerForm = () => {
     setNewPlayer({
@@ -33,7 +33,7 @@ const Players: React.FC = () => {
       names: "",
       lastnames: "",
       backJerseyName: "",
-      jerseyNumber: 0,
+      jerseyNumber: "",
       cedula: "",
       description: "",
       photo: "",
@@ -79,7 +79,7 @@ const Players: React.FC = () => {
       names: player.names,
       lastnames: player.lastnames,
       backJerseyName: player.backJerseyName,
-      jerseyNumber: player.jerseyNumber,
+      jerseyNumber: player.jerseyNumber.toString(),
       cedula: player.cedula,
       description: player.description,
       photo: player.photo || "",

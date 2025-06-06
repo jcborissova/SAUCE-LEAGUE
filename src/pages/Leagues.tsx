@@ -4,11 +4,11 @@ import { supabase } from "../lib/supabase";
 import { toast } from "react-toastify";
 import { ArrowPathIcon } from "@heroicons/react/24/outline";
 import type { Player } from "../types/player";
-import LeagueBoard from "../components/League/LeagueBoard";
 import GuestInput from "../components/League/GuestInput";
 import PlayerCard from "../components/League/PlayerCard";
 import GameModal from "../components/League/GameModal";
 import TeamList from "../components/League/TeamList";
+import SortableLeagueBoard from "../components/League/LeagueBoard";
 
 type LeaguePlayer = Player & {
   arrivalTime?: number;
@@ -149,12 +149,7 @@ const Leagues: React.FC = () => {
           )}
 
           <section className="bg-white p-4 sm:p-6 rounded-xl shadow-md">
-            <LeagueBoard
-              id="league-dropzone"
-              team={players}
-              label="Jugadores en lista"
-              onRemove={handleRemovePlayer}
-            />
+            <SortableLeagueBoard players={players} onRemove={handleRemovePlayer} />
           </section>
         </DndContext>
       )}

@@ -1,33 +1,50 @@
 import React from "react";
-import type { Player } from "../../types/player";
+import type { LeaguePlayer } from "../../types/player";
 import PlayerCard from "./PlayerCard";
-import { useDroppable } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface Props {
-  id: string; // 👉 agregar esta línea para permitir la prop `id`
-  team: Player[];
-  label: string;
+  players: LeaguePlayer[];
   onRemove: (id: number) => void;
 }
 
-const LeagueBoard: React.FC<Props> = ({ id, team, label, onRemove }) => {
-  const { setNodeRef, isOver } = useDroppable({ id });
+const SortableItem: React.FC<{ player: LeaguePlayer; onRemove: (id: number) => void }> = ({ player, onRemove }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: player.id.toString() });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
 
   return (
-    <div
-      ref={setNodeRef}
-      className={`p-4 border-2 rounded min-h-[150px] transition ${
-        isOver ? "bg-green-100" : "bg-gray-100"
-      }`}
-    >
-      <h4 className="font-bold mb-3">{label}</h4>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-        {team.map((p) => (
-          <PlayerCard key={p.id} player={p} onDelete={onRemove} />
-        ))}
-      </div>
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      <PlayerCard player={player} onDelete={onRemove} />
     </div>
   );
 };
 
-export default LeagueBoard;
+const SortableLeagueBoard: React.FC<Props> = ({ players, onRemove }) => {
+  return (
+    <div className="p-4 border-2 border-gray-200 rounded-xl bg-gray-50">
+      <h4 className="font-bold text-blue-950 mb-3">Jugadores en lista</h4>
+      <SortableContext items={players.map(p => p.id.toString())} strategy={verticalListSortingStrategy}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          {players.map(player => (
+            <SortableItem key={player.id} player={player} onRemove={onRemove} />
+          ))}
+        </div>
+      </SortableContext>
+    </div>
+  );
+};
+
+export default SortableLeagueBoard;

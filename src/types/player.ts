@@ -1,6 +1,5 @@
-// types/player.ts
-
-export interface Player {
+/* eslint-disable @typescript-eslint/no-empty-object-type */
+export interface PlayerBase {
   id: number;
   names: string;
   lastnames: string;
@@ -11,14 +10,15 @@ export interface Player {
   photo?: string;
 }
 
-export interface PlayerFormState extends Omit<Player, "jerseyNumber" | "cedula" | "photo"> {
-  jerseyNumber: string;
-  cedula: string;
-  photo: string | File;
-}
+export interface Player extends PlayerBase {}
 
 export type LeaguePlayer = Player & {
   arrivalTime?: number;
   isGuest?: boolean;
 };
 
+export interface PlayerFormState extends Omit<PlayerBase, "jerseyNumber" | "cedula" | "photo"> {
+  jerseyNumber: string;
+  cedula: string;
+  photo: string | File;
+}

@@ -1,3 +1,4 @@
+// components/League/GuestInput.tsx
 import React, { useState } from "react";
 import type { LeaguePlayer } from "../../types/player";
 
