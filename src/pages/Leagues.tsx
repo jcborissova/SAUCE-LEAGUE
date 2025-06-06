@@ -70,13 +70,15 @@ const Leagues: React.FC = () => {
 
   const handleGameEnd = async (winner: LeaguePlayer[] | null) => {
     if (!winner || gameQueue.length < 2) return;
-
+  
     const [teamA, teamB] = gameQueue;
     const loser = winner === teamA ? teamB : teamA;
-
+  
     const isSameTeam = winnerStreak && winner.every((p) => winnerStreak.team.some((w) => w.id === p.id));
-    let newStreak = isSameTeam ? { team: winner, wins: winnerStreak!.wins + 1 } : { team: winner, wins: 1 };
-
+    let newStreak: { team: LeaguePlayer[]; wins: number } | null = isSameTeam
+      ? { team: winner, wins: winnerStreak!.wins + 1 }
+      : { team: winner, wins: 1 };
+  
     if (newStreak.wins >= 2 && players.length - 10 >= 10) {
       const remaining = players.filter((p) => !winner.some((w) => w.id === p.id));
       setPlayers([...remaining]);
@@ -86,12 +88,12 @@ const Leagues: React.FC = () => {
       const remaining = players.filter((p) => !loser.some((l) => l.id === p.id));
       setPlayers([...remaining, ...loser]);
     }
-
+  
     const rest = players.slice(10);
     setGameQueue(rest.length >= 5 ? [winner, rest.slice(0, 5)] : []);
     setWinnerStreak(newStreak);
     setShowModal(false);
-
+  
     await supabase.from("matches").insert({
       league_id: 1,
       team_a: teamA.map((p) => ({ player_id: p.id })),
@@ -99,9 +101,9 @@ const Leagues: React.FC = () => {
       winner_team: winner === teamA ? "A" : "B",
       created_at: new Date().toISOString(),
     });
-
+  
     toast.success("📊 Resultado guardado");
-  };
+  };  
 
   const orderedPlayers = [...players].sort((a, b) => (a.arrivalTime ?? 0) - (b.arrivalTime ?? 0));
   const currentMatch = orderedPlayers.slice(0, 10);
