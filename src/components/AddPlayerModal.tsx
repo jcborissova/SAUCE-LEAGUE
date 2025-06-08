@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from "react";
-import type { PlayerFormState } from "../types/player"; // Asegúrate de que esta ruta sea correcta
+import type { PlayerFormState } from "../types/player";
 
 interface Props {
   isOpen: boolean;
@@ -96,15 +96,15 @@ const AddPlayerModal: React.FC<Props> = ({
             type="text"
             placeholder="Back Jersey Name"
             className={inputStyle}
-            value={newPlayer.backJerseyName}
-            onChange={(e) => setNewPlayer((p) => ({ ...p, backJerseyName: e.target.value }))}
+            value={newPlayer.backjerseyname}
+            onChange={(e) => setNewPlayer((p) => ({ ...p, backjerseyname: e.target.value }))}
           />
           <input
             type="number"
             placeholder="Jersey Number"
             className={inputStyle}
-            value={newPlayer.jerseyNumber}
-            onChange={(e) => setNewPlayer((p) => ({ ...p, jerseyNumber: e.target.value }))}
+            value={newPlayer.jerseynumber}
+            onChange={(e) => setNewPlayer((p) => ({ ...p, jerseynumber: e.target.value }))}
           />
           <input
             type="text"

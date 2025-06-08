@@ -19,7 +19,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, onDelete }) => {
           />
         ) : (
           <div className="w-12 h-12 bg-red-900 text-white rounded-full flex items-center justify-center font-bold">
-            #{player.jerseyNumber}
+            #{player.jerseynumber}
           </div>
         )}
         <div>

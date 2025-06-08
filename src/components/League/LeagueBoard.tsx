@@ -26,11 +26,12 @@ const SortableItem: React.FC<{ player: LeaguePlayer; onRemove: (id: number) => v
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <PlayerCard player={player} onDelete={onRemove} />
+    <div ref={setNodeRef} style={style}>
+      <PlayerCard player={player} onDelete={onRemove} dragProps={{ attributes, listeners }} />
     </div>
   );
 };
+
 
 const SortableLeagueBoard: React.FC<Props> = ({ players, onRemove }) => {
   return (

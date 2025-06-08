@@ -20,7 +20,7 @@ const TeamList: React.FC<Props> = ({ players }) => {
     <div className="space-y-8">
       {quinteto1.length > 0 && (
         <div className="space-y-2">
-          <h4 className="font-semibold text-blue-950">🏀 Quinteto 1</h4>
+          <h4 className="font-semibold text-blue-950">Quinteto 1</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             {quinteto1.map((player) => (
               <PlayerCard key={player.id} player={player} />
@@ -31,7 +31,7 @@ const TeamList: React.FC<Props> = ({ players }) => {
 
       {quinteto2.length > 0 && (
         <div className="space-y-2">
-          <h4 className="font-semibold text-blue-950">🏀 Quinteto 2</h4>
+          <h4 className="font-semibold text-blue-950">Quinteto 2</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             {quinteto2.map((player) => (
               <PlayerCard key={player.id} player={player} />

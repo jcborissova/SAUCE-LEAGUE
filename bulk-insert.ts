@@ -47,8 +47,8 @@ const run = async () => {
         names: p.names,
         lastnames: p.lastnames,
         cedula: p.cedula,
-        backJerseyName: "",
-        jerseyNumber: 0,
+        backjerseyname: "",
+        jerseynumber: 0,
         description: "Pendiente",
         photo: ""
       }),

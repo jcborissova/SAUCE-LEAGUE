@@ -3,8 +3,8 @@ export interface PlayerBase {
   id: number;
   names: string;
   lastnames: string;
-  backJerseyName: string;
-  jerseyNumber: number;
+  backjerseyname: string;
+  jerseynumber: number;
   cedula: string;
   description: string;
   photo?: string;
@@ -17,8 +17,8 @@ export type LeaguePlayer = Player & {
   isGuest?: boolean;
 };
 
-export interface PlayerFormState extends Omit<PlayerBase, "jerseyNumber" | "cedula" | "photo"> {
-  jerseyNumber: string;
+export interface PlayerFormState extends Omit<PlayerBase, "jerseynumber" | "cedula" | "photo"> {
+  jerseynumber: string;
   cedula: string;
   photo: string | File;
 }

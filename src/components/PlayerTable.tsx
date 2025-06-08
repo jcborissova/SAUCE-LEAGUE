@@ -53,9 +53,9 @@ const PlayerTable: React.FC<PlayerTableProps> = ({
             ) : (
               players.map((p) => (
                 <tr key={p.id} className="hover:bg-gray-50">
-                  <td className="p-3 font-medium text-gray-800">#{p.jerseyNumber}</td>
+                  <td className="p-3 font-medium text-gray-800">#{p.jerseynumber}</td>
                   <td className="p-3 text-gray-700">{p.names} {p.lastnames}</td>
-                  <td className="p-3 text-gray-700 hidden md:table-cell">{p.backJerseyName}</td>
+                  <td className="p-3 text-gray-700 hidden md:table-cell">{p.backjerseyname}</td>
                   <td className="p-3 text-gray-600 hidden lg:table-cell">{p.description}</td>
                   <td className="p-3 text-gray-600 hidden lg:table-cell">{p.cedula}</td>
                   <td className="p-3 hidden xl:table-cell">
