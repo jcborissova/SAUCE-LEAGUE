@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { toast } from "react-toastify";
 import LeagueManager from "../components/League/LeagueManager";
+import { ArrowPathIcon } from "@heroicons/react/16/solid";
 
 type League = {
   id: number;
@@ -77,7 +78,9 @@ const LeaguesPage: React.FC = () => {
       </div>
 
       {loading ? (
-        <p className="text-center text-gray-500">Cargando...</p>
+        <div className="flex justify-center py-10">
+          <ArrowPathIcon className="w-10 h-10 animate-spin text-blue-600" />
+        </div>
       ) : (
         <ul className="space-y-4">
           {leagues.map((l) => (

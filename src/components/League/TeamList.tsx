@@ -5,53 +5,59 @@ import PlayerCard from "./PlayerCard";
 
 interface Props {
   players: LeaguePlayer[];
+  title?: string;
+  teamMode?: boolean; // true = mostrar quintetoA y quintetoB, false = lista normal
 }
 
-const TeamList: React.FC<Props> = ({ players }) => {
+const TeamList: React.FC<Props> = ({ players, title, teamMode = false }) => {
+  if (!players || players.length === 0) return null;
+
   const ordered = [...players].sort(
     (a, b) => (a.arrivalTime ?? 0) - (b.arrivalTime ?? 0)
   );
 
-  const quinteto1 = ordered.slice(0, 5);
-  const quinteto2 = ordered.slice(5, 10);
-  const waitingList = ordered.slice(10);
+  if (teamMode) {
+    const quintetoA = ordered.slice(0, 5);
+    const quintetoB = ordered.slice(5, 10);
 
+    return (
+      <div className="space-y-6">
+        {title && <h4 className="font-semibold text-blue-950 text-lg">{title}</h4>}
+
+        {quintetoA.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="font-semibold text-blue-950">Quinteto A</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              {quintetoA.map((player) => (
+                <PlayerCard key={player.id} player={player} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {quintetoB.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="font-semibold text-blue-950">Quinteto B</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              {quintetoB.map((player) => (
+                <PlayerCard key={player.id} player={player} />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Lista normal (jugadores en espera)
   return (
-    <div className="space-y-8">
-      {quinteto1.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="font-semibold text-blue-950">Quinteto 1</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            {quinteto1.map((player) => (
-              <PlayerCard key={player.id} player={player} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {quinteto2.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="font-semibold text-blue-950">Quinteto 2</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            {quinteto2.map((player) => (
-              <PlayerCard key={player.id} player={player} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {waitingList.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="font-semibold text-blue-950">⌛ Jugadores en espera</h4>
-          <div className="flex flex-wrap gap-3">
-            {waitingList.map((player) => (
-              <div key={player.id} className="w-full sm:w-auto">
-                <PlayerCard player={player} />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+    <div className="space-y-2">
+      {title && <h4 className="font-semibold text-blue-950 text-lg">{title}</h4>}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        {ordered.map((player) => (
+          <PlayerCard key={player.id} player={player} />
+        ))}
+      </div>
     </div>
   );
 };

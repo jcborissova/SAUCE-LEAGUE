@@ -2,12 +2,18 @@ import React, { useEffect, useRef, useState } from "react";
 import type { Player } from "../../types/player";
 import ScorePanel from "./ScorePanel";
 
+type LeaguePlayer = Player & {
+  arrivalTime: number;
+  isGuest?: boolean;
+};
+
 interface Props {
-  teamA: Player[];
-  teamB: Player[];
+  teamA: LeaguePlayer[];
+  teamB: LeaguePlayer[];
   onClose: () => void;
-  onFinish: (winnerTeam: Player[] | null) => void;
+  onFinish: (winnerTeam: LeaguePlayer[] | null) => void;
 }
+
 
 const GameModal: React.FC<Props> = ({ teamA, teamB, onClose, onFinish }) => {
   const [scoreA, setScoreA] = useState(0);
@@ -15,24 +21,35 @@ const GameModal: React.FC<Props> = ({ teamA, teamB, onClose, onFinish }) => {
   const [foulsA, setFoulsA] = useState(0);
   const [foulsB, setFoulsB] = useState(0);
   const [maxPoints, setMaxPoints] = useState(21);
-  const [timeLimit] = useState(10 * 60);
-  const [timeLeft, setTimeLeft] = useState(timeLimit);
+
+  const regularTime = 10 * 60;
+  const extraTime = 2 * 60;
+
+  const [timeLeft, setTimeLeft] = useState(regularTime);
   const [isRunning, setIsRunning] = useState(false);
-  const [isFullscreen] = useState(false);
+  const [isExtraTime, setIsExtraTime] = useState(false);
+  const [isFullscreen] = useState(false); // puedes conectarlo con un toggle externo
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => setTimeLeft(timeLimit), [timeLimit]);
-
+  // Inicia o pausa el reloj
   useEffect(() => {
     if (isRunning) {
       intervalRef.current = setInterval(() => {
         setTimeLeft((prev) => {
           if (prev <= 1) {
             clearInterval(intervalRef.current!);
+            setIsRunning(false);
             if (scoreA > scoreB) onFinish(teamA);
             else if (scoreB > scoreA) onFinish(teamB);
-            else setTimeLeft(2 * 60); // tiempo extra
+            else if (!isExtraTime) {
+              setIsExtraTime(true);
+              setTimeLeft(extraTime);
+              setIsRunning(true);
+            } else {
+              // empate tras tiempo extra
+              onFinish(null);
+            }
             return 0;
           }
           return prev - 1;
@@ -41,12 +58,14 @@ const GameModal: React.FC<Props> = ({ teamA, teamB, onClose, onFinish }) => {
     } else {
       clearInterval(intervalRef.current!);
     }
+
     return () => clearInterval(intervalRef.current!);
   }, [isRunning]);
 
+  // Finaliza si llega al puntaje máximo
   useEffect(() => {
     if (scoreA >= maxPoints) onFinish(teamA);
-    if (scoreB >= maxPoints) onFinish(teamB);
+    else if (scoreB >= maxPoints) onFinish(teamB);
   }, [scoreA, scoreB]);
 
   const formatTime = (t: number) => {
@@ -62,31 +81,29 @@ const GameModal: React.FC<Props> = ({ teamA, teamB, onClose, onFinish }) => {
           isFullscreen ? "h-screen flex flex-col justify-center" : ""
         }`}
       >
-        {/* ✅ Reemplazo de Scoreboard + ControlPanel */}
         <ScorePanel
-            scoreA={scoreA}
-            scoreB={scoreB}
-            foulsA={foulsA}
-            foulsB={foulsB}
-            time={formatTime(timeLeft)}
-            isRunning={isRunning}
-            maxPoints={maxPoints}
-            isFullscreen={isFullscreen}
-            onStartPause={() => setIsRunning((prev) => !prev)}
-            onReset={() => {
-                setIsRunning(false);
-                setTimeLeft(timeLimit);
-            }}
-            onMaxPointsChange={setMaxPoints}
-            onScoreA={() => setScoreA((s) => s + 1)}
-            onUnscoreA={() => setScoreA((s) => Math.max(0, s - 1))}
-            onFoulA={() => setFoulsA((f) => f + 1)}
-            onScoreB={() => setScoreB((s) => s + 1)}
-            onUnscoreB={() => setScoreB((s) => Math.max(0, s - 1))}
-            onFoulB={() => setFoulsB((f) => f + 1)}
-            />
+          scoreA={scoreA}
+          scoreB={scoreB}
+          foulsA={foulsA}
+          foulsB={foulsB}
+          time={formatTime(timeLeft)}
+          isRunning={isRunning}
+          maxPoints={maxPoints}
+          isFullscreen={isFullscreen}
+          onStartPause={() => setIsRunning((prev) => !prev)}
+          onReset={() => {
+            setIsRunning(false);
+            setTimeLeft(isExtraTime ? extraTime : regularTime);
+          }}
+          onMaxPointsChange={setMaxPoints}
+          onScoreA={() => setScoreA((s) => s + 1)}
+          onUnscoreA={() => setScoreA((s) => Math.max(0, s - 1))}
+          onFoulA={() => setFoulsA((f) => f + 1)}
+          onScoreB={() => setScoreB((s) => s + 1)}
+          onUnscoreB={() => setScoreB((s) => Math.max(0, s - 1))}
+          onFoulB={() => setFoulsB((f) => f + 1)}
+        />
 
-        {/* Cerrar */}
         <button
           onClick={() => {
             setIsRunning(false);

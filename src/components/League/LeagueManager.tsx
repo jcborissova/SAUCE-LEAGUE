@@ -1,4 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
+// src/components/League/LeagueManager.tsx
 import React, { useEffect, useState } from "react";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { toast } from "react-toastify";
@@ -12,7 +14,7 @@ import TeamList from "./TeamList";
 import SortableLeagueBoard from "./LeagueBoard";
 
 type LeaguePlayer = Player & {
-  arrivalTime?: number;
+  arrivalTime: number;
   isGuest?: boolean;
 };
 
@@ -26,111 +28,98 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
   const [gameQueue, setGameQueue] = useState<LeaguePlayer[][]>([]);
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [winnerStreak, setWinnerStreak] = useState<{ team: LeaguePlayer[]; wins: number } | null>(null);
+  const [winnerStreak, setWinnerStreak] = useState<{ ids: number[]; wins: number } | null>(null);
 
   useEffect(() => {
-    fetchAvailablePlayers();
-    fetchLeaguePlayers();
+    loadData();
   }, []);
 
-  const fetchAvailablePlayers = async () => {
+  const loadData = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("players").select("*").order("id");
-    if (error) toast.error("Error al cargar los jugadores.");
-    else setAvailable(data || []);
-    setLoading(false);
-  };
 
-  const fetchLeaguePlayers = async () => {
-    const { data, error } = await supabase
+    const { data: leagueData, error: errorLeague } = await supabase
       .from("league_players")
       .select("player_id, is_guest, arrival_time, players(*)")
       .eq("league_id", leagueId)
       .order("arrival_time");
 
-    if (error) {
-      console.error("Error al cargar jugadores de la liga", error);
+    const { data: allPlayers, error: errorPlayers } = await supabase.from("players").select("*");
+
+    if (errorLeague || errorPlayers) {
+      toast.error("Error al cargar los datos");
+      setLoading(false);
       return;
     }
 
-    const leaguePlayers: LeaguePlayer[] =
-      data?.map((item: any) => ({
-        ...item.players,
-        isGuest: item.is_guest,
-        arrivalTime: new Date(item.arrival_time).getTime(),
-      })) || [];
+    const leaguePlayers: LeaguePlayer[] = (leagueData || []).map((item: any) => ({
+      ...item.players,
+      isGuest: item.is_guest,
+      arrivalTime: new Date(item.arrival_time).getTime(),
+    }));
+
+    const leagueIds = leaguePlayers.map((p) => p.id);
+    const notInLeague = (allPlayers || []).filter((p: any) => !leagueIds.includes(p.id));
 
     setPlayers(leaguePlayers);
+    setAvailable(notInLeague);
+    setLoading(false);
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || over.id !== "league-dropzone") return;
+
+    const player = available.find((p) => p.id.toString() === active.id);
+    if (!player || players.some((p) => p.id === player.id)) return;
+
+    const arrival = new Date().toISOString();
+    const newPlayer = { ...player, arrivalTime: new Date(arrival).getTime() };
+
+    await supabase.from("league_players").insert({
+      league_id: leagueId,
+      player_id: player.id,
+      is_guest: false,
+      arrival_time: arrival,
+    });
+
+    toast.info("Jugador agregado");
+    loadData();
   };
 
   const handleAddGuest = async (guest: Player) => {
     const arrival = new Date().toISOString();
-    const newGuest: LeaguePlayer = {
-      ...guest,
-      isGuest: true,
-      arrivalTime: new Date(arrival).getTime(),
-    };
-
-    setPlayers((prev) => [...prev, newGuest]);
-    toast.success("Invitado agregado");
-
-    const { error } = await supabase.from("league_players").insert({
+    await supabase.from("league_players").insert({
       league_id: leagueId,
       player_id: guest.id,
       is_guest: true,
       arrival_time: arrival,
     });
-
-    if (error) console.error("Error al guardar invitado en DB", error);
-  };
-
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (over?.id === "league-dropzone") {
-      const player = available.find((p) => p.id.toString() === active.id);
-      if (player && !players.some((p) => p.id === player.id)) {
-        const arrival = new Date().toISOString();
-        const newPlayer = {
-          ...player,
-          arrivalTime: new Date(arrival).getTime(),
-        };
-
-        setPlayers((prev) => [...prev, newPlayer]);
-        setAvailable((prev) => prev.filter((p) => p.id !== player.id));
-        toast.info("⚡ Jugador agregado");
-
-        const { error } = await supabase.from("league_players").insert({
-          league_id: leagueId,
-          player_id: player.id,
-          is_guest: false,
-          arrival_time: arrival,
-        });
-
-        if (error) console.error("Error al guardar jugador en DB", error);
-      }
-    }
+    toast.success("Invitado agregado");
+    loadData();
   };
 
   const handleRemovePlayer = async (id: number) => {
-    setPlayers((prev) => prev.filter((p) => p.id !== id));
-
-    const { error } = await supabase
-      .from("league_players")
-      .delete()
-      .match({ league_id: leagueId, player_id: id });
-
-    if (error) {
-      toast.error("Error al eliminar jugador de la liga");
-      console.error("Supabase deletion error:", error);
-    } else {
-      toast.success("Jugador eliminado de la liga");
-    }
+    await supabase.from("league_players").delete().match({ league_id: leagueId, player_id: id });
+    toast.success("Jugador eliminado");
+    loadData();
   };
 
-  const generateMatch = () => {
-    const ordered = [...players].sort((a, b) => (a.arrivalTime ?? 0) - (b.arrivalTime ?? 0));
-    if (ordered.length < 10) return toast.warning("Se necesitan 10 jugadores para iniciar.");
-    setGameQueue([ordered.slice(0, 5), ordered.slice(5, 10)]);
+  const updateActivePlayers = async (teamA: LeaguePlayer[], teamB: LeaguePlayer[]) => {
+    await supabase.from("active_players").delete().eq("league_id", leagueId);
+    const payload = [
+      ...teamA.map((p, i) => ({ league_id: leagueId, player_id: p.id, team: "A", position: i })),
+      ...teamB.map((p, i) => ({ league_id: leagueId, player_id: p.id, team: "B", position: i })),
+    ];
+    await supabase.from("active_players").insert(payload);
+  };
+
+  const generateMatch = async () => {
+    const ordered = [...players].sort((a, b) => a.arrivalTime - b.arrivalTime);
+    if (ordered.length < 10) return toast.warning("Se necesitan al menos 10 jugadores");
+    const teamA = ordered.slice(0, 5);
+    const teamB = ordered.slice(5, 10);
+    await updateActivePlayers(teamA, teamB);
+    setGameQueue([teamA, teamB]);
     setShowModal(true);
   };
 
@@ -140,72 +129,64 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
     const [teamA, teamB] = gameQueue;
     const loser = winner === teamA ? teamB : teamA;
 
-    const isSameTeam =
-      winnerStreak && winner.every((p) => winnerStreak.team.some((w) => w.id === p.id));
-    let newStreak: { team: LeaguePlayer[]; wins: number } | null = isSameTeam
-      ? { team: winner, wins: winnerStreak!.wins + 1 }
-      : { team: winner, wins: 1 };
+    const sameStreak =
+      winnerStreak && winner.every((p) => winnerStreak.ids.includes(p.id));
+    const newStreak = sameStreak
+      ? { ids: winner.map((p) => p.id), wins: winnerStreak.wins + 1 }
+      : { ids: winner.map((p) => p.id), wins: 1 };
 
-    if (newStreak.wins >= 2 && players.length - 10 >= 10) {
-      const remaining = players.filter((p) => !winner.some((w) => w.id === p.id));
-      setPlayers([...remaining]);
-      toast.success("🏆 Equipo se retira por 2 victorias");
-      newStreak = null;
+    const allIds = [...teamA, ...teamB].map((p) => p.id);
+    const waiting = players.filter((p) => !allIds.includes(p.id)).sort((a, b) => a.arrivalTime - b.arrivalTime);
+
+    let nextA: LeaguePlayer[] = [];
+    let nextB: LeaguePlayer[] = [];
+
+    if (newStreak.wins >= 2 && waiting.length >= 10) {
+      nextA = waiting.slice(0, 5);
+      nextB = waiting.slice(5, 10);
+      setWinnerStreak(null);
     } else {
-      const remaining = players.filter((p) => !loser.some((l) => l.id === p.id));
-      setPlayers([...remaining, ...loser]);
+      const replacement = waiting.slice(0, 5);
+      if (winner === teamA) {
+        nextA = teamA;
+        nextB = replacement.length < 5 ? [...replacement, loser[0]] : replacement;
+      } else {
+        nextA = replacement.length < 5 ? [...replacement, loser[0]] : replacement;
+        nextB = teamB;
+      }
+      setWinnerStreak(newStreak);
     }
 
-    const rest = players.slice(10);
-    setGameQueue(rest.length >= 5 ? [winner, rest.slice(0, 5)] : []);
-    setWinnerStreak(newStreak);
-    setShowModal(false);
-
-    const { data: matchData, error: matchError } = await supabase
+    const { data: matchData, error } = await supabase
       .from("matches")
-      .insert({
-        league_id: leagueId,
-        winner_team: winner === teamA ? "A" : "B",
-      })
+      .insert({ league_id: leagueId, winner_team: winner === teamA ? "A" : "B" })
       .select()
       .single();
 
-    if (matchError || !matchData) {
-      toast.error("Error al guardar resultado del partido");
+    if (error || !matchData) {
+      toast.error("Error al guardar el partido");
       return;
     }
 
-    await supabase
-      .from("current_match")
-      .upsert({ league_id: leagueId, match_id: matchData.id });
+    await supabase.from("current_match").upsert({ league_id: leagueId, match_id: matchData.id });
 
-    const matchPlayersPayload = [
-      ...teamA.map((p) => ({
+    await supabase.from("match_players").insert(
+      [...teamA, ...teamB].map((p) => ({
         match_id: matchData.id,
         player_id: p.id,
-        team: "A",
-      })),
-      ...teamB.map((p) => ({
-        match_id: matchData.id,
-        player_id: p.id,
-        team: "B",
-      })),
-    ];
+        team: teamA.includes(p) ? "A" : "B",
+      }))
+    );
 
-    const { error: mpError } = await supabase.from("match_players").insert(matchPlayersPayload);
-
-    if (mpError) {
-      console.error("Error al guardar jugadores del partido", mpError);
-      toast.error("Error al guardar jugadores del partido");
-    } else {
-      toast.success("Resultado guardado");
-      await fetchLeaguePlayers();
-    }
+    await updateActivePlayers(nextA, nextB);
+    setGameQueue([nextA, nextB]);
+    setShowModal(false);
+    loadData();
   };
 
-  const orderedPlayers = [...players].sort((a, b) => (a.arrivalTime ?? 0) - (b.arrivalTime ?? 0));
-  const currentMatch = orderedPlayers.slice(0, 10);
-  const waitingList = orderedPlayers.slice(10);
+  const ordered = [...players].sort((a, b) => a.arrivalTime - b.arrivalTime);
+  const currentMatch = ordered.slice(0, 10);
+  const waitingList = ordered.slice(10);
 
   return (
     <div className="space-y-8 pb-20">
@@ -222,34 +203,18 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
         <DndContext onDragEnd={handleDragEnd}>
           {available.length > 0 && (
             <section className="bg-white p-4 rounded-xl shadow-md">
-              <h3 className="text-lg font-semibold text-blue-950 mb-3">Jugadores de la Liga</h3>
+              <h3 className="text-lg font-semibold text-blue-950 mb-3">Jugadores disponibles</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 max-h-[300px] overflow-y-auto">
                 {available.map((p) => (
                   <PlayerCard
                     key={p.id}
                     player={p}
-                    onDoubleClick={async () => {
-                      if (!players.some((pl) => pl.id === p.id)) {
-                        const arrival = new Date().toISOString();
-                        const newPlayer = {
-                          ...p,
-                          arrivalTime: new Date(arrival).getTime(),
-                        };
-
-                        setPlayers((prev) => [...prev, newPlayer]);
-                        setAvailable((prev) => prev.filter((pl) => pl.id !== p.id));
-                        toast.info("Jugador agregado");
-
-                        const { error } = await supabase.from("league_players").insert({
-                          league_id: leagueId,
-                          player_id: p.id,
-                          is_guest: false,
-                          arrival_time: arrival,
-                        });
-
-                        if (error) console.error("Error al guardar jugador en DB", error);
-                      }
-                    }}
+                    onDoubleClick={() =>
+                      handleDragEnd({
+                        active: { id: p.id.toString() } as any,
+                        over: { id: "league-dropzone" } as any,
+                      } as DragEndEvent)
+                    }
                   />
                 ))}
               </div>
@@ -275,15 +240,13 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
 
       {currentMatch.length > 0 && (
         <section className="bg-white p-4 rounded-xl shadow-md">
-          <h3 className="text-lg font-semibold text-blue-950 mb-3">Quintetos en orden de llegada</h3>
-          <TeamList players={currentMatch} />
+          <TeamList players={currentMatch} title="Jugadores del partido" teamMode />
         </section>
       )}
 
       {waitingList.length > 0 && (
         <section className="bg-white p-4 rounded-xl shadow-md">
-          <h3 className="text-lg font-semibold text-blue-950 mb-3">Jugadores en espera</h3>
-          <TeamList players={waitingList} />
+          <TeamList players={waitingList} title="Jugadores en espera" />
         </section>
       )}
 
