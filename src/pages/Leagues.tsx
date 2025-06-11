@@ -1,8 +1,13 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/rules-of-hooks */
 import React, { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { toast } from "react-toastify";
 import LeagueManager from "../components/League/LeagueManager";
 import { ArrowPathIcon } from "@heroicons/react/16/solid";
+import ConfirmModal from "../components/ConfirmModal";
+import LeagueItem from "../components/League/LeagueItem";
+
 
 type League = {
   id: number;
@@ -17,10 +22,15 @@ const LeaguesPage: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [newLeague, setNewLeague] = useState({ name: "", description: "" });
   const [selectedLeague, setSelectedLeague] = useState<League | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [leagueToDelete, setLeagueToDelete] = useState<League | null>(null);
 
   const fetchLeagues = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("leagues").select("*").order("created_at", { ascending: false });
+    const { data, error } = await supabase
+      .from("leagues")
+      .select("*")
+      .order("created_at", { ascending: false });
     if (error) toast.error("Error al cargar ligas");
     else setLeagues(data || []);
     setLoading(false);
@@ -48,6 +58,53 @@ const LeaguesPage: React.FC = () => {
     setNewLeague({ name: "", description: "" });
     setLeagues([data!, ...leagues]);
   };
+
+  const handleDeleteLeague = async (leagueId: number) => {
+    try {
+      setLoading(true);
+  
+      // 1. Elimina jugadores activos de la liga
+      const { error: activePlayersError } = await supabase
+        .from("active_players")
+        .delete()
+        .eq("league_id", leagueId);
+      if (activePlayersError) throw activePlayersError;
+  
+      // 2. Elimina el partido actual de esa liga
+      const { error: matchError } = await supabase
+        .from("current_match")
+        .delete()
+        .eq("league_id", leagueId);
+      if (matchError) throw matchError;
+  
+      // 3. (Opcional) Elimina los resultados históricos si usas una tabla `matches`
+      const { error: matchesError } = await supabase
+        .from("matches")
+        .delete()
+        .eq("league_id", leagueId);
+      if (matchesError) throw matchesError;
+  
+      // 4. Ahora sí, elimina la liga
+      const { error: leagueError } = await supabase
+        .from("leagues")
+        .delete()
+        .eq("id", leagueId);
+      if (leagueError) throw leagueError;
+  
+      toast.success("Liga eliminada");
+      fetchLeagues();
+    } catch (err: any) {
+      console.error(err);
+      if (err.code === "23503") {
+        toast.error("No se puede eliminar la liga porque tiene referencias activas.");
+      } else {
+        toast.error("Error al eliminar liga");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+  
 
   if (selectedLeague)
     return (
@@ -82,21 +139,20 @@ const LeaguesPage: React.FC = () => {
           <ArrowPathIcon className="w-10 h-10 animate-spin text-blue-600" />
         </div>
       ) : (
-        <ul className="space-y-4">
+        <ul className="space-y-3">
           {leagues.map((l) => (
-            <li
+            <LeagueItem
               key={l.id}
-              className="bg-white rounded-xl p-4 shadow hover:shadow-md hover:bg-blue-50 cursor-pointer transition"
-              onClick={() => setSelectedLeague(l)}
-            >
-              <h3 className="text-lg font-semibold">{l.name}</h3>
-              <p className="text-gray-600 text-sm">{l.description}</p>
-              <p className="text-gray-400 text-xs mt-1">
-                Creado el {new Date(l.created_at).toLocaleDateString()}
-              </p>
-            </li>
+              league={l}
+              onSelect={() => setSelectedLeague(l)}
+              onDeleteRequest={() => {
+                setLeagueToDelete(l);
+                setShowConfirm(true);
+              }}
+            />
           ))}
         </ul>
+
       )}
 
       {showModal && (
@@ -144,6 +200,22 @@ const LeaguesPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={showConfirm}
+        title="Eliminar Liga"
+        message={`¿Estás seguro de eliminar la liga "${leagueToDelete?.name}"? Esta acción eliminará todos sus resultados.`}
+        onCancel={() => {
+          setShowConfirm(false);
+          setLeagueToDelete(null);
+        }}
+        onConfirm={async () => {
+          if (!leagueToDelete) return;
+          await handleDeleteLeague(leagueToDelete.id);
+          setShowConfirm(false);
+          setLeagueToDelete(null);
+        }}
+      />
     </div>
   );
 };

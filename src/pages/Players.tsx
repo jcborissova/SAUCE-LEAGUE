@@ -2,11 +2,10 @@ import React, { useEffect, useState } from "react";
 import PlayerCard from "../components/PlayerCard";
 import PlayerTable from "../components/PlayerTable";
 import AddPlayerModal from "../components/AddPlayerModal";
-import { Squares2X2Icon, TableCellsIcon, ArrowPathIcon } from "@heroicons/react/24/solid";
+import { Squares2X2Icon, TableCellsIcon, ArrowPathIcon, UserCircleIcon } from "@heroicons/react/24/solid";
 import { supabase } from "../lib/supabase";
-import type { Player, PlayerFormState } from "../types/player";
 import { toast } from "react-toastify";
-import { UserCircleIcon } from "@heroicons/react/24/solid";
+import type { Player, PlayerFormState } from "../types/player";
 
 const Players: React.FC = () => {
   const [players, setPlayers] = useState<Player[]>([]);
@@ -27,7 +26,7 @@ const Players: React.FC = () => {
     cedula: "",
     description: "",
     photo: "",
-  });  
+  });
 
   const resetPlayerForm = () => {
     setNewPlayer({
@@ -50,28 +49,30 @@ const Players: React.FC = () => {
       reader.readAsDataURL(file);
     });
 
-    const fetchPlayers = async () => {
-      try {
-        setLoading(true);
-        const { data, error } = await supabase.from("players").select("*").order("id");
-        if (error) throw error;
-    
-        // Añade un campo `photo` con SVG de UserCircleIcon si no existe
-        const normalizedPlayers = (data || []).map((player) => ({
-          ...player,
-          photo: typeof player.photo === "string" && player.photo.trim() !== ""
-            ? player.photo
-            : "", // deja string vacío y el componente usará el ícono
-        }));
-    
-        setPlayers(normalizedPlayers);
-      } catch (err) {
-        console.error(err);
-        toast.error("Error al cargar jugadores.");
-      } finally {
-        setLoading(false);
-      }
-    };    
+  const fetchPlayers = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("players")
+        .select("*")
+        .eq("is_guest", false)
+        .order("id");
+
+      if (error) throw error;
+
+      const normalizedPlayers = (data || []).map((player) => ({
+        ...player,
+        photo: typeof player.photo === "string" && player.photo.trim() !== "" ? player.photo : "",
+      }));
+
+      setPlayers(normalizedPlayers);
+    } catch (err) {
+      console.error(err);
+      toast.error("Error al cargar jugadores.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchPlayers();
@@ -98,21 +99,15 @@ const Players: React.FC = () => {
     setModalMode("edit");
     setEditingPlayerId(player.id);
     setModalOpen(true);
-  };  
+  };
 
   const handleAddOrEditPlayer = async () => {
     const { names, lastnames, backjerseyname, jerseynumber, cedula } = newPlayer;
 
-    if (
-      !names?.trim() ||
-      !lastnames?.trim() ||
-      !backjerseyname?.trim() ||
-      !jerseynumber ||
-      !cedula
-    ) {
+    if (!names?.trim() || !lastnames?.trim() || !backjerseyname?.trim() || !jerseynumber || !cedula) {
       toast.warning("Todos los campos obligatorios deben estar llenos.");
       return;
-    }    
+    }
 
     try {
       setLoading(true);
@@ -125,14 +120,14 @@ const Players: React.FC = () => {
       }
 
       const payload = {
-        names: newPlayer.names?.trim() || null,
-        lastnames: newPlayer.lastnames?.trim() || null,
-        backjerseyname: newPlayer.backjerseyname?.trim() || null,
-        jerseynumber: parseInt(newPlayer.jerseynumber || "0", 10),
-        cedula: parseInt(newPlayer.cedula || "0", 10),
+        names: names.trim(),
+        lastnames: lastnames.trim(),
+        backjerseyname: backjerseyname.trim(),
+        jerseynumber: parseInt(jerseynumber, 10),
+        cedula: parseInt(cedula, 10),
         description: newPlayer.description?.trim() || null,
         photo: photoToSave || null,
-      };      
+      };
 
       if (modalMode === "add") {
         const { error } = await supabase.from("players").insert([payload]);
@@ -141,7 +136,7 @@ const Players: React.FC = () => {
       } else if (editingPlayerId) {
         const { error } = await supabase.from("players").update(payload).eq("id", editingPlayerId);
         if (error) throw error;
-        toast.success("✏️ Jugador actualizado");
+        toast.success("Jugador actualizado");
       }
 
       setModalOpen(false);
@@ -159,7 +154,7 @@ const Players: React.FC = () => {
       setLoading(true);
       const { error } = await supabase.from("players").delete().eq("id", id);
       if (error) throw error;
-      toast.success("🗑️ Jugador eliminado");
+      toast.success("Jugador eliminado");
       fetchPlayers();
     } catch (err) {
       console.error(err);
@@ -195,61 +190,36 @@ const Players: React.FC = () => {
         mode={modalMode}
       />
 
-    {viewPlayer && (
-      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-        <div className="relative bg-white rounded-3xl shadow-xl w-full max-w-sm p-6 pt-20 text-center">
-
-          {/* Círculo con sombra flotante (foto) */}
-          <div className="absolute -top-14 left-1/2 -translate-x-1/2 w-28 h-28 rounded-full border-4 border-white shadow-lg overflow-hidden cursor-pointer transition transform hover:scale-105 bg-gray-100 flex items-center justify-center">
-          {viewPlayer.photo ? (
-              <img
-                src={viewPlayer.photo}
-                alt="Jugador"
-                className="w-full h-full object-cover"
-                onClick={() => setExpanded(true)}
-              />
-            ) : (
-              <UserCircleIcon className="w-20 h-20 text-gray-300" />
-            )}
+      {viewPlayer && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="relative bg-white rounded-3xl shadow-xl w-full max-w-sm p-6 pt-20 text-center">
+            <div className="absolute -top-14 left-1/2 -translate-x-1/2 w-28 h-28 rounded-full border-4 border-white shadow-lg overflow-hidden cursor-pointer bg-gray-100 flex items-center justify-center">
+              {viewPlayer.photo ? (
+                <img
+                  src={viewPlayer.photo}
+                  alt="Jugador"
+                  className="w-full h-full object-cover"
+                  onClick={() => setExpanded(true)}
+                />
+              ) : (
+                <UserCircleIcon className="w-20 h-20 text-gray-300" />
+              )}
+            </div>
+            <button onClick={() => setViewPlayer(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 text-xl font-bold">×</button>
+            <div>
+              <h2 className="text-xl font-semibold text-blue-950">{viewPlayer.names} {viewPlayer.lastnames}</h2>
+              <p className="text-sm text-gray-500 mt-1">Jersey #{viewPlayer.jerseynumber}</p>
+              <p className="text-xs text-gray-400 mt-1 italic">{viewPlayer.description || "Jugador de liga"}</p>
+            </div>
           </div>
-
-          {/* Botón cerrar (X) */}
-          <button
-            onClick={() => setViewPlayer(null)}
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 text-xl font-bold"
-          >
-            ×
-          </button>
-
-          {/* Contenido del jugador */}
-          <div>
-            <h2 className="text-xl font-semibold text-blue-950">
-              {viewPlayer.names} {viewPlayer.lastnames}
-            </h2>
-            <p className="text-sm text-gray-500 mt-1">Jersey #{viewPlayer.jerseynumber}</p>
-            <p className="text-xs text-gray-400 mt-1 italic">{viewPlayer.description || "Jugador de liga"}</p>
-          </div>
+          {expanded && (
+            <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center" onClick={() => setExpanded(false)}>
+              <img src={viewPlayer.photo} alt="Jugador" className="max-w-full max-h-full object-contain" />
+            </div>
+          )}
         </div>
+      )}
 
-        {/* Foto expandida */}
-        {expanded && (
-          <div
-            className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
-            onClick={() => setExpanded(false)}
-          >
-            {typeof viewPlayer.photo === "string" && viewPlayer.photo.trim() !== "" ? (
-              <img
-                src={viewPlayer.photo}
-                alt="Jugador"
-                className="max-w-full max-h-full object-contain"
-              />
-            ) : (
-              <UserCircleIcon className="w-40 h-40 text-gray-500" />
-            )}
-          </div>
-        )}
-      </div>
-    )}
       {loading ? (
         <div className="flex justify-center py-10">
           <ArrowPathIcon className="h-8 w-8 text-blue-800 animate-spin" />
@@ -264,16 +234,9 @@ const Players: React.FC = () => {
         />
       ) : (
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          {players.length === 0 ? (
-            <div className="col-span-full flex flex-col items-center justify-center space-y-2 p-10 text-center text-gray-600 bg-white rounded-lg shadow-md">
-              <ArrowPathIcon className="h-8 w-8 text-gray-400 animate-spin" />
-              <p className="text-sm text-gray-500">Sin jugadores registrados</p>
-            </div>
-          ) : (
-            players.map((player) => (
-              <PlayerCard key={player.id} player={player} onDelete={handleDeletePlayer} />
-            ))
-          )}
+          {players.map((player) => (
+            <PlayerCard key={player.id} player={player} onDelete={handleDeletePlayer} />
+          ))}
         </div>
       )}
     </div>

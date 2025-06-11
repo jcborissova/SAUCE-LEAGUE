@@ -3,7 +3,7 @@ import type { Player } from "../../types/player";
 import ScorePanel from "./ScorePanel";
 
 type LeaguePlayer = Player & {
-  arrivalTime: number;
+  order_number: number;
   isGuest?: boolean;
 };
 
@@ -13,7 +13,6 @@ interface Props {
   onClose: () => void;
   onFinish: (winnerTeam: LeaguePlayer[] | null) => void;
 }
-
 
 const GameModal: React.FC<Props> = ({ teamA, teamB, onClose, onFinish }) => {
   const [scoreA, setScoreA] = useState(0);
@@ -28,11 +27,11 @@ const GameModal: React.FC<Props> = ({ teamA, teamB, onClose, onFinish }) => {
   const [timeLeft, setTimeLeft] = useState(regularTime);
   const [isRunning, setIsRunning] = useState(false);
   const [isExtraTime, setIsExtraTime] = useState(false);
-  const [isFullscreen] = useState(false); // puedes conectarlo con un toggle externo
+  const [isFullscreen] = useState(false);
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Inicia o pausa el reloj
+  // Control del tiempo
   useEffect(() => {
     if (isRunning) {
       intervalRef.current = setInterval(() => {
@@ -40,6 +39,7 @@ const GameModal: React.FC<Props> = ({ teamA, teamB, onClose, onFinish }) => {
           if (prev <= 1) {
             clearInterval(intervalRef.current!);
             setIsRunning(false);
+
             if (scoreA > scoreB) onFinish(teamA);
             else if (scoreB > scoreA) onFinish(teamB);
             else if (!isExtraTime) {
@@ -47,11 +47,12 @@ const GameModal: React.FC<Props> = ({ teamA, teamB, onClose, onFinish }) => {
               setTimeLeft(extraTime);
               setIsRunning(true);
             } else {
-              // empate tras tiempo extra
-              onFinish(null);
+              onFinish(null); // empate tras tiempo extra
             }
+
             return 0;
           }
+
           return prev - 1;
         });
       }, 1000);
@@ -68,9 +69,9 @@ const GameModal: React.FC<Props> = ({ teamA, teamB, onClose, onFinish }) => {
     else if (scoreB >= maxPoints) onFinish(teamB);
   }, [scoreA, scoreB]);
 
-  const formatTime = (t: number) => {
-    const m = Math.floor(t / 60);
-    const s = t % 60;
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 

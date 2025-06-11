@@ -1,6 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// src/components/League/LeagueManager.tsx
 import React, { useEffect, useState } from "react";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { toast } from "react-toastify";
@@ -14,7 +12,7 @@ import TeamList from "./TeamList";
 import SortableLeagueBoard from "./LeagueBoard";
 
 type LeaguePlayer = Player & {
-  arrivalTime: number;
+  order_number: number;
   isGuest?: boolean;
 };
 
@@ -39,9 +37,9 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
 
     const { data: leagueData, error: errorLeague } = await supabase
       .from("league_players")
-      .select("player_id, is_guest, arrival_time, players(*)")
+      .select("player_id, order_number, players(*)")
       .eq("league_id", leagueId)
-      .order("arrival_time");
+      .order("order_number");
 
     const { data: allPlayers, error: errorPlayers } = await supabase.from("players").select("*");
 
@@ -53,12 +51,13 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
 
     const leaguePlayers: LeaguePlayer[] = (leagueData || []).map((item: any) => ({
       ...item.players,
-      isGuest: item.is_guest,
-      arrivalTime: new Date(item.arrival_time).getTime(),
+      isGuest: item.players.is_guest,
+      order_number: item.order_number ?? 9999,
     }));
 
     const leagueIds = leaguePlayers.map((p) => p.id);
     const notInLeague = (allPlayers || []).filter((p: any) => !leagueIds.includes(p.id));
+    
 
     setPlayers(leaguePlayers);
     setAvailable(notInLeague);
@@ -72,30 +71,60 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
     const player = available.find((p) => p.id.toString() === active.id);
     if (!player || players.some((p) => p.id === player.id)) return;
 
-    const arrival = new Date().toISOString();
-    const newPlayer = { ...player, arrivalTime: new Date(arrival).getTime() };
+    const maxOrder = players.reduce((max, p) => Math.max(max, p.order_number), 0);
 
-    await supabase.from("league_players").insert({
+    const { error } = await supabase.from("league_players").insert({
       league_id: leagueId,
       player_id: player.id,
       is_guest: false,
-      arrival_time: arrival,
+      order_number: maxOrder + 1,
     });
 
+    if (error) return toast.error("Error al agregar jugador");
+
     toast.info("Jugador agregado");
-    loadData();
+    setPlayers((prev) => [
+      ...prev,
+      { ...player, isGuest: false, order_number: maxOrder + 1 },
+    ]);
+    setAvailable((prev) => prev.filter((p) => p.id !== player.id));
   };
 
   const handleAddGuest = async (guest: Player) => {
-    const arrival = new Date().toISOString();
-    await supabase.from("league_players").insert({
+    const { data: insertedPlayer, error: insertError } = await supabase
+      .from("players")
+      .insert({
+        names: guest.names,
+        lastnames: guest.lastnames || "",
+        backjerseyname: guest.backjerseyname || guest.names,
+        jerseynumber: 0,
+        cedula: null,
+        description: "Invitado",
+        photo: null,
+        is_guest: true,
+      })
+      .select()
+      .single();
+
+    if (insertError || !insertedPlayer) return toast.error("Error al guardar invitado");
+
+    const maxOrder = players.reduce((max, p) => Math.max(max, p.order_number), 0);
+
+    const { error: leagueInsertError } = await supabase.from("league_players").insert({
       league_id: leagueId,
-      player_id: guest.id,
+      player_id: insertedPlayer.id,
       is_guest: true,
-      arrival_time: arrival,
+      order_number: maxOrder + 1,
     });
+
+    if (leagueInsertError) return toast.error("Error al registrar invitado en la liga");
+
     toast.success("Invitado agregado");
-    loadData();
+
+    setPlayers((prev) => [
+      ...prev,
+      { ...insertedPlayer, isGuest: true, order_number: maxOrder + 1 },
+    ]);
   };
 
   const handleRemovePlayer = async (id: number) => {
@@ -114,7 +143,7 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
   };
 
   const generateMatch = async () => {
-    const ordered = [...players].sort((a, b) => a.arrivalTime - b.arrivalTime);
+    const ordered = [...players].sort((a, b) => a.order_number - b.order_number);
     if (ordered.length < 10) return toast.warning("Se necesitan al menos 10 jugadores");
     const teamA = ordered.slice(0, 5);
     const teamB = ordered.slice(5, 10);
@@ -125,22 +154,23 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
 
   const handleGameEnd = async (winner: LeaguePlayer[] | null) => {
     if (!winner || gameQueue.length < 2) return;
-
+  
     const [teamA, teamB] = gameQueue;
     const loser = winner === teamA ? teamB : teamA;
-
-    const sameStreak =
-      winnerStreak && winner.every((p) => winnerStreak.ids.includes(p.id));
+  
+    const sameStreak = winnerStreak && winner.every((p) => winnerStreak.ids.includes(p.id));
     const newStreak = sameStreak
       ? { ids: winner.map((p) => p.id), wins: winnerStreak.wins + 1 }
       : { ids: winner.map((p) => p.id), wins: 1 };
-
+  
     const allIds = [...teamA, ...teamB].map((p) => p.id);
-    const waiting = players.filter((p) => !allIds.includes(p.id)).sort((a, b) => a.arrivalTime - b.arrivalTime);
-
+    const waiting = players
+      .filter((p) => !allIds.includes(p.id))
+      .sort((a, b) => a.order_number - b.order_number);
+  
     let nextA: LeaguePlayer[] = [];
     let nextB: LeaguePlayer[] = [];
-
+  
     if (newStreak.wins >= 2 && waiting.length >= 10) {
       nextA = waiting.slice(0, 5);
       nextB = waiting.slice(5, 10);
@@ -149,27 +179,33 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
       const replacement = waiting.slice(0, 5);
       if (winner === teamA) {
         nextA = teamA;
-        nextB = replacement.length < 5 ? [...replacement, loser[0]] : replacement;
+        nextB = replacement.length < 5
+          ? [...replacement, ...loser.slice(0, 5 - replacement.length)]
+          : replacement;
       } else {
-        nextA = replacement.length < 5 ? [...replacement, loser[0]] : replacement;
         nextB = teamB;
+        nextA = replacement.length < 5
+          ? [...replacement, ...loser.slice(0, 5 - replacement.length)]
+          : replacement;
       }
       setWinnerStreak(newStreak);
     }
-
+  
     const { data: matchData, error } = await supabase
       .from("matches")
       .insert({ league_id: leagueId, winner_team: winner === teamA ? "A" : "B" })
       .select()
       .single();
-
+  
     if (error || !matchData) {
       toast.error("Error al guardar el partido");
       return;
     }
-
-    await supabase.from("current_match").upsert({ league_id: leagueId, match_id: matchData.id });
-
+  
+    await supabase
+      .from("current_match")
+      .upsert({ league_id: leagueId, match_id: matchData.id });
+  
     await supabase.from("match_players").insert(
       [...teamA, ...teamB].map((p) => ({
         match_id: matchData.id,
@@ -177,14 +213,29 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
         team: teamA.includes(p) ? "A" : "B",
       }))
     );
-
+  
     await updateActivePlayers(nextA, nextB);
+  
+    // ✅ Actualizar el orden en base de datos
+    const updatedOrder = [...nextA, ...nextB, ...waiting].map((p, i) => ({
+      player_id: p.id,
+      order_number: i + 1,
+    }));
+  
+    for (const { player_id, order_number } of updatedOrder) {
+      await supabase
+        .from("league_players")
+        .update({ order_number })
+        .match({ league_id: leagueId, player_id });
+    }
+  
     setGameQueue([nextA, nextB]);
     setShowModal(false);
     loadData();
   };
+  
 
-  const ordered = [...players].sort((a, b) => a.arrivalTime - b.arrivalTime);
+  const ordered = [...players].sort((a, b) => a.order_number - b.order_number);
   const currentMatch = ordered.slice(0, 10);
   const waitingList = ordered.slice(10);
 
