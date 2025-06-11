@@ -8,7 +8,7 @@ import {
   TrophyIcon,
   PlayIcon,
 } from "@heroicons/react/24/solid";
-import logo from "../assets/sl-logo.png";
+import logo from "../assets/sl-logo-white.png";
 
 const Layout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
