@@ -16,6 +16,7 @@ const Players: React.FC = () => {
   const [editingPlayerId, setEditingPlayerId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const [newPlayer, setNewPlayer] = useState<PlayerFormState>({
     id: 0,
@@ -164,6 +165,12 @@ const Players: React.FC = () => {
     }
   };
 
+  const filteredPlayers = players.filter(p =>
+    `${p.names} ${p.lastnames} ${p.backjerseyname} ${p.jerseynumber}`
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase())
+  );  
+
   return (
     <div className="mx-auto p-4 space-y-4">
       <div className="flex items-center justify-between">
@@ -220,13 +227,24 @@ const Players: React.FC = () => {
         </div>
       )}
 
+      {/* Buscador */}
+      <div className="flex items-center justify-between mb-4">
+        <input
+          type="text"
+          placeholder="Buscar jugador..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="border rounded-lg px-4 py-2 w-full max-w-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+        />
+      </div>
+
       {loading ? (
         <div className="flex justify-center py-10">
           <ArrowPathIcon className="h-8 w-8 text-blue-800 animate-spin" />
         </div>
       ) : viewMode === "table" ? (
         <PlayerTable
-          players={players}
+          players={filteredPlayers}
           onDelete={handleDeletePlayer}
           onOpenModal={openAddModal}
           onEdit={openEditModal}
@@ -234,11 +252,12 @@ const Players: React.FC = () => {
         />
       ) : (
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          {players.map((player) => (
+          {filteredPlayers.map((player) => (
             <PlayerCard key={player.id} player={player} onDelete={handleDeletePlayer} />
           ))}
         </div>
       )}
+
     </div>
   );
 };
