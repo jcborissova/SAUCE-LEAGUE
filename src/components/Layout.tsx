@@ -3,10 +3,12 @@ import { Link, Outlet } from "react-router-dom";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
+  HomeIcon,
   UserGroupIcon,
   TrophyIcon,
   PlayIcon,
 } from "@heroicons/react/24/solid";
+import logo from "../assets/sl-logo.png";
 
 const Layout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -24,14 +26,22 @@ const Layout: React.FC = () => {
           {sidebarOpen ? (
             <h1 className="text-xl font-bold tracking-wide">Sauce League</h1>
           ) : (
-            <div className="bg-white text-blue-950 rounded-full w-10 h-10 flex items-center justify-center font-bold">
-              SL
-            </div>
+            <img src={logo} alt="Logo" className="w-12 h-12 object-contain" />
           )}
         </div>
 
         {/* Menu */}
         <nav className="flex flex-col gap-4 px-2">
+          <Link
+            to="/"
+            className={`flex items-center gap-3 rounded-md py-2 px-3 hover:bg-blue-800 transition ${
+              sidebarOpen ? "justify-start" : "justify-center"
+            }`}
+          >
+            <HomeIcon className="h-6 w-6" />
+            <span className={`${sidebarOpen ? "inline-block" : "hidden"}`}>Home</span>
+          </Link>
+
           <Link
             to="/players"
             className={`flex items-center gap-3 rounded-md py-2 px-3 hover:bg-blue-800 transition ${
@@ -41,6 +51,7 @@ const Layout: React.FC = () => {
             <UserGroupIcon className="h-6 w-6" />
             <span className={`${sidebarOpen ? "inline-block" : "hidden"}`}>Players</span>
           </Link>
+
           <Link
             to="/leagues"
             className={`flex items-center gap-3 rounded-md py-2 px-3 hover:bg-blue-800 transition ${
@@ -50,6 +61,7 @@ const Layout: React.FC = () => {
             <TrophyIcon className="h-6 w-6" />
             <span className={`${sidebarOpen ? "inline-block" : "hidden"}`}>Leagues</span>
           </Link>
+
           <Link
             to="/matches"
             className={`flex items-center gap-3 rounded-md py-2 px-3 hover:bg-blue-800 transition ${
