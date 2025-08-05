@@ -1,4 +1,3 @@
-// components/League/LeagueItem.tsx
 import React from "react";
 import { useSwipeable } from "react-swipeable";
 import { TrashIcon } from "@heroicons/react/24/solid";
@@ -37,12 +36,14 @@ const LeagueItem: React.FC<Props> = ({ league, onSelect, onDeleteRequest }) => {
           Creado el {new Date(league.created_at).toLocaleDateString()}
         </p>
       </div>
+
+      {/* Botón de eliminar siempre visible */}
       <button
         onClick={(e) => {
           e.stopPropagation();
           onDeleteRequest();
         }}
-        className="ml-4 text-red-500 hover:text-red-700 transition sm:opacity-100 opacity-0 group-hover:opacity-100"
+        className="ml-4 text-red-500 hover:text-red-700 transition"
         title="Eliminar"
       >
         <TrashIcon className="w-5 h-5" />

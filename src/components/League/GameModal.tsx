@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useEffect, useRef, useState } from "react";
 import type { Player } from "../../types/player";
 import ScorePanel from "./ScorePanel";
@@ -11,10 +13,10 @@ interface Props {
   teamA: LeaguePlayer[];
   teamB: LeaguePlayer[];
   onClose: () => void;
-  onFinish: (winnerTeam: LeaguePlayer[] | null) => void;
+  onFinish: (winnerTeam: "A" | "B" | "DRAW") => void;
 }
 
-const GameModal: React.FC<Props> = ({ teamA, teamB, onClose, onFinish }) => {
+const GameModal: React.FC<Props> = ({ onClose, onFinish }) => {
   const [scoreA, setScoreA] = useState(0);
   const [scoreB, setScoreB] = useState(0);
   const [foulsA, setFoulsA] = useState(0);
@@ -27,11 +29,8 @@ const GameModal: React.FC<Props> = ({ teamA, teamB, onClose, onFinish }) => {
   const [timeLeft, setTimeLeft] = useState(regularTime);
   const [isRunning, setIsRunning] = useState(false);
   const [isExtraTime, setIsExtraTime] = useState(false);
-  const [isFullscreen] = useState(false);
-
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Control del tiempo
   useEffect(() => {
     if (isRunning) {
       intervalRef.current = setInterval(() => {
@@ -40,19 +39,18 @@ const GameModal: React.FC<Props> = ({ teamA, teamB, onClose, onFinish }) => {
             clearInterval(intervalRef.current!);
             setIsRunning(false);
 
-            if (scoreA > scoreB) onFinish(teamA);
-            else if (scoreB > scoreA) onFinish(teamB);
+            if (scoreA > scoreB) onFinish("A");
+            else if (scoreB > scoreA) onFinish("B");
             else if (!isExtraTime) {
               setIsExtraTime(true);
               setTimeLeft(extraTime);
               setIsRunning(true);
             } else {
-              onFinish(null); // empate tras tiempo extra
+              onFinish("DRAW");
             }
 
             return 0;
           }
-
           return prev - 1;
         });
       }, 1000);
@@ -61,12 +59,11 @@ const GameModal: React.FC<Props> = ({ teamA, teamB, onClose, onFinish }) => {
     }
 
     return () => clearInterval(intervalRef.current!);
-  }, [isRunning]);
+  }, [isRunning, scoreA, scoreB, isExtraTime]);
 
-  // Finaliza si llega al puntaje máximo
   useEffect(() => {
-    if (scoreA >= maxPoints) onFinish(teamA);
-    else if (scoreB >= maxPoints) onFinish(teamB);
+    if (scoreA >= maxPoints) onFinish("A");
+    else if (scoreB >= maxPoints) onFinish("B");
   }, [scoreA, scoreB]);
 
   const formatTime = (seconds: number) => {
@@ -77,11 +74,7 @@ const GameModal: React.FC<Props> = ({ teamA, teamB, onClose, onFinish }) => {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-2">
-      <div
-        className={`bg-white rounded-2xl shadow-xl p-4 w-full max-w-5xl space-y-6 relative ${
-          isFullscreen ? "h-screen flex flex-col justify-center" : ""
-        }`}
-      >
+      <div className="bg-white rounded-2xl shadow-xl p-4 w-full max-w-5xl space-y-6 relative">
         <ScorePanel
           scoreA={scoreA}
           scoreB={scoreB}
@@ -90,7 +83,6 @@ const GameModal: React.FC<Props> = ({ teamA, teamB, onClose, onFinish }) => {
           time={formatTime(timeLeft)}
           isRunning={isRunning}
           maxPoints={maxPoints}
-          isFullscreen={isFullscreen}
           onStartPause={() => setIsRunning((prev) => !prev)}
           onReset={() => {
             setIsRunning(false);

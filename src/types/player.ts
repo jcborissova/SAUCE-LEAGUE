@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-empty-object-type */
+// src/types/player.ts
 export interface PlayerBase {
   id: number;
   names: string;
@@ -13,7 +14,7 @@ export interface PlayerBase {
 export interface Player extends PlayerBase {}
 
 export type LeaguePlayer = Player & {
-  arrivalTime?: number;
+  arrivalTime?: number;   // ahora queda como timestamp en milisegundos
   isGuest?: boolean;
 };
 

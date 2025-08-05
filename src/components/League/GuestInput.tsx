@@ -1,9 +1,8 @@
-// components/League/GuestInput.tsx
 import React, { useState } from "react";
-import type { LeaguePlayer } from "../../types/player";
+import type { Player } from "../../types/player";
 
 interface Props {
-  onAddGuest: (player: LeaguePlayer) => void;
+  onAddGuest: (guest: Player) => void;
 }
 
 const GuestInput: React.FC<Props> = ({ onAddGuest }) => {
@@ -11,33 +10,21 @@ const GuestInput: React.FC<Props> = ({ onAddGuest }) => {
 
   const handleAdd = () => {
     if (!name.trim()) return;
-    onAddGuest({
-      id: Date.now(),
-      names: name,
-      lastnames: "",
-      backjerseyname: name,
-      jerseynumber: 0,
-      cedula: "",
-      description: "",
-      photo: "",
-      isGuest: true,
-      arrivalTime: Date.now(),
-    });
+    onAddGuest({ names: name, backjerseyname: name } as Player);
     setName("");
   };
 
   return (
-    <div className="flex gap-2 mt-4">
+    <div className="flex gap-3">
       <input
-        type="text"
+        className="border p-2 rounded w-full"
         placeholder="Nombre del invitado"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="border px-3 py-1 rounded w-full"
       />
       <button
+        className="bg-blue-950 text-white px-4 py-2 rounded"
         onClick={handleAdd}
-        className="bg-blue-950 text-white px-3 py-1 rounded"
       >
         Agregar
       </button>
