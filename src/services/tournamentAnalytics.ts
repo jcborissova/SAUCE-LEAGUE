@@ -920,8 +920,18 @@ export const getTournamentSettings = async (tournamentId: string): Promise<Tourn
       tournamentId,
       seasonType: "regular_plus_playoffs",
       playoffFormat: { ...DEFAULT_PLAYOFF_FORMAT },
+      rulesPdfUrl: null,
     };
   }
+
+  const rawPlayoffFormat =
+    typeof data.playoff_format === "object" && data.playoff_format
+      ? (data.playoff_format as Record<string, unknown>)
+      : ({ ...DEFAULT_PLAYOFF_FORMAT } as Record<string, unknown>);
+
+  const rawRulesPdfUrl = rawPlayoffFormat["rules_pdf_url"] ?? rawPlayoffFormat["rulesPdfUrl"];
+  const rulesPdfUrl =
+    typeof rawRulesPdfUrl === "string" && rawRulesPdfUrl.trim().length > 0 ? rawRulesPdfUrl.trim() : null;
 
   return {
     tournamentId: data.tournament_id,
@@ -930,15 +940,21 @@ export const getTournamentSettings = async (tournamentId: string): Promise<Tourn
       typeof data.playoff_format === "object" && data.playoff_format
         ? data.playoff_format
         : { ...DEFAULT_PLAYOFF_FORMAT },
+    rulesPdfUrl,
   } as TournamentSettings;
 };
 
 export const saveTournamentSettings = async (settings: TournamentSettings): Promise<void> => {
+  const playoffFormatPayload: Record<string, unknown> = {
+    ...settings.playoffFormat,
+    rules_pdf_url: settings.rulesPdfUrl,
+  };
+
   const { error } = await supabase.from("tournament_settings").upsert(
     {
       tournament_id: settings.tournamentId,
       season_type: settings.seasonType,
-      playoff_format: settings.playoffFormat,
+      playoff_format: playoffFormatPayload,
     },
     { onConflict: "tournament_id" }
   );

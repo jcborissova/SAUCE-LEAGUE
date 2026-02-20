@@ -149,6 +149,7 @@ export type TournamentSettings = {
       series: Array<Record<string, unknown>>;
     }>;
   };
+  rulesPdfUrl: string | null;
 };
 
 export type MatchPlayerStatsInput = {
