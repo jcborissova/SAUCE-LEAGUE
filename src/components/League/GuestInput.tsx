@@ -15,15 +15,15 @@ const GuestInput: React.FC<Props> = ({ onAddGuest }) => {
   };
 
   return (
-    <div className="flex gap-3">
+    <div className="flex flex-col gap-3 sm:flex-row">
       <input
-        className="border p-2 rounded w-full"
+        className="input-base"
         placeholder="Nombre del invitado"
         value={name}
         onChange={(e) => setName(e.target.value)}
       />
       <button
-        className="bg-blue-950 text-white px-4 py-2 rounded"
+        className="btn-primary"
         onClick={handleAdd}
       >
         Agregar

@@ -1,4 +1,3 @@
-// components/League/ScorePanel.tsx
 import React from "react";
 
 interface Props {
@@ -41,104 +40,98 @@ const ScorePanel: React.FC<Props> = ({
   onFoulB,
 }) => {
   return (
-    <div
-      className={`bg-white px-4 py-6 w-full max-w-5xl mx-auto space-y-6 ${
-        isFullscreen ? "text-xl sm:text-2xl" : "text-base"
-      }`}
-    >
-      {/* Tiempo y puntos meta */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-center sm:text-left items-center">
-        <div>
-          <p className="text-sm text-gray-500">⏱ Tiempo</p>
-          <p className="font-bold text-3xl text-blue-900">{time}</p>
-          <div className="flex flex-wrap justify-center sm:justify-start gap-2 mt-2">
-            <button
-              onClick={onStartPause}
-              className={`px-4 py-1 rounded-full text-sm font-semibold shadow ${
-                isRunning ? "bg-yellow-500 text-white" : "bg-blue-800 text-white"
-              } hover:opacity-90 transition`}
-            >
-              {isRunning ? "Pausar" : "Iniciar"}
-            </button>
-            <button
-              onClick={onReset}
-              className="px-4 py-1 rounded-full text-sm font-semibold bg-gray-200 text-gray-800 hover:bg-gray-300 transition"
-            >
-              Reiniciar
-            </button>
+    <section className={`w-full space-y-4 ${isFullscreen ? "text-lg" : "text-base"}`}>
+      <header className="grid grid-cols-1 gap-3 rounded-[10px] border bg-[hsl(var(--surface-1))] p-3 shadow-[0_1px_0_hsl(var(--border)/0.32)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <div className="flex flex-wrap items-center gap-2">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-[hsl(var(--muted-foreground))]">Tiempo</p>
+            <p className="text-2xl font-black tabular-nums sm:text-3xl">{time}</p>
+          </div>
+          <span className="h-8 w-px bg-[hsl(var(--border))]" />
+          <div>
+            <p className="text-xs uppercase tracking-wide text-[hsl(var(--muted-foreground))]">Meta</p>
+            <input
+              type="number"
+              value={maxPoints}
+              onChange={(e) => onMaxPointsChange(Number(e.target.value))}
+              className="input-base w-20 text-center text-base font-semibold"
+            />
           </div>
         </div>
 
-        <div>
-          <p className="text-sm text-gray-500">🎯 Puntos Meta</p>
-          <input
-            type="number"
-            value={maxPoints}
-            onChange={(e) => onMaxPointsChange(Number(e.target.value))}
-            className="mt-1 border rounded-lg px-3 py-2 text-center text-lg font-semibold text-blue-800 shadow-sm w-28 focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
+        <div className="flex flex-wrap gap-2 sm:justify-end">
+          <button onClick={onStartPause} className={isRunning ? "btn-secondary" : "btn-primary"}>
+            {isRunning ? "Pausar" : "Iniciar"}
+          </button>
+          <button onClick={onReset} className="btn-secondary">
+            Reiniciar
+          </button>
         </div>
+      </header>
+
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+        <TeamBox
+          label="Equipo A"
+          score={scoreA}
+          fouls={foulsA}
+          accent="primary"
+          onScore={onScoreA}
+          onUnscore={onUnscoreA}
+          onFoul={onFoulA}
+        />
+        <TeamBox
+          label="Equipo B"
+          score={scoreB}
+          fouls={foulsB}
+          accent="success"
+          onScore={onScoreB}
+          onUnscore={onUnscoreB}
+          onFoul={onFoulB}
+        />
       </div>
+    </section>
+  );
+};
 
-      {/* Paneles de equipos */}
-      <div className="flex flex-col sm:flex-row gap-6 text-center">
-        {/* Equipo A */}
-        <div className="flex-1 bg-blue-50 rounded-xl p-4 space-y-2">
-          <p className="text-sm font-semibold text-blue-800">Equipo A</p>
-          <p className="text-5xl font-bold text-blue-700">{scoreA}</p>
-          <p className="text-sm text-gray-500">Faltas</p>
-          <p className="text-2xl text-red-600 font-semibold">{foulsA}</p>
-          <div className="flex flex-wrap justify-center gap-2 mt-3">
-            <button
-              onClick={onScoreA}
-              className="bg-blue-800 text-white px-4 py-1 rounded text-sm font-medium"
-            >
-              +1
-            </button>
-            <button
-              onClick={onUnscoreA}
-              className="bg-gray-700 text-white px-4 py-1 rounded text-sm font-medium"
-            >
-              -1
-            </button>
-            <button
-              onClick={onFoulA}
-              className="bg-red-600 text-white px-4 py-1 rounded text-sm font-medium"
-            >
-              Foul
-            </button>
-          </div>
-        </div>
+const TeamBox = ({
+  label,
+  score,
+  fouls,
+  accent,
+  onScore,
+  onUnscore,
+  onFoul,
+}: {
+  label: string;
+  score: number;
+  fouls: number;
+  accent: "primary" | "success";
+  onScore: () => void;
+  onUnscore: () => void;
+  onFoul: () => void;
+}) => {
+  const accentColor = accent === "primary" ? "text-[hsl(var(--primary))]" : "text-[hsl(var(--success))]";
+  const scoreColor = accent === "primary" ? "text-[hsl(var(--foreground))]" : "text-[hsl(var(--success))]";
 
-        {/* Equipo B */}
-        <div className="flex-1 bg-green-50 rounded-xl p-4 space-y-2">
-          <p className="text-sm font-semibold text-green-800">Equipo B</p>
-          <p className="text-5xl font-bold text-green-700">{scoreB}</p>
-          <p className="text-sm text-gray-500">Faltas</p>
-          <p className="text-2xl text-red-600 font-semibold">{foulsB}</p>
-          <div className="flex flex-wrap justify-center gap-2 mt-3">
-            <button
-              onClick={onScoreB}
-              className="bg-green-800 text-white px-4 py-1 rounded text-sm font-medium"
-            >
-              +1
-            </button>
-            <button
-              onClick={onUnscoreB}
-              className="bg-gray-700 text-white px-4 py-1 rounded text-sm font-medium"
-            >
-              -1
-            </button>
-            <button
-              onClick={onFoulB}
-              className="bg-red-600 text-white px-4 py-1 rounded text-sm font-medium"
-            >
-              Foul
-            </button>
-          </div>
-        </div>
+  return (
+    <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3 shadow-[0_1px_0_hsl(var(--border)/0.32)] sm:p-4">
+      <p className={`text-sm font-semibold ${accentColor}`}>{label}</p>
+      <p className={`mt-1 text-[2.5rem] font-black tabular-nums sm:text-5xl lg:text-6xl ${scoreColor}`}>{score}</p>
+      <p className="mt-1 text-xs uppercase tracking-wide text-[hsl(var(--muted-foreground))]">Faltas</p>
+      <p className="text-2xl font-semibold text-[hsl(var(--destructive))] tabular-nums">{fouls}</p>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button onClick={onScore} className="btn-primary min-w-[68px]">
+          +1
+        </button>
+        <button onClick={onUnscore} className="btn-secondary min-w-[68px]">
+          -1
+        </button>
+        <button onClick={onFoul} className="btn-danger min-w-[68px]">
+          Foul
+        </button>
       </div>
-    </div>
+    </article>
   );
 };
 

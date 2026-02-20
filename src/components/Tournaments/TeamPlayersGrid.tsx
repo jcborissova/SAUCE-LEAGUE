@@ -17,14 +17,14 @@ const TeamPlayersGrid: React.FC<Props> = ({
   removePlayer,
 }) => {
   return (
-    <div className="grid grid-cols-2 gap-6">
-      <div className="bg-white rounded-xl border border-gray-200 shadow p-4">
-        <h4 className="text-base font-semibold mb-3 text-blue-800">Jugadores disponibles</h4>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+      <div className="app-card rounded-xl p-4">
+        <h4 className="text-base font-semibold mb-3 text-[hsl(var(--primary))]">Jugadores disponibles</h4>
         <ul className="space-y-2 overflow-y-auto max-h-72">
           {availablePlayers.map((player) => (
             <li
               key={player.id}
-              className="flex justify-between items-center bg-gray-50 hover:bg-blue-50 rounded-lg px-3 py-2 transition cursor-pointer"
+              className="flex justify-between items-center bg-[hsl(var(--surface-2))] hover:bg-[hsl(var(--muted))] rounded-lg px-3 py-2 transition cursor-pointer"
               onDoubleClick={() => assignPlayer(player.id)}
             >
               <span className="text-sm font-medium">
@@ -32,7 +32,7 @@ const TeamPlayersGrid: React.FC<Props> = ({
               </span>
               <button
                 onClick={() => assignPlayer(player.id)}
-                className="p-1 text-green-600 hover:text-green-800 transition"
+                className="p-1 text-[hsl(var(--success))] hover:opacity-80 transition"
               >
                 <ArrowRightIcon className="w-5 h-5" />
               </button>
@@ -41,13 +41,13 @@ const TeamPlayersGrid: React.FC<Props> = ({
         </ul>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow p-4">
-        <h4 className="text-base font-semibold mb-3 text-blue-800">Jugadores en el equipo</h4>
+      <div className="app-card rounded-xl p-4">
+        <h4 className="text-base font-semibold mb-3 text-[hsl(var(--primary))]">Jugadores en el equipo</h4>
         <ul className="space-y-2 overflow-y-auto max-h-72">
           {currentTeamPlayers.map((player) => (
             <li
               key={player.id}
-              className="flex justify-between items-center bg-gray-50 hover:bg-red-50 rounded-lg px-3 py-2 transition cursor-pointer"
+              className="flex justify-between items-center bg-[hsl(var(--surface-2))] hover:bg-[hsl(var(--muted))] rounded-lg px-3 py-2 transition cursor-pointer"
               onDoubleClick={() => removePlayer(player.id)}
             >
               <span className="text-sm font-medium">
@@ -55,7 +55,7 @@ const TeamPlayersGrid: React.FC<Props> = ({
               </span>
               <button
                 onClick={() => removePlayer(player.id)}
-                className="p-1 text-red-600 hover:text-red-800 transition"
+                className="p-1 text-[hsl(var(--destructive))] hover:opacity-80 transition"
               >
                 <ArrowLeftIcon className="w-5 h-5" />
               </button>

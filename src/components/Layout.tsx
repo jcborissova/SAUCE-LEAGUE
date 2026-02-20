@@ -1,110 +1,223 @@
-import React, { useState } from "react";
-import { Link, Outlet } from "react-router-dom";
+import React, { useEffect, useMemo, useState } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
+  Bars3Icon,
   HomeIcon,
   UserGroupIcon,
   TrophyIcon,
   PlayIcon,
   CalendarDaysIcon,
+  XMarkIcon,
+  SunIcon,
+  MoonIcon,
 } from "@heroicons/react/24/solid";
-import logo from "../assets/sl-logo-white.png";
-import { useRole } from "../contexts/RoleContext"; // 👈 Importamos el contexto de rol
+import { useTheme } from "next-themes";
+import logo from "../assets/sauce-league-logo-mark.png";
+import { useRole } from "../contexts/RoleContext";
+
+type NavItem = {
+  to: string;
+  label: string;
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  protected: boolean;
+};
+
+const NAV_ITEMS: NavItem[] = [
+  { to: "/", label: "Inicio", icon: HomeIcon, protected: false },
+  { to: "/players", label: "Jugadores", icon: UserGroupIcon, protected: true },
+  { to: "/leagues", label: "Ligas", icon: TrophyIcon, protected: true },
+  { to: "/matches", label: "Partidos", icon: PlayIcon, protected: true },
+  { to: "/tournaments", label: "Torneos", icon: CalendarDaysIcon, protected: false },
+];
 
 const Layout: React.FC = () => {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const { role } = useRole(); // 👈 Obtenemos el rol actual
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { role } = useRole();
+  const { theme, setTheme, systemTheme } = useTheme();
+  const location = useLocation();
+
+  const currentTheme = (theme === "system" ? systemTheme : theme) ?? "light";
+  const isTournamentImmersive = location.pathname.startsWith("/tournaments/view/");
+  const visibleNavItems = useMemo(() => NAV_ITEMS.filter((item) => !item.protected || role !== "visor"), [role]);
+
+  const activeSectionLabel = useMemo(() => {
+    if (isTournamentImmersive) return "Torneo";
+
+    const match = visibleNavItems
+      .slice()
+      .sort((a, b) => b.to.length - a.to.length)
+      .find((item) => (item.to === "/" ? location.pathname === "/" : location.pathname.startsWith(item.to)));
+
+    return match?.label ?? "Panel";
+  }, [isTournamentImmersive, location.pathname, visibleNavItems]);
+
+  const toggleTheme = () => setTheme(currentTheme === "dark" ? "light" : "dark");
+
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSidebarOpen(false);
+    };
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [sidebarOpen]);
 
   return (
-    <div className="min-h-screen flex bg-gray-100">
-      {/* Sidebar */}
-      <aside
-        className={`sticky top-0 h-screen bg-blue-950 text-white flex flex-col py-6 transition-all duration-300 ${
-          sidebarOpen ? "w-64" : "w-20"
-        }`}
-      >
-        <div className="flex items-center justify-center px-4 mb-10">
-          {sidebarOpen ? (
-            <h1 className="text-xl font-bold tracking-wide">Sauce League</h1>
-          ) : (
-            <img src={logo} alt="Logo" className="w-12 h-12 object-contain" />
-          )}
+    <div className="relative min-h-screen overflow-x-clip bg-[hsl(var(--background))] text-[hsl(var(--foreground))]">
+      <header className="sticky top-0 z-40 border-b border-[hsl(var(--border)/0.86)] bg-[hsl(var(--background)/0.9)] shadow-[0_1px_0_hsl(var(--border)/0.36)] backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--background)/0.78)]">
+        <div className="flex h-14 w-full items-center gap-2 px-3 sm:h-16 sm:px-4 lg:px-5">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-[6px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--muted))] lg:hidden"
+            aria-label="Abrir menú"
+          >
+            <Bars3Icon className="h-6 w-6" />
+          </button>
+
+          <NavLink to="/" className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] border border-[hsl(var(--border)/0.9)] bg-[hsl(var(--surface-1))] p-0.5 shadow-[0_2px_10px_hsl(var(--background)/0.2)]">
+              <img src={logo} alt="Sauce League" className="h-full w-full object-contain" />
+            </span>
+            <div className="hidden sm:block">
+              <p className="text-sm font-bold leading-tight tracking-tight">Sauce League</p>
+              <p className="text-xs text-[hsl(var(--muted-foreground))]">{activeSectionLabel}</p>
+            </div>
+          </NavLink>
+
+          <div className="ml-auto flex items-center gap-2">
+            <span className="hidden rounded-[6px] border border-[hsl(var(--border)/0.85)] bg-[hsl(var(--surface-1))] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))] sm:inline-flex">
+              {role === "admin" ? "Admin" : "Visor"}
+            </span>
+            <button
+              onClick={toggleTheme}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-[6px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--muted))]"
+              aria-label="Cambiar tema"
+            >
+              {currentTheme === "dark" ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
+            </button>
+          </div>
         </div>
+      </header>
 
-        <nav className="flex flex-col gap-4 px-2">
-          <Link
-            to="/"
-            className={`flex items-center gap-3 rounded-md py-2 px-3 hover:bg-blue-800 transition ${
-              sidebarOpen ? "justify-start" : "justify-center"
-            }`}
-          >
-            <HomeIcon className="h-6 w-6" />
-            <span className={`${sidebarOpen ? "inline-block" : "hidden"}`}>Home</span>
-          </Link>
-
-          {role !== "visor" && (
-            <>
-              <Link
-                to="/players"
-                className={`flex items-center gap-3 rounded-md py-2 px-3 hover:bg-blue-800 transition ${
-                  sidebarOpen ? "justify-start" : "justify-center"
-                }`}
-              >
-                <UserGroupIcon className="h-6 w-6" />
-                <span className={`${sidebarOpen ? "inline-block" : "hidden"}`}>Players</span>
-              </Link>
-
-              <Link
-                to="/leagues"
-                className={`flex items-center gap-3 rounded-md py-2 px-3 hover:bg-blue-800 transition ${
-                  sidebarOpen ? "justify-start" : "justify-center"
-                }`}
-              >
-                <TrophyIcon className="h-6 w-6" />
-                <span className={`${sidebarOpen ? "inline-block" : "hidden"}`}>Leagues</span>
-              </Link>
-
-              <Link
-                to="/matches"
-                className={`flex items-center gap-3 rounded-md py-2 px-3 hover:bg-blue-800 transition ${
-                  sidebarOpen ? "justify-start" : "justify-center"
-                }`}
-              >
-                <PlayIcon className="h-6 w-6" />
-                <span className={`${sidebarOpen ? "inline-block" : "hidden"}`}>Matches</span>
-              </Link>
-            </>
-          )}
-
-          <Link
-            to="/tournaments"
-            className={`flex items-center gap-3 rounded-md py-2 px-3 hover:bg-blue-800 transition ${
-              sidebarOpen ? "justify-start" : "justify-center"
-            }`}
-          >
-            <CalendarDaysIcon className="h-6 w-6" />
-            <span className={`${sidebarOpen ? "inline-block" : "hidden"}`}>Tournaments</span>
-          </Link>
-        </nav>
-      </aside>
-
-      <div className="flex-1 min-h-screen relative">
+      {sidebarOpen ? (
         <button
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          className={`absolute top-4 left-4 bg-white text-blue-950 border-2 border-blue-950 rounded-full p-2 shadow-md hover:bg-gray-200 transition-all duration-300`}
-        >
-          {sidebarOpen ? (
-            <ChevronLeftIcon className="h-6 w-6" />
-          ) : (
-            <ChevronRightIcon className="h-6 w-6" />
-          )}
-        </button>
+          type="button"
+          aria-label="Cerrar menú"
+          className="fixed inset-0 z-40 bg-black/42 backdrop-blur-[1px] lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      ) : null}
 
-        <main className="pt-16 px-4 md:px-6">
-          <Outlet />
+      <div className="relative lg:min-h-[calc(100vh-4rem)] lg:pl-[244px]">
+        <aside
+          className={`fixed inset-y-0 left-0 z-50 w-72 border-r border-[hsl(var(--border)/0.9)] bg-[hsl(var(--surface-1))] p-4 shadow-[1px_0_0_hsl(var(--border)/0.46)] transition-transform duration-[var(--motion-tab)] lg:top-16 lg:z-30 lg:h-[calc(100vh-4rem)] lg:w-[244px] lg:translate-x-0 lg:border-r lg:border-l-0 lg:border-y-0 lg:p-0 ${
+            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          <div className="mb-4 flex items-center justify-between lg:hidden">
+            <p className="text-sm font-semibold">Navegación</p>
+            <button
+              className="rounded-md p-1 text-[hsl(var(--muted-foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))]"
+              onClick={() => setSidebarOpen(false)}
+              aria-label="Cerrar menú"
+            >
+              <XMarkIcon className="h-6 w-6" />
+            </button>
+          </div>
+
+          <div className="hidden border-b border-[hsl(var(--border)/0.86)] px-4 py-4 lg:block">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] p-0.5">
+                <img src={logo} alt="Sauce League" className="h-full w-full object-contain" />
+              </span>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[hsl(var(--muted-foreground))]">Navegación</p>
+                <p className="text-sm font-bold">Sauce League</p>
+              </div>
+            </div>
+          </div>
+          <nav className="space-y-1 lg:px-3 lg:py-3">
+            {visibleNavItems.map(({ to, label, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === "/"}
+                onClick={() => setSidebarOpen(false)}
+                className={({ isActive }) =>
+                  `group relative flex min-h-[44px] items-center gap-3 rounded-[8px] px-3 py-2 text-sm font-medium transition-colors duration-[var(--motion-hover)] ${
+                    isActive
+                      ? "bg-[hsl(var(--primary)/0.11)] text-[hsl(var(--foreground))]"
+                      : "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted)/0.84)] hover:text-[hsl(var(--foreground))]"
+                  }`
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <span
+                      className={`absolute inset-y-1 left-0 w-0.5 transition-colors ${
+                        isActive ? "bg-[hsl(var(--primary))]" : "bg-transparent group-hover:bg-[hsl(var(--primary)/0.24)]"
+                      }`}
+                    />
+                    <span
+                      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] border ${
+                        isActive
+                          ? "border-[hsl(var(--primary)/0.3)] bg-[hsl(var(--surface-1))]"
+                          : "border-transparent bg-transparent"
+                      }`}
+                    >
+                      <Icon
+                        className={`h-[18px] w-[18px] ${
+                          isActive ? "text-[hsl(var(--primary))]" : "text-[hsl(var(--muted-foreground))]"
+                        }`}
+                      />
+                    </span>
+                    <span className="truncate font-semibold">{label}</span>
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </nav>
+        </aside>
+
+        <main className="min-w-0 page-reveal px-3 py-3 pb-24 sm:px-4 sm:py-4 sm:pb-24 lg:px-6 lg:py-5 lg:pb-6">
+          <div className="mx-auto w-full max-w-[1220px]">
+            <Outlet />
+          </div>
         </main>
       </div>
+
+      {!isTournamentImmersive ? (
+        <nav
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-[hsl(var(--border)/0.9)] bg-[hsl(var(--background)/0.96)] px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 shadow-[0_-1px_0_hsl(var(--border)/0.5)] backdrop-blur lg:hidden"
+          aria-label="Navegación principal"
+        >
+          <ul className="grid grid-cols-5 gap-0.5">
+            {visibleNavItems.slice(0, 5).map(({ to, label, icon: Icon }) => (
+              <li key={to}>
+                <NavLink
+                  to={to}
+                  end={to === "/"}
+                  className={({ isActive }) =>
+                    `relative flex min-h-[50px] flex-col items-center justify-center gap-0.5 px-1 py-1 text-xs font-semibold transition-colors duration-[var(--motion-hover)] ${
+                      isActive
+                        ? "bg-[hsl(var(--primary)/0.08)] text-[hsl(var(--primary))]"
+                        : "text-[hsl(var(--muted-foreground))]"
+                    }`
+                  }
+                >
+                  <Icon className="h-[18px] w-[18px]" />
+                  <span className="truncate">{label}</span>
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      ) : null}
     </div>
   );
 };

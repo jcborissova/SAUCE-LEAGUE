@@ -17,8 +17,8 @@ const TeamSelector: React.FC<Props> = ({ teams, activeIndex, setActiveIndex, del
           key={team.id}
           className={`flex items-center border rounded-2xl px-4 py-2 whitespace-nowrap font-medium transition ${
             activeIndex === idx
-              ? "bg-blue-600 text-white border-blue-600 shadow-md"
-              : "bg-white text-blue-700 border-blue-700"
+              ? "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] border-[hsl(var(--primary))] shadow-md"
+              : "bg-[hsl(var(--surface-1))] text-[hsl(var(--primary))] border-[hsl(var(--border))]"
           }`}
         >
           <button onClick={() => setActiveIndex(idx)} className="flex-1 text-left">
@@ -26,7 +26,7 @@ const TeamSelector: React.FC<Props> = ({ teams, activeIndex, setActiveIndex, del
           </button>
           <button
             onClick={() => deleteTeam(idx)}
-            className="ml-2 p-1 text-red-500 hover:text-red-700 transition"
+            className="ml-2 p-1 text-[hsl(var(--destructive))] hover:opacity-80 transition"
           >
             <XMarkIcon className="w-4 h-4" />
           </button>

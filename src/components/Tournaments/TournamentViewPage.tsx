@@ -1,24 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import type { Player } from "../../types/player";
 import { ArrowPathIcon } from "@heroicons/react/24/solid";
+import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { Link, useParams } from "react-router-dom";
+
 import TournamentScheduleView from "./TournamentScheduleView";
 import TournamentStandings from "./TournamentStandings";
-import TeamSection from "./TeamSection";
 import TournamentResultsView from "./TournamentResultsView";
-import TournamentLeaders from "./TournamentLeaders";
-import { Listbox } from "@headlessui/react";
-import { ChevronDownIcon } from "@heroicons/react/24/solid";
+import TournamentPlayoffOverview from "./TournamentPlayoffOverview";
+import TournamentPlayersGallery from "./TournamentPlayersGallery";
+import TournamentStatsOverview from "./TournamentStatsOverview";
 
-const tabs = [
-  { key: "info", label: "Equipos" },
-  { key: "schedule", label: "Calendario" },
-  { key: "standings", label: "Tabla" },
-  { key: "results", label: "Resultados" },
-  { key: "leaders", label: "Líderes" },
-];
+import SegmentedControl from "../ui/SegmentedControl";
+import EmptyState from "../ui/EmptyState";
 
 type Team = {
   id: number;
@@ -26,21 +22,53 @@ type Team = {
   players: Player[];
 };
 
+type MainTabKey = "matches" | "standings" | "stats" | "players";
+type MatchesSubtab = "schedule" | "results";
+type StatsSubtab = "analytics" | "playoffs" | "duel";
+
+const MAIN_TABS: Array<{ key: MainTabKey; label: string }> = [
+  { key: "matches", label: "Partidos" },
+  { key: "standings", label: "Posiciones" },
+  { key: "stats", label: "Estadísticas" },
+  { key: "players", label: "Equipos" },
+];
+
 const TournamentViewPage: React.FC = () => {
   const { id: tournamentId } = useParams();
+  const [activeTab, setActiveTab] = useState<MainTabKey>("matches");
+  const [matchesSubtab, setMatchesSubtab] = useState<MatchesSubtab>("schedule");
+  const [statsSubtab, setStatsSubtab] = useState<StatsSubtab>("analytics");
+
+  const [tournamentName, setTournamentName] = useState("Sauce League");
+  const [tournamentLoading, setTournamentLoading] = useState(false);
+
   const [teams, setTeams] = useState<Team[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<
-    "info" | "schedule" | "standings" | "results" | "leaders"
-  >("info");
+  const [teamsLoading, setTeamsLoading] = useState(false);
+  const [teamsLoaded, setTeamsLoaded] = useState(false);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
+    if (!tournamentId) return;
+
+    const loadTournament = async () => {
+      setTournamentLoading(true);
+
+      const { data, error } = await supabase.from("tournaments").select("name").eq("id", tournamentId).single();
+      if (!error && data?.name) setTournamentName(data.name);
+      else setTournamentName("Sauce League");
+
+      setTournamentLoading(false);
+    };
+
+    loadTournament();
+  }, [tournamentId]);
+
+  useEffect(() => {
+    if (!tournamentId || activeTab !== "players" || teamsLoaded) return;
+
+    const fetchTeamsAndPlayers = async () => {
+      setTeamsLoading(true);
       try {
-        const { data: playersData, error: playersError } = await supabase
-          .from("players")
-          .select("*");
+        const { data: playersData, error: playersError } = await supabase.from("players").select("*");
         if (playersError) throw playersError;
 
         const { data: teamsData, error: teamsError } = await supabase
@@ -51,11 +79,9 @@ const TournamentViewPage: React.FC = () => {
         if (teamsError) throw teamsError;
 
         const formattedTeams = (teamsData || []).map((team) => {
-          const playerIds = team.team_players
-            ? team.team_players.map((tp: any) => tp.player_id)
-            : [];
-          const teamPlayers =
-            playersData?.filter((p) => playerIds.includes(p.id)) || [];
+          const playerIds = team.team_players ? team.team_players.map((tp: any) => tp.player_id) : [];
+          const teamPlayers = playersData?.filter((player) => playerIds.includes(player.id)) || [];
+
           return {
             id: team.id,
             name: team.name,
@@ -64,145 +90,144 @@ const TournamentViewPage: React.FC = () => {
         });
 
         setTeams(formattedTeams);
+        setTeamsLoaded(true);
       } catch (error) {
-        console.error("Error al cargar equipos", error);
+        console.error("Error al cargar jugadores del torneo", error);
       } finally {
-        setLoading(false);
+        setTeamsLoading(false);
       }
     };
 
-    fetchData();
-  }, [tournamentId]);
+    fetchTeamsAndPlayers();
+  }, [activeTab, teamsLoaded, tournamentId]);
+
+  const totalPlayers = useMemo(() => teams.reduce((acc, team) => acc + team.players.length, 0), [teams]);
+
+  if (!tournamentId) {
+    return (
+      <div className="w-full py-2">
+        <EmptyState
+          title="No se encontró el torneo solicitado"
+          description="Revisa el enlace o vuelve al listado de torneos."
+          action={
+            <Link to="/tournaments" className="btn-secondary">
+              Volver a torneos
+            </Link>
+          }
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full max-w-screen-xl mx-auto px-4 py-6 md:py-10 space-y-10">
-      {/* Encabezado */}
-      <div className="flex flex-col items-center text-center space-y-4">
-        <h1 className="text-2xl md:text-4xl font-extrabold tracking-wide text-blue-950">
-          Vista del Torneo
-        </h1>
-        <p className="text-base md:text-lg text-gray-600 max-w-2xl">
-          Explora toda la información, los equipos, el calendario y la tabla de
-          posiciones.
-        </p>
-        <Link
-          to="/tournaments"
-          className="inline-block bg-blue-950 text-white font-semibold py-2 px-6 rounded-full shadow hover:bg-blue-900 transition"
-        >
-          Volver a Torneos
-        </Link>
-      </div>
+    <div className="w-full space-y-4">
+      <header className="w-full">
+        <div className="overflow-hidden border border-[hsl(var(--border)/0.92)] bg-[hsl(var(--surface-1))] shadow-[0_1px_0_hsl(var(--border)/0.35)]">
+          <div className="h-0.5 bg-[linear-gradient(90deg,hsl(var(--primary)),hsl(var(--chart-2)))]" />
+          <div className="border-b bg-[hsl(var(--surface-1))]">
+            <div className="flex w-full flex-wrap items-center justify-between gap-3 px-3 py-4 sm:px-4 sm:py-5 lg:px-5">
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-[hsl(var(--text-subtle))]">Torneo</p>
+                <h1 className="truncate text-2xl font-bold sm:text-3xl">
+                  {tournamentLoading ? "Cargando torneo..." : tournamentName}
+                </h1>
+              </div>
 
-      {/* Tabs Scrollable en móvil */}
-      <div className="w-full">
-        {/* Mobile dropdown */}
-        <div className="sm:hidden mb-4">
-          <Listbox value={activeTab} onChange={(value) => setActiveTab(value)}>
-            <div className="relative">
-              <Listbox.Button className="w-full bg-white border border-gray-300 rounded-md py-2 pl-3 pr-10 text-left shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 sm:text-sm">
-                {tabs.find((t) => t.key === activeTab)?.label}
-                <span className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                  <ChevronDownIcon className="w-5 h-5 text-gray-400" aria-hidden="true" />
-                </span>
-              </Listbox.Button>
-              <Listbox.Options className="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto sm:text-sm">
-                {tabs.map((tab) => (
-                  <Listbox.Option
-                    key={tab.key}
-                    value={tab.key}
-                    className={({ active }) =>
-                      `cursor-pointer select-none relative py-2 pl-10 pr-4 ${
-                        active ? "bg-blue-100 text-blue-900" : "text-gray-900"
-                      }`
-                    }
-                  >
-                    {({ selected }) => (
-                      <>
-                        <span className={`block truncate ${selected ? "font-medium" : "font-normal"}`}>
-                          {tab.label}
-                        </span>
-                        {selected && (
-                          <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-blue-600">
-                            ●
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </Listbox.Option>
-                ))}
-              </Listbox.Options>
+              <Link
+                to="/tournaments"
+                className="inline-flex min-h-[42px] items-center gap-2 rounded-[6px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] px-4 text-sm font-semibold text-[hsl(var(--foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--surface-2))]"
+              >
+                <ArrowLeftIcon className="h-4 w-4" />
+                Volver
+              </Link>
             </div>
-          </Listbox>
-        </div>
+          </div>
 
-        {/* Desktop tabs */}
-        <div className="hidden sm:flex justify-center gap-4 border-b pb-2">
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key as any)}
-              className={`px-3 py-2 border-b-2 transition-all text-sm md:text-base ${
-                activeTab === tab.key
-                  ? "border-blue-600 text-blue-600 font-bold"
-                  : "border-transparent text-gray-600 hover:text-blue-600"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Contenido */}
-      {loading ? (
-        <div className="flex justify-center py-24">
-          <ArrowPathIcon className="w-10 h-10 animate-spin text-blue-600" />
-        </div>
-      ) : (
-        <>
-          {activeTab === "info" && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
-              {teams.length === 0 ? (
-                <p className="text-center text-gray-500 col-span-full">
-                  No hay equipos configurados todavía.
-                </p>
-              ) : (
-                teams.map((team) => (
-                  <TeamSection
-                    key={team.id}
-                    teamName={team.name}
-                    players={team.players}
+          <nav className="grid w-full grid-cols-4 border-t border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))]" aria-label="Secciones de torneo">
+            {MAIN_TABS.map((tab) => {
+              const active = activeTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`relative min-h-[48px] px-2 text-[13px] font-semibold transition-colors duration-[var(--motion-tab)] sm:text-sm ${
+                    active
+                      ? "text-[hsl(var(--primary))]"
+                      : "text-[hsl(var(--text-subtle))] hover:bg-[hsl(var(--surface-2)/0.6)] hover:text-[hsl(var(--foreground))]"
+                  }`}
+                  aria-current={active ? "page" : undefined}
+                >
+                  <span className="truncate">{tab.label}</span>
+                  <span
+                    className={`pointer-events-none absolute inset-x-2 bottom-0 h-0.5 transition-colors duration-[var(--motion-tab)] ${
+                      active ? "bg-[hsl(var(--primary))]" : "bg-transparent"
+                    }`}
                   />
-                ))
-              )}
-            </div>
-          )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      </header>
 
-          {activeTab === "schedule" && (
-            <div className="w-full px-2 sm:px-4">
-              <TournamentScheduleView tournamentId={tournamentId || ""} />
-            </div>
-          )}
+      <section className="w-full space-y-4 pb-2">
+        {activeTab === "matches" ? (
+          <div className="space-y-3">
+            <SegmentedControl
+              options={[
+                { value: "schedule", label: "Calendario" },
+                { value: "results", label: "Resultados" },
+              ]}
+              value={matchesSubtab}
+              onChange={(value) => setMatchesSubtab(value as MatchesSubtab)}
+            />
+            {matchesSubtab === "schedule" ? (
+              <TournamentScheduleView tournamentId={tournamentId} embedded />
+            ) : (
+              <TournamentResultsView tournamentId={tournamentId} embedded />
+            )}
+          </div>
+        ) : null}
 
-          {activeTab === "standings" && (
-            <div className="w-full px-2 sm:px-4">
-              <TournamentStandings tournamentId={tournamentId || ""} />
-            </div>
-          )}
+        {activeTab === "standings" ? <TournamentStandings tournamentId={tournamentId} embedded /> : null}
 
-          {activeTab === "results" && (
-            <div className="w-full px-2 sm:px-4">
-              <TournamentResultsView tournamentId={tournamentId || ""} />
-            </div>
-          )}
+        {activeTab === "stats" ? (
+          <div className="space-y-3">
+            <SegmentedControl
+              options={[
+                { value: "analytics", label: "Analíticas" },
+                { value: "playoffs", label: "Playoffs" },
+                { value: "duel", label: "Duelo" },
+              ]}
+              value={statsSubtab}
+              onChange={(value) => setStatsSubtab(value as StatsSubtab)}
+            />
 
-          {activeTab === "leaders" && (
-            <div className="w-full px-2 sm:px-4">
-              <TournamentLeaders tournamentId={tournamentId || ""} />
-            </div>
-          )}
-        </>
-      )}
+            {statsSubtab === "analytics" ? <TournamentStatsOverview tournamentId={tournamentId} embedded /> : null}
+            {statsSubtab === "playoffs" ? <TournamentPlayoffOverview tournamentId={tournamentId} embedded /> : null}
+            {statsSubtab === "duel" ? <TournamentStatsOverview tournamentId={tournamentId} embedded mode="duel" /> : null}
+          </div>
+        ) : null}
+
+        {activeTab === "players" ? (
+          <div className="space-y-3">
+            {teamsLoading && !teamsLoaded ? (
+              <div className="flex justify-center py-24">
+                <ArrowPathIcon className="h-10 w-10 animate-spin text-[hsl(var(--primary))]" />
+              </div>
+            ) : (
+              <TournamentPlayersGallery teams={teams} loading={teamsLoading} />
+            )}
+
+            {teamsLoaded ? (
+              <p className="text-xs text-[hsl(var(--text-subtle))]">
+                {teams.length} equipos vinculados, {totalPlayers} jugadores detectados.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
     </div>
   );
 };
