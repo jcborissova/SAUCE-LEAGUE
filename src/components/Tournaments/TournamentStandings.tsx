@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { supabase } from "../../lib/supabase";
 import LoadingSpinner from "../LoadingSpinner";
+import EmptyState from "../ui/EmptyState";
 
 type TeamStanding = {
   teamId: number;
@@ -29,9 +30,7 @@ const TournamentStandings: React.FC<Props> = ({ tournamentId, embedded = false }
       .select("team_id, team_name, games_played, wins, losses, win_pct")
       .eq("tournament_id", tournamentId);
 
-    if (error) {
-      return null;
-    }
+    if (error) return null;
 
     return (data || []).map((row) => ({
       teamId: Number(row.team_id),
@@ -44,15 +43,14 @@ const TournamentStandings: React.FC<Props> = ({ tournamentId, embedded = false }
   };
 
   const loadStandingsFallback = async () => {
-    const [{ data: teams, error: teamsError }, { data: matches, error: matchesError }] =
-      await Promise.all([
-        supabase.from("teams").select("id, name").eq("tournament_id", tournamentId),
-        supabase
-          .from("matches")
-          .select("team_a, team_b, winner_team")
-          .eq("tournament_id", tournamentId)
-          .not("winner_team", "is", null),
-      ]);
+    const [{ data: teams, error: teamsError }, { data: matches, error: matchesError }] = await Promise.all([
+      supabase.from("teams").select("id, name").eq("tournament_id", tournamentId),
+      supabase
+        .from("matches")
+        .select("team_a, team_b, winner_team")
+        .eq("tournament_id", tournamentId)
+        .not("winner_team", "is", null),
+    ]);
 
     if (teamsError) throw teamsError;
     if (matchesError) throw matchesError;
@@ -121,14 +119,7 @@ const TournamentStandings: React.FC<Props> = ({ tournamentId, embedded = false }
     [standings]
   );
 
-  const totalGames = useMemo(
-    () => Math.round(sorted.reduce((acc, team) => acc + team.pj, 0) / 2),
-    [sorted]
-  );
-  const maxWins = useMemo(
-    () => sorted.reduce((max, team) => Math.max(max, team.pg), 0),
-    [sorted]
-  );
+  const totalGames = useMemo(() => Math.round(sorted.reduce((acc, team) => acc + team.pj, 0) / 2), [sorted]);
   const seededTeams = Math.min(4, sorted.length);
 
   if (loading) return <LoadingSpinner />;
@@ -138,22 +129,17 @@ const TournamentStandings: React.FC<Props> = ({ tournamentId, embedded = false }
       <section className="space-y-4">
         {!embedded ? (
           <div>
-            <h3 className="text-xl sm:text-2xl font-bold">Tabla de Posiciones</h3>
-            <p className="text-sm text-[hsl(var(--text-subtle))]">
-              Orden oficial para siembra de playoffs (desempate por orden de equipo).
-            </p>
+            <h3 className="text-xl font-bold sm:text-2xl">Tabla de posiciones</h3>
+            <p className="text-sm text-[hsl(var(--text-subtle))]">Orden oficial para siembra de playoffs.</p>
           </div>
         ) : (
-          <p className="text-sm text-[hsl(var(--text-subtle))]">
-            Orden oficial para siembra de playoffs (desempate por orden de equipo).
-          </p>
+          <p className="text-sm text-[hsl(var(--text-subtle))]">Orden oficial para siembra de playoffs.</p>
         )}
 
-        <div className="app-card p-5 text-center">
-          <p className="text-sm text-[hsl(var(--text-subtle))]">
-            Todavía no hay resultados cargados para calcular posiciones.
-          </p>
-        </div>
+        <EmptyState
+          title="Todavía no hay resultados"
+          description="Carga resultados de partidos para calcular posiciones automáticamente."
+        />
       </section>
     );
   }
@@ -162,115 +148,106 @@ const TournamentStandings: React.FC<Props> = ({ tournamentId, embedded = false }
     <section className="space-y-4 sm:space-y-5">
       {!embedded ? (
         <div>
-          <h3 className="text-xl sm:text-2xl font-bold">Tabla de Posiciones</h3>
-          <p className="text-sm text-[hsl(var(--text-subtle))]">
-            Orden oficial para siembra de playoffs (desempate por orden de equipo).
-          </p>
+          <h3 className="text-xl font-bold sm:text-2xl">Tabla de posiciones</h3>
+          <p className="text-sm text-[hsl(var(--text-subtle))]">Orden oficial para siembra de playoffs.</p>
         </div>
       ) : (
-        <p className="text-sm text-[hsl(var(--text-subtle))]">
-          Orden oficial para siembra de playoffs (desempate por orden de equipo).
-        </p>
+        <p className="text-sm text-[hsl(var(--text-subtle))]">Orden oficial para siembra de playoffs.</p>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <div className="app-card rounded-xl px-3 py-2.5">
-          <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">
-            Equipos
-          </p>
-          <p className="text-lg font-bold">{sorted.length}</p>
-        </div>
-        <div className="app-card rounded-xl px-3 py-2.5">
-          <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">
-            Partidos
-          </p>
-          <p className="text-lg font-bold">{totalGames}</p>
-        </div>
-        <div className="app-card rounded-xl px-3 py-2.5">
-          <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">
-            Zona Playoffs
-          </p>
-          <p className="text-lg font-bold">{seededTeams}</p>
-        </div>
-        <div className="app-card rounded-xl px-3 py-2.5">
-          <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">
-            Líder
-          </p>
-          <p className="text-sm font-semibold truncate">{sorted[0]?.name ?? "-"}</p>
-        </div>
+      <div className="app-panel flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-xs text-[hsl(var(--text-subtle))] sm:text-sm">
+        <span>
+          Equipos: <span className="font-semibold text-[hsl(var(--foreground))]">{sorted.length}</span>
+        </span>
+        <span className="hidden sm:inline">•</span>
+        <span>
+          Partidos: <span className="font-semibold text-[hsl(var(--foreground))]">{totalGames}</span>
+        </span>
+        <span className="hidden sm:inline">•</span>
+        <span>
+          Zona playoffs: <span className="font-semibold text-[hsl(var(--foreground))]">Top {seededTeams}</span>
+        </span>
+        <span className="hidden sm:inline">•</span>
+        <span>
+          Líder: <span className="font-semibold text-[hsl(var(--foreground))]">{sorted[0]?.name ?? "-"}</span>
+        </span>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border bg-[hsl(var(--surface-1))]">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[660px] text-xs sm:text-sm">
-            <thead className="bg-[hsl(var(--surface-2))] text-[hsl(var(--text-subtle))] sticky top-0">
-              <tr>
-                <th className="px-3 py-2.5 sm:px-4 sm:py-3 text-left font-semibold">Seed</th>
-                <th className="px-3 py-2.5 sm:px-4 sm:py-3 text-left font-semibold">Equipo</th>
-                <th className="px-3 py-2.5 sm:px-4 sm:py-3 text-center font-semibold">PJ</th>
-                <th className="px-3 py-2.5 sm:px-4 sm:py-3 text-center font-semibold">PG</th>
-                <th className="px-3 py-2.5 sm:px-4 sm:py-3 text-center font-semibold">PP</th>
-                <th className="px-3 py-2.5 sm:px-4 sm:py-3 text-center font-semibold">Win%</th>
-                <th className="px-3 py-2.5 sm:px-4 sm:py-3 text-center font-semibold">Barra</th>
-                <th className="px-3 py-2.5 sm:px-4 sm:py-3 text-right font-semibold">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((team, index) => {
-                const seed = index + 1;
-                const playoffSpot = seed <= 4;
-                const winProgress = maxWins > 0 ? (team.pg / maxWins) * 100 : 0;
+      <div className="space-y-2 md:hidden">
+        {sorted.map((team, index) => {
+          const seed = index + 1;
+          const playoffSpot = seed <= 4;
 
-                return (
-                  <tr
-                    key={team.teamId}
-                    className="border-t border-[hsl(var(--border))] hover:bg-[hsl(var(--surface-2))]"
-                  >
-                    <td className="px-3 py-2.5 sm:px-4 sm:py-3">
-                      <span
-                        className={`inline-flex h-6 min-w-6 items-center justify-center rounded-lg px-2 text-[11px] sm:h-7 sm:min-w-7 sm:text-xs font-bold ${
-                          playoffSpot
-                            ? "bg-[hsl(var(--primary)/0.16)] text-[hsl(var(--primary))]"
-                            : "bg-[hsl(var(--muted))] text-[hsl(var(--text-subtle))]"
-                        }`}
-                      >
-                        #{seed}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 sm:px-4 sm:py-3 font-semibold">{team.name}</td>
-                    <td className="px-3 py-2.5 sm:px-4 sm:py-3 text-center">{team.pj}</td>
-                    <td className="px-3 py-2.5 sm:px-4 sm:py-3 text-center font-semibold text-[hsl(var(--success))]">
-                      {team.pg}
-                    </td>
-                    <td className="px-3 py-2.5 sm:px-4 sm:py-3 text-center font-semibold text-[hsl(var(--destructive))]">
-                      {team.pp}
-                    </td>
-                    <td className="px-3 py-2.5 sm:px-4 sm:py-3 text-center">{formatWinPct(team.winPct)}</td>
-                    <td className="px-3 py-2.5 sm:px-4 sm:py-3">
-                      <div className="mx-auto h-1.5 w-16 sm:w-24 overflow-hidden rounded-full bg-[hsl(var(--surface-3))]">
-                        <div
-                          className="h-full rounded-full bg-[hsl(var(--primary))]"
-                          style={{ width: `${winProgress}%` }}
-                        />
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5 sm:px-4 sm:py-3 text-right">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 sm:px-2.5 sm:py-1 text-[11px] sm:text-xs font-semibold ${
-                          playoffSpot
-                            ? "bg-[hsl(var(--success)/0.14)] text-[hsl(var(--success))]"
-                            : "bg-[hsl(var(--muted))] text-[hsl(var(--text-subtle))]"
-                        }`}
-                      >
-                        {playoffSpot ? "Playoffs" : "Fuera"}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+          return (
+            <article key={team.teamId} className="rounded-lg border bg-[hsl(var(--surface-1))] px-3 py-3">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-md border bg-[hsl(var(--surface-2))] px-2 text-xs font-semibold">
+                  #{seed}
+                </span>
+
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">{team.name}</p>
+                  <p className="text-xs text-[hsl(var(--text-subtle))]">
+                    Récord {team.pg}-{team.pp} · PJ {team.pj} · Win% {formatWinPct(team.winPct)}
+                  </p>
+                </div>
+
+                <span
+                  className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${
+                    playoffSpot
+                      ? "border-[hsl(var(--success)/0.34)] bg-[hsl(var(--success)/0.12)] text-[hsl(var(--success))]"
+                      : "border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] text-[hsl(var(--muted-foreground))]"
+                  }`}
+                >
+                  {playoffSpot ? "Playoffs" : "Fuera"}
+                </span>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-lg border bg-[hsl(var(--surface-1))] md:block">
+        <table className="w-full text-sm">
+          <thead className="bg-[hsl(var(--surface-2))] text-[hsl(var(--text-subtle))]">
+            <tr>
+              <th className="px-3 py-2 text-left font-semibold">Seed</th>
+              <th className="px-3 py-2 text-left font-semibold">Equipo</th>
+              <th className="px-3 py-2 text-center font-semibold">Récord</th>
+              <th className="px-3 py-2 text-center font-semibold">PJ</th>
+              <th className="px-3 py-2 text-center font-semibold">Win%</th>
+              <th className="px-3 py-2 text-right font-semibold">Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((team, index) => {
+              const seed = index + 1;
+              const playoffSpot = seed <= 4;
+
+              return (
+                <tr
+                  key={team.teamId}
+                  className={`border-t border-[hsl(var(--border))] ${playoffSpot ? "bg-[hsl(var(--primary)/0.04)]" : ""}`}
+                >
+                  <td className="px-3 py-2">#{seed}</td>
+                  <td className="px-3 py-2 font-semibold">{team.name}</td>
+                  <td className="px-3 py-2 text-center tabular-nums">
+                    <span className="font-semibold text-[hsl(var(--success))]">{team.pg}</span>
+                    <span className="text-[hsl(var(--text-subtle))]">-</span>
+                    <span className="font-semibold text-[hsl(var(--destructive))]">{team.pp}</span>
+                  </td>
+                  <td className="px-3 py-2 text-center">{team.pj}</td>
+                  <td className="px-3 py-2 text-center font-semibold">{formatWinPct(team.winPct)}</td>
+                  <td className="px-3 py-2 text-right">
+                    <span className={playoffSpot ? "font-semibold text-[hsl(var(--success))]" : "text-[hsl(var(--muted-foreground))]"}>
+                      {playoffSpot ? "Playoffs" : "Fuera"}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </section>
   );

@@ -1,4 +1,3 @@
-// components/League/ScorePanel.tsx
 import React from "react";
 
 interface Props {
@@ -41,104 +40,98 @@ const ScorePanel: React.FC<Props> = ({
   onFoulB,
 }) => {
   return (
-    <div
-      className={`card px-4 py-6 w-full max-w-5xl mx-auto space-y-6 transition-colors ${
-        isFullscreen ? "text-xl sm:text-2xl" : "text-base"
-      }`}
-    >
-      {/* Tiempo y puntos meta */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-center sm:text-left items-center">
-        <div>
-          <p className="text-sm text-[hsl(var(--muted-foreground))]">⏱ Tiempo</p>
-          <p className="font-bold text-3xl">{time}</p>
-          <div className="flex flex-wrap justify-center sm:justify-start gap-2 mt-2">
-            <button
-              onClick={onStartPause}
-              className={`px-4 py-2 rounded-full text-sm font-semibold shadow ${
-                isRunning ? "bg-[hsl(var(--warning))] text-[hsl(var(--foreground))]" : "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]"
-              } hover:opacity-90 transition`}
-            >
-              {isRunning ? "Pausar" : "Iniciar"}
-            </button>
-            <button
-              onClick={onReset}
-              className="px-4 py-2 rounded-full text-sm font-semibold border text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition"
-            >
-              Reiniciar
-            </button>
+    <section className={`w-full space-y-4 ${isFullscreen ? "text-lg" : "text-base"}`}>
+      <header className="grid grid-cols-1 gap-3 border bg-[hsl(var(--surface-1))] p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <div className="flex flex-wrap items-center gap-2">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-[hsl(var(--muted-foreground))]">Tiempo</p>
+            <p className="text-3xl font-black tabular-nums sm:text-4xl">{time}</p>
+          </div>
+          <span className="h-8 w-px bg-[hsl(var(--border))]" />
+          <div>
+            <p className="text-xs uppercase tracking-wide text-[hsl(var(--muted-foreground))]">Meta</p>
+            <input
+              type="number"
+              value={maxPoints}
+              onChange={(e) => onMaxPointsChange(Number(e.target.value))}
+              className="input-base w-20 text-center text-base font-semibold"
+            />
           </div>
         </div>
 
-        <div>
-          <p className="text-sm text-[hsl(var(--muted-foreground))]">🎯 Puntos meta</p>
-          <input
-            type="number"
-            value={maxPoints}
-            onChange={(e) => onMaxPointsChange(Number(e.target.value))}
-            className="mt-1 border rounded-lg px-3 py-2 text-center text-lg font-semibold shadow-sm w-28 bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
-          />
+        <div className="flex flex-wrap gap-2 sm:justify-end">
+          <button onClick={onStartPause} className={isRunning ? "btn-secondary" : "btn-primary"}>
+            {isRunning ? "Pausar" : "Iniciar"}
+          </button>
+          <button onClick={onReset} className="btn-secondary">
+            Reiniciar
+          </button>
         </div>
+      </header>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <TeamBox
+          label="Equipo A"
+          score={scoreA}
+          fouls={foulsA}
+          accent="primary"
+          onScore={onScoreA}
+          onUnscore={onUnscoreA}
+          onFoul={onFoulA}
+        />
+        <TeamBox
+          label="Equipo B"
+          score={scoreB}
+          fouls={foulsB}
+          accent="success"
+          onScore={onScoreB}
+          onUnscore={onUnscoreB}
+          onFoul={onFoulB}
+        />
       </div>
+    </section>
+  );
+};
 
-      {/* Paneles de equipos */}
-      <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 text-center">
-        {/* Equipo A */}
-        <div className="flex-1 rounded-2xl p-5 space-y-2 border bg-gradient-to-br from-[hsl(var(--primary)/0.10)] via-[hsl(var(--primary)/0.5)] to-transparent">
-          <p className="text-sm font-semibold text-[hsl(var(--primary))]">Equipo A</p>
-          <p className="text-5xl sm:text-6xl font-black">{scoreA}</p>
-          <p className="text-sm text-[hsl(var(--muted-foreground))]">Faltas</p>
-          <p className="text-2xl sm:text-3xl text-destructive font-semibold">{foulsA}</p>
-          <div className="flex flex-wrap justify-center gap-2 mt-3">
-            <button
-              onClick={onScoreA}
-              className="bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] px-4 py-2 rounded-lg text-sm font-semibold shadow hover:opacity-90"
-            >
-              +1
-            </button>
-            <button
-              onClick={onUnscoreA}
-              className="bg-[hsl(var(--muted))] text-[hsl(var(--foreground))] px-4 py-2 rounded-lg text-sm font-semibold border hover:bg-[hsl(var(--muted)/0.80)]"
-            >
-              -1
-            </button>
-            <button
-              onClick={onFoulA}
-              className="bg-destructive text-destructive-foreground px-4 py-2 rounded-lg text-sm font-semibold shadow hover:opacity-90"
-            >
-              Foul
-            </button>
-          </div>
-        </div>
+const TeamBox = ({
+  label,
+  score,
+  fouls,
+  accent,
+  onScore,
+  onUnscore,
+  onFoul,
+}: {
+  label: string;
+  score: number;
+  fouls: number;
+  accent: "primary" | "success";
+  onScore: () => void;
+  onUnscore: () => void;
+  onFoul: () => void;
+}) => {
+  const accentColor = accent === "primary" ? "text-[hsl(var(--primary))]" : "text-[hsl(var(--success))]";
+  const scoreColor = accent === "primary" ? "text-[hsl(var(--foreground))]" : "text-[hsl(var(--success))]";
 
-        {/* Equipo B */}
-        <div className="flex-1 rounded-2xl p-5 space-y-2 border bg-gradient-to-br from-[hsl(var(--success)/0.20)] via-[hsl(var(--success)/0.08)] to-transparent">
-          <p className="text-sm font-semibold text-[hsl(var(--success))]">Equipo B</p>
-          <p className="text-5xl sm:text-6xl font-black text-[hsl(var(--success))]">{scoreB}</p>
-          <p className="text-sm text-[hsl(var(--muted-foreground))]">Faltas</p>
-          <p className="text-2xl sm:text-3xl text-destructive font-semibold">{foulsB}</p>
-          <div className="flex flex-wrap justify-center gap-2 mt-3">
-            <button
-              onClick={onScoreB}
-              className="bg-[hsl(var(--success))] text-[hsl(var(--primary-foreground))] px-4 py-2 rounded-lg text-sm font-semibold shadow hover:opacity-90"
-            >
-              +1
-            </button>
-            <button
-              onClick={onUnscoreB}
-              className="bg-[hsl(var(--muted))] text-[hsl(var(--foreground))] px-4 py-2 rounded-lg text-sm font-semibold border hover:bg-[hsl(var(--muted)/0.80)]"
-            >
-              -1
-            </button>
-            <button
-              onClick={onFoulB}
-              className="bg-destructive text-destructive-foreground px-4 py-2 rounded-lg text-sm font-semibold shadow hover:opacity-90"
-            >
-              Foul
-            </button>
-          </div>
-        </div>
+  return (
+    <article className="border bg-[hsl(var(--surface-1))] p-4">
+      <p className={`text-sm font-semibold ${accentColor}`}>{label}</p>
+      <p className={`mt-1 text-6xl font-black tabular-nums ${scoreColor}`}>{score}</p>
+      <p className="mt-1 text-xs uppercase tracking-wide text-[hsl(var(--muted-foreground))]">Faltas</p>
+      <p className="text-2xl font-semibold text-[hsl(var(--destructive))] tabular-nums">{fouls}</p>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button onClick={onScore} className="btn-primary min-w-[68px]">
+          +1
+        </button>
+        <button onClick={onUnscore} className="btn-secondary min-w-[68px]">
+          -1
+        </button>
+        <button onClick={onFoul} className="btn-danger min-w-[68px]">
+          Foul
+        </button>
       </div>
-    </div>
+    </article>
   );
 };
 

@@ -1,5 +1,7 @@
 import React, { useRef, useEffect, useState } from "react";
 import type { PlayerFormState } from "../types/player";
+import ModalShell from "./ui/ModalShell";
+import Field from "./ui/Field";
 
 interface Props {
   isOpen: boolean;
@@ -10,14 +12,7 @@ interface Props {
   mode: "add" | "edit";
 }
 
-const AddPlayerModal: React.FC<Props> = ({
-  isOpen,
-  onClose,
-  onSubmit,
-  newPlayer,
-  setNewPlayer,
-  mode,
-}) => {
+const AddPlayerModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, newPlayer, setNewPlayer, mode }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [previewURL, setPreviewURL] = useState<string | null>(null);
 
@@ -26,118 +21,99 @@ const AddPlayerModal: React.FC<Props> = ({
       const url = URL.createObjectURL(newPlayer.photo);
       setPreviewURL(url);
       return () => URL.revokeObjectURL(url);
-    } else if (typeof newPlayer.photo === "string") {
+    }
+
+    if (typeof newPlayer.photo === "string") {
       setPreviewURL(newPlayer.photo);
     } else {
       setPreviewURL(null);
     }
-  }, [newPlayer.photo]);  
-
-  if (!isOpen) return null;
+  }, [newPlayer.photo]);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setNewPlayer((prev) => ({ ...prev, photo: file }));
-    }
+    if (file) setNewPlayer((prev) => ({ ...prev, photo: file }));
   };
 
-  const inputStyle =
-    "input-base";
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="card w-full max-w-md p-6 animate-fadeIn shadow-2xl">
-        <h3 className="text-xl font-semibold text-center">
-          {mode === "add" ? "Agregar jugador" : "Editar jugador"}
-        </h3>
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      title={mode === "add" ? "Agregar jugador" : "Editar jugador"}
+      maxWidthClassName="sm:max-w-md"
+      actions={
+        <>
+          <button onClick={onClose} className="btn-secondary">
+            Cancelar
+          </button>
+          <button onClick={onSubmit} className="btn-primary">
+            Guardar
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {previewURL ? (
+          <img src={previewURL} alt="Preview" className="mx-auto h-24 w-24 object-cover border" />
+        ) : null}
 
-        <div className="space-y-4 mt-4">
-          {previewURL && (
-            <img
-              src={previewURL}
-              alt="Preview"
-              className="w-24 h-24 object-cover rounded-full mx-auto border"
-            />
-          )}
+        <div className="text-center">
+          <input type="file" accept="image/*" ref={fileInputRef} onChange={handlePhotoChange} className="hidden" />
+          <button type="button" onClick={() => fileInputRef.current?.click()} className="btn-secondary">
+            {previewURL ? "Cambiar foto" : "Subir foto"}
+          </button>
+        </div>
 
-          <div className="text-center">
-            <input
-              type="file"
-              accept="image/*"
-              ref={fileInputRef}
-              onChange={handlePhotoChange}
-              className="hidden"
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="text-sm text-[hsl(var(--primary))] hover:underline"
-            >
-              {previewURL ? "Cambiar foto" : "Subir foto"}
-            </button>
-          </div>
-
+        <Field label="Nombres">
           <input
             type="text"
-            placeholder="Nombres"
-            className={inputStyle}
+            className="input-base"
             value={newPlayer.names}
             onChange={(e) => setNewPlayer((p) => ({ ...p, names: e.target.value }))}
           />
+        </Field>
+        <Field label="Apellidos">
           <input
             type="text"
-            placeholder="Apellidos"
-            className={inputStyle}
+            className="input-base"
             value={newPlayer.lastnames}
             onChange={(e) => setNewPlayer((p) => ({ ...p, lastnames: e.target.value }))}
           />
+        </Field>
+        <Field label="Nombre dorsal">
           <input
             type="text"
-            placeholder="Nombre dorsal"
-            className={inputStyle}
+            className="input-base"
             value={newPlayer.backjerseyname}
             onChange={(e) => setNewPlayer((p) => ({ ...p, backjerseyname: e.target.value }))}
           />
+        </Field>
+        <Field label="Número de jersey">
           <input
             type="number"
-            placeholder="Número de jersey"
-            className={inputStyle}
+            className="input-base"
             value={newPlayer.jerseynumber}
             onChange={(e) => setNewPlayer((p) => ({ ...p, jerseynumber: e.target.value }))}
           />
+        </Field>
+        <Field label="Cédula">
           <input
             type="text"
-            placeholder="Cédula"
-            className={inputStyle}
+            className="input-base"
             value={newPlayer.cedula}
             onChange={(e) => setNewPlayer((p) => ({ ...p, cedula: e.target.value }))}
           />
+        </Field>
+        <Field label="Descripción">
           <input
             type="text"
-            placeholder="Descripción"
-            className={inputStyle}
+            className="input-base"
             value={newPlayer.description}
             onChange={(e) => setNewPlayer((p) => ({ ...p, description: e.target.value }))}
           />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 mt-6">
-          <button
-            onClick={onClose}
-            className="w-full px-4 py-2 rounded-lg border text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={onSubmit}
-            className="w-full px-4 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-semibold hover:opacity-90 transition"
-          >
-            Guardar
-          </button>
-        </div>
+        </Field>
       </div>
-    </div>
+    </ModalShell>
   );
 };
 

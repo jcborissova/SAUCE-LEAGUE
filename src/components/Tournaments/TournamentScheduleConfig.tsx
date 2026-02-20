@@ -339,7 +339,7 @@ const handleSave = async () => {
         <button
           onClick={generateMatches}
           disabled={generating}
-          className="btn-primary w-full md:w-auto rounded-full"
+          className="btn-primary w-full md:w-auto"
         >
           {generating ? "Generando..." : "Generar Partidos"}
         </button>
@@ -352,7 +352,7 @@ const handleSave = async () => {
             {previewMatches.map((match, idx) => (
               <div
                 key={idx}
-                className="app-card rounded-xl p-4 flex flex-col space-y-2 hover:shadow-md transition"
+                className="app-card p-4 flex flex-col space-y-2 transition-colors hover:bg-[hsl(var(--surface-2))]"
               >
                 <p className="font-semibold">{match.team_a} vs {match.team_b}</p>
                 <p className="text-sm text-[hsl(var(--text-subtle))]">{match.match_date} - {match.match_time}</p>
@@ -361,7 +361,7 @@ const handleSave = async () => {
           </div>
           <button
             onClick={handleSave}
-            className="btn-primary rounded-full"
+            className="btn-primary"
           >
             Guardar en Base de Datos
           </button>
@@ -378,7 +378,7 @@ const handleSave = async () => {
           {matches.map((match) => (
             <div
               key={match.id}
-              className="app-card rounded-xl p-4 flex flex-col space-y-2 hover:shadow-md transition"
+              className="app-card p-4 flex flex-col space-y-2 transition-colors hover:bg-[hsl(var(--surface-2))]"
             >
               <p className="font-semibold">{match.team_a} vs {match.team_b}</p>
               <p className="text-sm text-[hsl(var(--text-subtle))]">{match.match_date} - {match.match_time}</p>

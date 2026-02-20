@@ -16,21 +16,25 @@ const TeamList: React.FC<Props> = ({ players, title, teamMode = false }) => {
     const quintetoB = players.slice(5, 10);
 
     return (
-      <div className="space-y-4">
-        {title && <h4 className="font-semibold text-lg">{title}</h4>}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="card p-3">
-            <h4 className="font-semibold mb-2">Quinteto A</h4>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {quintetoA.map((player) => <PlayerCard key={player.id} player={player} />)}
+      <div className="space-y-3">
+        {title ? <h4 className="text-base font-semibold">{title}</h4> : null}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <section className="border bg-[hsl(var(--surface-1))] p-3">
+            <h4 className="mb-2 text-sm font-semibold">Quinteto A</h4>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {quintetoA.map((player) => (
+                <PlayerCard key={player.id} player={player} />
+              ))}
             </div>
-          </div>
-          <div className="card p-3">
-            <h4 className="font-semibold mb-2">Quinteto B</h4>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {quintetoB.map((player) => <PlayerCard key={player.id} player={player} />)}
+          </section>
+          <section className="border bg-[hsl(var(--surface-1))] p-3">
+            <h4 className="mb-2 text-sm font-semibold">Quinteto B</h4>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {quintetoB.map((player) => (
+                <PlayerCard key={player.id} player={player} />
+              ))}
             </div>
-          </div>
+          </section>
         </div>
       </div>
     );
@@ -38,9 +42,11 @@ const TeamList: React.FC<Props> = ({ players, title, teamMode = false }) => {
 
   return (
     <div className="space-y-2">
-      {title && <h4 className="font-semibold text-lg">{title}</h4>}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-        {players.map((player) => <PlayerCard key={player.id} player={player} />)}
+      {title ? <h4 className="text-base font-semibold">{title}</h4> : null}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {players.map((player) => (
+          <PlayerCard key={player.id} player={player} />
+        ))}
       </div>
     </div>
   );

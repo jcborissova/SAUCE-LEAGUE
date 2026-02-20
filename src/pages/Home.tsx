@@ -1,159 +1,185 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
 import React from "react";
 import { Link } from "react-router-dom";
-import { UserGroupIcon, TrophyIcon, CalendarDaysIcon } from "@heroicons/react/24/solid";
-import logo from "../assets/sl-logo.png";
+import { ArrowRightIcon, CalendarDaysIcon, TrophyIcon, UserGroupIcon } from "@heroicons/react/24/solid";
 
-import playersImg from "../assets/players.png";
-import leaguesImg from "../assets/leagues.png";
-import matchesImg from "../assets/matches.png";
+import PageShell from "../components/ui/PageShell";
+import SectionCard from "../components/ui/SectionCard";
+import StatPill from "../components/ui/StatPill";
+import Badge from "../components/ui/Badge";
+import leaguesHomeImage from "../assets/home/leagues-home.jpg";
+import matchesHomeImage from "../assets/home/matches-home.jpg";
 
 const Home: React.FC = () => {
   return (
-    <div className="space-y-10 p-3 sm:space-y-14 sm:p-4 lg:p-6">
-      <section className="grid gap-4 lg:grid-cols-[1.08fr_0.92fr] lg:items-center">
-        <div className="space-y-4 rounded-2xl border bg-[hsl(var(--surface-1)/0.92)] p-5 sm:p-7">
-          <span className="inline-flex items-center gap-2 rounded-md border border-[hsl(var(--primary)/0.25)] bg-[hsl(var(--primary)/0.1)] px-3 py-1 text-xs font-semibold text-[hsl(var(--primary))]">
-            Domingo / Liga en vivo
-          </span>
+    <PageShell>
+      <section className="overflow-hidden border bg-[hsl(var(--surface-1))]">
+        <div className="grid lg:grid-cols-[1.08fr_0.92fr]">
+          <div className="space-y-4 p-4 sm:space-y-5 sm:p-6">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="primary">Temporada activa</Badge>
+              <Badge>Control central</Badge>
+            </div>
 
-          <div className="space-y-2">
-            <h1 className="text-3xl font-extrabold tracking-tight leading-tight sm:text-5xl">Sauce League</h1>
-            <p className="max-w-2xl text-sm text-[hsl(var(--muted-foreground))] sm:text-base">
-              Baloncesto organizado con rotaciones justas, resultados claros y una experiencia elegante para jugadores y espectadores.
-            </p>
+            <div className="space-y-2">
+              <h1 className="text-3xl font-extrabold leading-tight tracking-tight sm:text-5xl">Sauce League</h1>
+              <p className="max-w-2xl text-sm text-[hsl(var(--muted-foreground))] sm:text-base">
+                Gestiona ligas y torneos de baloncesto con un flujo operativo claro: quintetos, marcador en vivo, resultados y líderes.
+              </p>
+            </div>
+
+            <div className="border-l-2 border-[hsl(var(--primary)/0.55)] bg-[hsl(var(--surface-2)/0.75)] px-3 py-2 sm:px-4 sm:py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-subtle))]">Objetivo</p>
+              <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))] sm:text-[15px]">
+                Estandarizar la operación del torneo en un panel móvil-first, minimizando pasos para registrar partidos y tomar decisiones rápidas.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <StatPill label="Roster" value="24" />
+              <StatPill label="Partidos" value="132" />
+              <StatPill label="Ligas" value="4" />
+              <StatPill label="Torneos" value="2" />
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Link to="/tournaments" className="btn-primary w-full sm:w-auto">
+                Ver torneo
+              </Link>
+              <Link to="/leagues" className="btn-secondary w-full sm:w-auto">
+                Gestionar liga
+              </Link>
+            </div>
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <Link to="/tournaments" className="btn-primary w-full sm:w-auto">
-              Ver torneo
-            </Link>
-            <Link to="/players" className="btn-secondary w-full sm:w-auto">
-              Ver jugadores
-            </Link>
+          <div className="border-t bg-[hsl(var(--surface-2)/0.56)] p-3 sm:p-4 lg:border-l lg:border-t-0">
+            <div className="grid h-full grid-cols-2 gap-2 sm:gap-3">
+              <article className="relative col-span-2 min-h-[148px] overflow-hidden border sm:min-h-[170px]">
+                <img
+                  src={leaguesHomeImage}
+                  alt="Vista de gestión de ligas"
+                  loading="eager"
+                  fetchPriority="high"
+                  className="h-full w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/20 to-transparent" />
+                <div className="absolute inset-x-0 bottom-0 p-3 text-white sm:p-4">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-white/80">Operación</p>
+                  <p className="text-base font-bold sm:text-xl">Control total de liga en tiempo real</p>
+                </div>
+              </article>
+
+              <article className="relative min-h-[104px] overflow-hidden border sm:min-h-[128px]">
+                <img src={matchesHomeImage} alt="Calendario y resultados" loading="lazy" className="h-full w-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/62 via-black/12 to-transparent" />
+                <div className="absolute inset-x-0 bottom-0 p-2.5 text-white">
+                  <p className="text-xs font-semibold">Resultados</p>
+                </div>
+              </article>
+
+              <article className="grid min-h-[104px] place-content-center border bg-[hsl(var(--surface-1))] p-3 text-center sm:min-h-[128px]">
+                <p className="text-[11px] uppercase tracking-[0.15em] text-[hsl(var(--text-subtle))]">Experiencia</p>
+                <p className="mt-1 text-sm font-semibold sm:text-base">Simple, rápida y profesional</p>
+                <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">Pensada para organizar torneos sin fricción.</p>
+              </article>
+            </div>
           </div>
         </div>
-
-        <article className="overflow-hidden rounded-2xl border bg-[hsl(var(--surface-1)/0.94)]">
-          <div className="bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--info))] p-4 text-[hsl(var(--text-inverse))] sm:p-5">
-            <div className="flex items-center gap-3">
-              <img src={logo} alt="Sauce League" className="h-12 w-12" />
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-[hsl(var(--text-inverse)/0.75)]">Próximo Juego</p>
-                <p className="text-lg font-bold sm:text-xl">Domingo 6:00 PM</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 p-4 sm:p-5">
-            <div className="rounded-2xl border bg-[hsl(var(--surface-2))] p-3 text-center">
-              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Equipo A</p>
-              <p className="text-4xl font-black">72</p>
-              <p className="text-xs text-[hsl(var(--text-subtle))]">Último marcador</p>
-            </div>
-            <div className="rounded-2xl border bg-[hsl(var(--surface-2))] p-3 text-center">
-              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Equipo B</p>
-              <p className="text-4xl font-black">69</p>
-              <p className="text-xs text-[hsl(var(--text-subtle))]">Último marcador</p>
-            </div>
-            <div className="rounded-xl border bg-[hsl(var(--surface-1))] px-3 py-2 text-sm text-[hsl(var(--text-subtle))]">
-              Roster activo <span className="ml-1 font-semibold text-[hsl(var(--foreground))]">24</span>
-            </div>
-            <div className="rounded-xl border bg-[hsl(var(--surface-1))] px-3 py-2 text-sm text-[hsl(var(--text-subtle))]">
-              Partidos jugados <span className="ml-1 font-semibold text-[hsl(var(--foreground))]">132</span>
-            </div>
-          </div>
-        </article>
       </section>
 
-      <section className="card mx-auto max-w-6xl space-y-6 p-5 sm:p-8">
-        <Section title="¿Qué es la Sauce League?">
-          Liga profesional amateur de baloncesto organizada, donde todos tienen oportunidad bajo un sistema justo, rotativo y competitivo.
-        </Section>
-        <Section title="Historia">
-          Desde 2024 se estructura cada jornada con orden, equilibrio, disciplina y rotaciones automatizadas para mantener continuidad semanal.
-        </Section>
-        <Section title="Misión">
-          Generar una experiencia de baloncesto seria, estructurada y apasionante, integrando jugadores de distintos niveles bajo un sistema profesional.
-        </Section>
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <HomeFeatureTile
+          icon={<UserGroupIcon className="h-6 w-6" />}
+          title="Jugadores"
+          text="Registro, edición, búsqueda y control de roster."
+          link="/players"
+          cta="Abrir jugadores"
+          visualStyle="data"
+        />
+        <HomeFeatureTile
+          icon={<TrophyIcon className="h-6 w-6" />}
+          title="Ligas"
+          text="Gestión de cola, quintetos, invitados y partido actual."
+          link="/leagues"
+          cta="Abrir ligas"
+          imageSrc={leaguesHomeImage}
+          imageAlt="Panel de ligas"
+          visualStyle="image"
+        />
+        <HomeFeatureTile
+          icon={<CalendarDaysIcon className="h-6 w-6" />}
+          title="Torneos"
+          text="Calendario, resultados, posiciones y analíticas del torneo."
+          link="/tournaments"
+          cta="Abrir torneos"
+          imageSrc={matchesHomeImage}
+          imageAlt="Panel de torneos y partidos"
+          visualStyle="image"
+        />
       </section>
-
-      <ResponsiveSection
-        img={playersImg}
-        icon={<UserGroupIcon className="h-24 w-24 text-[hsl(var(--text-subtle))]" />}
-        title="Jugadores"
-        description="Registro detallado de jugadores activos, control de invitados, uniformes y administración de plantilla."
-        link="/players"
-        buttonText="Ver Jugadores"
-      />
-
-      <ResponsiveSection
-        img={leaguesImg}
-        icon={<TrophyIcon className="h-24 w-24 text-[hsl(var(--text-subtle))]" />}
-        title="Ligas"
-        description="Organización de quintetos, rotación automática y manejo de reglas dominicales bajo un sistema profesional."
-        link="/leagues"
-        buttonText="Administrar Ligas"
-        reverse
-      />
-
-      <ResponsiveSection
-        img={matchesImg}
-        icon={<CalendarDaysIcon className="h-24 w-24 text-[hsl(var(--text-subtle))]" />}
-        title="Partidos"
-        description="Registro completo de resultados, historial de encuentros y seguimiento estadístico de la temporada."
-        link="/matches"
-        buttonText="Ver Partidos"
-      />
-    </div>
+    </PageShell>
   );
 };
 
-const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className="space-y-1.5">
-    <h2 className="text-2xl font-bold sm:text-3xl">{title}</h2>
-    <p className="text-base leading-relaxed text-[hsl(var(--muted-foreground))]">{children}</p>
-  </div>
-);
-
-const ResponsiveSection = ({
-  img,
+const HomeFeatureTile = ({
   icon,
   title,
-  description,
+  text,
   link,
-  buttonText,
-  reverse = false,
+  cta,
+  imageSrc,
+  imageAlt,
+  visualStyle,
 }: {
-  img?: string;
   icon: React.ReactNode;
   title: string;
-  description: string;
+  text: string;
   link: string;
-  buttonText: string;
-  reverse?: boolean;
+  cta: string;
+  imageSrc?: string;
+  imageAlt?: string;
+  visualStyle: "image" | "data";
 }) => (
-  <article
-    className={`card mx-auto flex max-w-6xl flex-col items-center gap-5 p-4 sm:gap-8 sm:p-6 ${
-      reverse ? "md:flex-row-reverse" : "md:flex-row"
-    }`}
-  >
-    {img ? (
-      <img src={img} alt={title} className="max-h-[360px] w-full rounded-2xl border object-cover md:w-1/2" />
+  <SectionCard className="space-y-0 overflow-hidden p-0">
+    {visualStyle === "image" && imageSrc ? (
+      <div className="relative h-36 w-full border-b sm:h-40">
+        <img src={imageSrc} alt={imageAlt ?? title} loading="lazy" className="h-full w-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/58 via-black/18 to-transparent" />
+        <div className="absolute bottom-2 left-3 inline-flex h-9 w-9 items-center justify-center border border-white/45 bg-black/28 text-white backdrop-blur-sm">
+          {icon}
+        </div>
+      </div>
     ) : (
-      <div className="flex h-[240px] w-full items-center justify-center rounded-2xl border bg-[hsl(var(--muted))] md:w-1/2">
-        {icon}
+      <div className="border-b bg-[hsl(var(--surface-2)/0.85)] p-3">
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="border bg-[hsl(var(--surface-1))] px-2 py-2">
+            <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Activos</p>
+            <p className="text-base font-bold tabular-nums">24</p>
+          </div>
+          <div className="border bg-[hsl(var(--surface-1))] px-2 py-2">
+            <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Equipos</p>
+            <p className="text-base font-bold tabular-nums">8</p>
+          </div>
+          <div className="border bg-[hsl(var(--surface-1))] px-2 py-2">
+            <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Invitados</p>
+            <p className="text-base font-bold tabular-nums">5</p>
+          </div>
+        </div>
       </div>
     )}
-
-    <div className="w-full space-y-3 text-center md:w-1/2 md:text-left">
-      <h2 className="text-2xl font-bold sm:text-3xl">{title}</h2>
-      <p className="text-base leading-relaxed text-[hsl(var(--muted-foreground))]">{description}</p>
-      <Link to={link} className="btn-primary inline-flex">
-        {buttonText}
+    <div className="space-y-3 p-4">
+      <div className="flex items-center gap-2">
+        <span className="inline-flex h-9 w-9 items-center justify-center border bg-[hsl(var(--surface-2))] text-[hsl(var(--primary))]">
+          {icon}
+        </span>
+        <h2 className="text-lg font-semibold">{title}</h2>
+      </div>
+      <p className="text-sm text-[hsl(var(--muted-foreground))]">{text}</p>
+      <Link to={link} className="btn-secondary inline-flex min-w-[170px] gap-2">
+        {cta}
+        <ArrowRightIcon className="h-4 w-4" />
       </Link>
     </div>
-  </article>
+  </SectionCard>
 );
 
 export default Home;

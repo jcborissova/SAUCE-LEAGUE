@@ -40,10 +40,7 @@ const ActionMenu: React.FC<Props> = ({ onView, onEdit, onDelete, className }) =>
     const viewportPadding = 8;
 
     const desiredLeft = triggerRect.right - menuWidth;
-    const left = Math.min(
-      window.innerWidth - menuWidth - viewportPadding,
-      Math.max(viewportPadding, desiredLeft)
-    );
+    const left = Math.min(window.innerWidth - menuWidth - viewportPadding, Math.max(viewportPadding, desiredLeft));
 
     const top = Math.min(
       window.innerHeight - menuHeight - viewportPadding,
@@ -93,7 +90,7 @@ const ActionMenu: React.FC<Props> = ({ onView, onEdit, onDelete, className }) =>
         ref={buttonRef}
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))]"
+        className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))]"
         aria-haspopup="menu"
         aria-expanded={open}
       >
@@ -107,7 +104,7 @@ const ActionMenu: React.FC<Props> = ({ onView, onEdit, onDelete, className }) =>
           <div
             ref={menuRef}
             role="menu"
-            className="fixed z-[1200] min-w-[184px] rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-1 text-[hsl(var(--card-foreground))] shadow-sm"
+            className="fixed z-[1200] min-w-[184px] border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-1 text-[hsl(var(--card-foreground))] shadow-md"
             style={{ top: menuPosition.top, left: menuPosition.left }}
           >
             {actions.map((action) => (
@@ -117,7 +114,7 @@ const ActionMenu: React.FC<Props> = ({ onView, onEdit, onDelete, className }) =>
                   action.onClick();
                   setOpen(false);
                 }}
-                className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--muted))] ${
+                className={`flex min-h-[40px] w-full items-center gap-2 px-3 py-2 text-sm transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--muted))] ${
                   action.tone === "danger" ? "text-[hsl(var(--destructive))]" : "text-[hsl(var(--foreground))]"
                 }`}
               >

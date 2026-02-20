@@ -5,12 +5,16 @@ import type { Player } from "../../types/player";
 import { ArrowPathIcon } from "@heroicons/react/24/solid";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { Link, useParams } from "react-router-dom";
+
 import TournamentScheduleView from "./TournamentScheduleView";
 import TournamentStandings from "./TournamentStandings";
 import TournamentResultsView from "./TournamentResultsView";
-import TournamentAnalyticsHub from "./TournamentAnalyticsHub";
 import TournamentPlayoffOverview from "./TournamentPlayoffOverview";
 import TournamentPlayersGallery from "./TournamentPlayersGallery";
+import TournamentStatsOverview from "./TournamentStatsOverview";
+
+import SegmentedControl from "../ui/SegmentedControl";
+import EmptyState from "../ui/EmptyState";
 
 type Team = {
   id: number;
@@ -20,13 +24,13 @@ type Team = {
 
 type MainTabKey = "matches" | "standings" | "stats" | "players";
 type MatchesSubtab = "schedule" | "results";
-type StatsSubtab = "analytics" | "playoffs";
+type StatsSubtab = "analytics" | "playoffs" | "duel";
 
 const MAIN_TABS: Array<{ key: MainTabKey; label: string }> = [
   { key: "matches", label: "Partidos" },
   { key: "standings", label: "Posiciones" },
   { key: "stats", label: "Estadísticas" },
-  { key: "players", label: "Jugadores" },
+  { key: "players", label: "Equipos" },
 ];
 
 const TournamentViewPage: React.FC = () => {
@@ -48,17 +52,9 @@ const TournamentViewPage: React.FC = () => {
     const loadTournament = async () => {
       setTournamentLoading(true);
 
-      const { data, error } = await supabase
-        .from("tournaments")
-        .select("name")
-        .eq("id", tournamentId)
-        .single();
-
-      if (!error && data?.name) {
-        setTournamentName(data.name);
-      } else {
-        setTournamentName("Sauce League");
-      }
+      const { data, error } = await supabase.from("tournaments").select("name").eq("id", tournamentId).single();
+      if (!error && data?.name) setTournamentName(data.name);
+      else setTournamentName("Sauce League");
 
       setTournamentLoading(false);
     };
@@ -109,107 +105,83 @@ const TournamentViewPage: React.FC = () => {
 
   if (!tournamentId) {
     return (
-      <div className="mx-auto max-w-6xl px-3 py-6 sm:px-4">
-        <div className="app-card p-6 text-center">
-          <p className="text-sm text-[hsl(var(--text-subtle))]">No se encontró el torneo solicitado.</p>
-          <Link to="/tournaments" className="btn-secondary mt-4">
-            Volver a torneos
-          </Link>
-        </div>
+      <div className="w-full py-2">
+        <EmptyState
+          title="No se encontró el torneo solicitado"
+          description="Revisa el enlace o vuelve al listado de torneos."
+          action={
+            <Link to="/tournaments" className="btn-secondary">
+              Volver a torneos
+            </Link>
+          }
+        />
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-[1440px] mx-auto px-2 py-2 sm:px-3 sm:py-3 lg:px-4 lg:py-4 space-y-4">
-      <section className="border border-[hsl(var(--border)/0.92)] bg-[hsl(var(--surface-1))]">
-        <div className="border-b bg-[hsl(var(--primary))] px-4 py-3 text-[hsl(var(--text-inverse))] sm:px-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-xs uppercase tracking-[0.2em] text-[hsl(var(--text-inverse)/0.78)]">Torneo</p>
-              <h1 className="truncate text-xl font-bold sm:text-2xl">
-                {tournamentLoading ? "Cargando torneo..." : tournamentName}
-              </h1>
+    <div className="w-full space-y-4">
+      <header className="w-full py-1">
+        <div className="overflow-hidden border border-[hsl(var(--border)/0.9)] bg-[hsl(var(--surface-1))] shadow-[0_1px_0_hsl(var(--border)/0.35)]">
+          <div className="relative border-b border-white/12 bg-[linear-gradient(118deg,hsl(var(--primary)/0.94),hsl(var(--primary)/0.76))] text-[hsl(var(--primary-foreground))]">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_14%,hsl(var(--text-inverse)/0.2),transparent_38%),radial-gradient(circle_at_88%_82%,hsl(var(--text-inverse)/0.12),transparent_30%)]" />
+            <div className="relative flex w-full flex-wrap items-center justify-between gap-3 px-3 py-4 sm:px-4 sm:py-5 lg:px-5">
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/72">Torneo</p>
+                <h1 className="truncate text-2xl font-bold sm:text-3xl">
+                  {tournamentLoading ? "Cargando torneo..." : tournamentName}
+                </h1>
+              </div>
+
+              <Link
+                to="/tournaments"
+                className="inline-flex min-h-[42px] items-center gap-2 rounded-lg border border-white/35 bg-white/10 px-4 text-sm font-semibold text-white transition-colors duration-[var(--motion-hover)] hover:bg-white/18"
+              >
+                <ArrowLeftIcon className="h-4 w-4" />
+                Volver
+              </Link>
             </div>
-            <Link
-              to="/tournaments"
-              className="inline-flex min-h-[40px] items-center gap-2 rounded-md border border-white/36 bg-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide transition-colors duration-[var(--motion-hover)] hover:bg-white/18"
-            >
-              <ArrowLeftIcon className="h-4 w-4" />
-              Volver
-            </Link>
           </div>
-        </div>
 
-        <div className="border-b bg-[hsl(var(--surface-1))]">
-          <div className="soft-scrollbar overflow-x-auto">
-            <nav className="flex min-w-max items-center px-2 sm:px-3">
-              {MAIN_TABS.map((tab) => {
-                const active = activeTab === tab.key;
-
-                return (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    onClick={() => setActiveTab(tab.key)}
-                    className={`relative px-3 py-3 text-sm font-semibold sm:px-5 ${
-                      active
-                        ? "text-[hsl(var(--primary))]"
-                        : "text-[hsl(var(--text-subtle))] hover:text-[hsl(var(--foreground))]"
+          <nav className="grid w-full grid-cols-4 border-t border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))]" aria-label="Secciones de torneo">
+            {MAIN_TABS.map((tab) => {
+              const active = activeTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`relative min-h-[48px] px-2 text-[13px] font-semibold transition-colors duration-[var(--motion-tab)] sm:text-sm ${
+                    active
+                      ? "bg-[hsl(var(--primary)/0.09)] text-[hsl(var(--primary))]"
+                      : "text-[hsl(var(--text-subtle))] hover:bg-[hsl(var(--surface-2)/0.75)] hover:text-[hsl(var(--foreground))]"
+                  }`}
+                  aria-current={active ? "page" : undefined}
+                >
+                  <span className="truncate">{tab.label}</span>
+                  <span
+                    className={`pointer-events-none absolute inset-x-2 bottom-0 h-0.5 transition-colors duration-[var(--motion-tab)] ${
+                      active ? "bg-[hsl(var(--primary))]" : "bg-transparent"
                     }`}
-                  >
-                    {tab.label}
-                    <span
-                      className={`absolute inset-x-2 bottom-0 h-0.5 transition-all duration-[var(--motion-tab)] ${
-                        active ? "bg-[hsl(var(--primary))] opacity-100" : "bg-[hsl(var(--primary)/0.4)] opacity-0"
-                      }`}
-                    />
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
+                  />
+                </button>
+              );
+            })}
+          </nav>
         </div>
-      </section>
+      </header>
 
-      <section className="space-y-4 p-1 sm:p-2 md:p-3">
+      <section className="w-full space-y-4 pb-2">
         {activeTab === "matches" ? (
-          <div className="space-y-4">
-            <div className="border-b border-[hsl(var(--border))]">
-              <button
-                type="button"
-                onClick={() => setMatchesSubtab("schedule")}
-                className={`relative px-3 py-2.5 text-sm font-semibold transition-colors duration-[var(--motion-tab)] ${
-                  matchesSubtab === "schedule"
-                    ? "text-[hsl(var(--primary))]"
-                    : "text-[hsl(var(--text-subtle))] hover:text-[hsl(var(--foreground))]"
-                }`}
-              >
-                Calendario
-                <span
-                  className={`absolute inset-x-2 bottom-0 h-0.5 transition-all duration-[var(--motion-tab)] ${
-                    matchesSubtab === "schedule" ? "bg-[hsl(var(--primary))] opacity-100" : "opacity-0"
-                  }`}
-                />
-              </button>
-              <button
-                type="button"
-                onClick={() => setMatchesSubtab("results")}
-                className={`relative px-3 py-2.5 text-sm font-semibold transition-colors duration-[var(--motion-tab)] ${
-                  matchesSubtab === "results"
-                    ? "text-[hsl(var(--primary))]"
-                    : "text-[hsl(var(--text-subtle))] hover:text-[hsl(var(--foreground))]"
-                }`}
-              >
-                Resultados
-                <span
-                  className={`absolute inset-x-2 bottom-0 h-0.5 transition-all duration-[var(--motion-tab)] ${
-                    matchesSubtab === "results" ? "bg-[hsl(var(--primary))] opacity-100" : "opacity-0"
-                  }`}
-                />
-              </button>
-            </div>
-
+          <div className="space-y-3">
+            <SegmentedControl
+              options={[
+                { value: "schedule", label: "Calendario" },
+                { value: "results", label: "Resultados" },
+              ]}
+              value={matchesSubtab}
+              onChange={(value) => setMatchesSubtab(value as MatchesSubtab)}
+            />
             {matchesSubtab === "schedule" ? (
               <TournamentScheduleView tournamentId={tournamentId} embedded />
             ) : (
@@ -221,52 +193,25 @@ const TournamentViewPage: React.FC = () => {
         {activeTab === "standings" ? <TournamentStandings tournamentId={tournamentId} embedded /> : null}
 
         {activeTab === "stats" ? (
-          <div className="space-y-4">
-            <div className="border-b border-[hsl(var(--border))]">
-              <button
-                type="button"
-                onClick={() => setStatsSubtab("analytics")}
-                className={`relative px-3 py-2.5 text-sm font-semibold transition-colors duration-[var(--motion-tab)] ${
-                  statsSubtab === "analytics"
-                    ? "text-[hsl(var(--primary))]"
-                    : "text-[hsl(var(--text-subtle))] hover:text-[hsl(var(--foreground))]"
-                }`}
-              >
-                Analíticas
-                <span
-                  className={`absolute inset-x-2 bottom-0 h-0.5 transition-all duration-[var(--motion-tab)] ${
-                    statsSubtab === "analytics" ? "bg-[hsl(var(--primary))] opacity-100" : "opacity-0"
-                  }`}
-                />
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatsSubtab("playoffs")}
-                className={`relative px-3 py-2.5 text-sm font-semibold transition-colors duration-[var(--motion-tab)] ${
-                  statsSubtab === "playoffs"
-                    ? "text-[hsl(var(--primary))]"
-                    : "text-[hsl(var(--text-subtle))] hover:text-[hsl(var(--foreground))]"
-                }`}
-              >
-                Playoffs
-                <span
-                  className={`absolute inset-x-2 bottom-0 h-0.5 transition-all duration-[var(--motion-tab)] ${
-                    statsSubtab === "playoffs" ? "bg-[hsl(var(--primary))] opacity-100" : "opacity-0"
-                  }`}
-                />
-              </button>
-            </div>
+          <div className="space-y-3">
+            <SegmentedControl
+              options={[
+                { value: "analytics", label: "Analíticas" },
+                { value: "playoffs", label: "Playoffs" },
+                { value: "duel", label: "Duelo" },
+              ]}
+              value={statsSubtab}
+              onChange={(value) => setStatsSubtab(value as StatsSubtab)}
+            />
 
-            {statsSubtab === "analytics" ? (
-              <TournamentAnalyticsHub tournamentId={tournamentId} embedded />
-            ) : (
-              <TournamentPlayoffOverview tournamentId={tournamentId} embedded />
-            )}
+            {statsSubtab === "analytics" ? <TournamentStatsOverview tournamentId={tournamentId} embedded /> : null}
+            {statsSubtab === "playoffs" ? <TournamentPlayoffOverview tournamentId={tournamentId} embedded /> : null}
+            {statsSubtab === "duel" ? <TournamentStatsOverview tournamentId={tournamentId} embedded mode="duel" /> : null}
           </div>
         ) : null}
 
         {activeTab === "players" ? (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {teamsLoading && !teamsLoaded ? (
               <div className="flex justify-center py-24">
                 <ArrowPathIcon className="h-10 w-10 animate-spin text-[hsl(var(--primary))]" />

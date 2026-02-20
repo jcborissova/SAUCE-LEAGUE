@@ -1109,6 +1109,9 @@ export const saveMatchStats = async (payload: {
     return normalized;
   });
 
+  const submittedIds = new Set(normalizedRows.map((row) => row.playerId));
+  const toDeleteIds = Array.from(participantIds).filter((playerId) => !submittedIds.has(playerId));
+
   const { error: winnerError } = await supabase
     .from("matches")
     .update({ winner_team: payload.winnerTeam })
@@ -1116,6 +1119,18 @@ export const saveMatchStats = async (payload: {
 
   if (winnerError) {
     throw new Error(winnerError.message);
+  }
+
+  if (toDeleteIds.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("player_stats")
+      .delete()
+      .eq("match_id", payload.matchId)
+      .in("player_id", toDeleteIds);
+
+    if (deleteError) {
+      throw new Error(deleteError.message);
+    }
   }
 
   const upsertRows = normalizedRows.map((row) => ({
@@ -1133,9 +1148,13 @@ export const saveMatchStats = async (payload: {
     fga: row.fga,
   }));
 
-  const { error: statsError } = await supabase
-    .from("player_stats")
-    .upsert(upsertRows, { onConflict: "match_id,player_id" });
+  let statsError: { message: string } | null = null;
+  if (upsertRows.length > 0) {
+    const { error } = await supabase
+      .from("player_stats")
+      .upsert(upsertRows, { onConflict: "match_id,player_id" });
+    statsError = error;
+  }
 
   if (statsError) {
     throw new Error(statsError.message);

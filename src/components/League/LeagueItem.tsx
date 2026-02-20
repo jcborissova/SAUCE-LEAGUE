@@ -25,7 +25,7 @@ const LeagueItem: React.FC<Props> = ({ league, onSelect, onDeleteRequest }) => {
   return (
     <li
       {...handlers}
-      className="group app-card rounded-xl px-4 py-4 sm:px-5 flex justify-between items-center transition hover:shadow-md hover:bg-[hsl(var(--muted))]"
+      className="group app-card px-4 py-3 sm:px-5 flex justify-between items-center transition-colors hover:bg-[hsl(var(--muted))]"
     >
       <div onClick={onSelect} className="cursor-pointer w-full">
         <h3 className="text-base font-semibold">{league.name}</h3>

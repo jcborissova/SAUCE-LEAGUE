@@ -39,10 +39,7 @@ const PlayerTable: React.FC<PlayerTableProps> = ({
             <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">{resultSummary}</p>
           ) : null}
         </div>
-        <button
-          onClick={onOpenModal}
-          className="inline-flex items-center gap-2 bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] px-4 py-2 rounded-lg font-semibold shadow-sm hover:opacity-90 transition"
-        >
+        <button onClick={onOpenModal} className="btn-primary">
           <UserPlusIcon className="h-5 w-5" />
           <span className="hidden sm:inline">Nuevo jugador</span>
           <span className="sm:hidden">Añadir</span>
@@ -114,12 +111,12 @@ const PlayerTable: React.FC<PlayerTableProps> = ({
       {/* Mobile cards */}
       <div className="md:hidden space-y-3">
         {players.length === 0 && (
-          <div className="rounded-xl border p-4 text-center text-[hsl(var(--muted-foreground))]">
+          <div className="border p-4 text-center text-[hsl(var(--muted-foreground))]">
             No hay jugadores registrados.
           </div>
         )}
         {players.map((p) => (
-          <div key={p.id} className="rounded-xl border p-4 bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))] shadow-sm">
+          <div key={p.id} className="border p-4 bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))]">
             <div className="flex items-center gap-3">
               {p.photo ? (
                 <img src={p.photo} alt="Foto" className="w-12 h-12 rounded-full object-cover border" />

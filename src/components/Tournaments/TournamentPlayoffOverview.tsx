@@ -92,7 +92,7 @@ const TournamentPlayoffOverview: React.FC<Props> = ({ tournamentId, embedded = f
         <button
           type="button"
           onClick={load}
-          className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm hover:bg-[hsl(var(--muted))]"
+          className="inline-flex items-center gap-2 border px-3 py-2 text-sm hover:bg-[hsl(var(--muted))]"
         >
           <ArrowPathIcon className="w-4 h-4" />
           Actualizar
@@ -100,13 +100,13 @@ const TournamentPlayoffOverview: React.FC<Props> = ({ tournamentId, embedded = f
       </div>
 
       {error && (
-        <div className="rounded-2xl border border-[hsl(var(--destructive)/0.35)] bg-[hsl(var(--destructive)/0.12)] px-4 py-3 text-sm text-[hsl(var(--destructive))]">
+        <div className="border border-[hsl(var(--destructive)/0.35)] bg-[hsl(var(--destructive)/0.12)] px-4 py-3 text-sm text-[hsl(var(--destructive))]">
           {error}
         </div>
       )}
 
       {!error && series.length === 0 && (
-        <div className="rounded-2xl border bg-[hsl(var(--card))] p-6 text-sm text-[hsl(var(--muted-foreground))]">
+        <div className="border bg-[hsl(var(--card))] p-6 text-sm text-[hsl(var(--muted-foreground))]">
           Aún no hay series de playoffs generadas para este torneo.
         </div>
       )}
@@ -118,7 +118,7 @@ const TournamentPlayoffOverview: React.FC<Props> = ({ tournamentId, embedded = f
             <h4 className="text-lg font-semibold">{roundSeries[0].roundName}</h4>
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               {roundSeries.map((item) => (
-                <article key={item.id} className="rounded-2xl border bg-[hsl(var(--card))] p-4 space-y-3">
+                <article key={item.id} className="border bg-[hsl(var(--card))] p-4 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-semibold">{item.matchupKey.split("_").join(" ").toUpperCase()}</p>
                     <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClassName[item.status]}`}>
@@ -127,7 +127,7 @@ const TournamentPlayoffOverview: React.FC<Props> = ({ tournamentId, embedded = f
                   </div>
 
                   <div className="grid grid-cols-1 gap-2 text-sm">
-                    <div className="rounded-xl border px-3 py-2 flex items-center justify-between gap-2">
+                    <div className="border px-3 py-2 flex items-center justify-between gap-2">
                       <span>
                         {item.seedA ? `#${item.seedA} ` : ""}
                         {item.teamAName ?? "Por definir"}
@@ -136,7 +136,7 @@ const TournamentPlayoffOverview: React.FC<Props> = ({ tournamentId, embedded = f
                         {item.winsA}/{item.targetWinsA}
                       </span>
                     </div>
-                    <div className="rounded-xl border px-3 py-2 flex items-center justify-between gap-2">
+                    <div className="border px-3 py-2 flex items-center justify-between gap-2">
                       <span>
                         {item.seedB ? `#${item.seedB} ` : ""}
                         {item.teamBName ?? "Por definir"}
@@ -156,7 +156,7 @@ const TournamentPlayoffOverview: React.FC<Props> = ({ tournamentId, embedded = f
 
                   <div className="space-y-2">
                     {item.games.map((game) => (
-                      <div key={game.id} className="rounded-xl border px-3 py-2 text-sm space-y-1">
+                      <div key={game.id} className="border px-3 py-2 text-sm space-y-1">
                         <div className="flex items-center justify-between gap-2">
                           <p className="font-semibold">Juego {game.gameNumber}</p>
                           <span

@@ -1,5 +1,4 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useEffect, useRef, useState } from "react";
 import type { Player } from "../../types/player";
 import ScorePanel from "./ScorePanel";
@@ -51,6 +50,7 @@ const GameModal: React.FC<Props> = ({ onClose, onFinish }) => {
 
             return 0;
           }
+
           return prev - 1;
         });
       }, 1000);
@@ -73,8 +73,8 @@ const GameModal: React.FC<Props> = ({ onClose, onFinish }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-2 sm:px-4">
-      <div className="card rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-5xl space-y-6 relative">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/56 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="relative h-[100dvh] w-full overflow-y-auto border bg-[hsl(var(--background))] p-3 pb-24 sm:h-auto sm:max-h-[94vh] sm:max-w-5xl sm:p-5 sm:pb-5">
         <ScorePanel
           scoreA={scoreA}
           scoreB={scoreB}
@@ -83,6 +83,7 @@ const GameModal: React.FC<Props> = ({ onClose, onFinish }) => {
           time={formatTime(timeLeft)}
           isRunning={isRunning}
           maxPoints={maxPoints}
+          isFullscreen
           onStartPause={() => setIsRunning((prev) => !prev)}
           onReset={() => {
             setIsRunning(false);
@@ -102,7 +103,7 @@ const GameModal: React.FC<Props> = ({ onClose, onFinish }) => {
             setIsRunning(false);
             onClose();
           }}
-          className="absolute top-3 right-4 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] text-lg font-bold"
+          className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center border text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
           aria-label="Cerrar"
         >
           ✕

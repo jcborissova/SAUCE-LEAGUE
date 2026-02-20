@@ -1,9 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from "react";
 import type { Player } from "../../types/player";
-import { XMarkIcon } from "@heroicons/react/24/solid";
+import { XMarkIcon, Bars3Icon } from "@heroicons/react/24/solid";
 
-// Extendemos Player con propiedades específicas para la liga
 type LeaguePlayer = Player & {
   arrivalTime?: number;
   isGuest?: boolean;
@@ -25,60 +24,45 @@ const PlayerCard: React.FC<Props> = ({ player, onDelete, onDoubleClick, dragProp
     : null;
 
   return (
-    <div
-      className="relative card px-4 py-3 text-center text-sm sm:text-base font-medium hover:shadow-md transition w-full"
+    <article
+      className="relative border bg-[hsl(var(--surface-1))] px-3 py-2 text-left text-sm transition-colors hover:bg-[hsl(var(--surface-2))]"
       onDoubleClick={onDoubleClick}
     >
-      {/* Botón Eliminar */}
-      {onDelete && (
-        <div className="absolute top-1 right-1 z-10">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(player.id);
-            }}
-            className="text-[hsl(var(--muted-foreground))] hover:text-destructive"
-          >
-            <XMarkIcon className="w-5 h-5" />
-          </button>
-        </div>
-      )}
+      {onDelete ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(player.id);
+          }}
+          className="absolute right-1 top-1 inline-flex h-7 w-7 items-center justify-center text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--destructive))]"
+          aria-label="Eliminar jugador"
+        >
+          <XMarkIcon className="h-4 w-4" />
+        </button>
+      ) : null}
 
-      {/* Zona de arrastre (solo si está disponible) */}
-      {dragProps && (
+      {dragProps ? (
         <div
           {...dragProps.listeners}
           {...dragProps.attributes}
-          className="absolute bottom-1 left-1 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] cursor-grab z-10"
+          className="absolute bottom-1 right-1 cursor-grab text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
           title="Arrastrar"
         >
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <circle cx="5" cy="6" r="1.5" />
-            <circle cx="5" cy="10" r="1.5" />
-            <circle cx="5" cy="14" r="1.5" />
-            <circle cx="11" cy="6" r="1.5" />
-            <circle cx="11" cy="10" r="1.5" />
-            <circle cx="11" cy="14" r="1.5" />
-          </svg>
+          <Bars3Icon className="h-4 w-4" />
         </div>
-      )}
+      ) : null}
 
-      {/* Contenido */}
-      <div className="pointer-events-auto">
-        <p className="truncate font-semibold">
+      <div className="pr-8">
+        <p className="truncate font-semibold leading-tight">
           {player.names} {player.lastnames}
         </p>
-        {player.isGuest && (
-          <p className="text-xs text-[hsl(var(--text-subtle))] font-normal">(Invitado)</p>
-        )}
-        {arrivalTimeFormatted && (
-          <p className="text-xs text-[hsl(var(--text-subtle))] font-normal mt-1">
-            {arrivalTimeFormatted}
-          </p>
-        )}
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[hsl(var(--text-subtle))]">
+          {player.isGuest ? <span>Invitado</span> : null}
+          {arrivalTimeFormatted ? <span>{arrivalTimeFormatted}</span> : null}
+        </div>
       </div>
-    </div>
+    </article>
   );
 };
 

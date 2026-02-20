@@ -1,16 +1,17 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable react-hooks/rules-of-hooks */
 import React, { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { toast } from "react-toastify";
-import LeagueManager from "../components/League/LeagueManager";
 import { ArrowPathIcon } from "@heroicons/react/16/solid";
+
+import LeagueManager from "../components/League/LeagueManager";
 import ConfirmModal from "../components/ConfirmModal";
 import LeagueItem from "../components/League/LeagueItem";
 import ModalShell from "../components/ui/ModalShell";
-import PageHeader from "../components/ui/PageHeader";
 import Field from "../components/ui/Field";
-
+import PageShell from "../components/ui/PageShell";
+import SectionCard from "../components/ui/SectionCard";
+import EmptyState from "../components/ui/EmptyState";
 
 type League = {
   id: number;
@@ -30,10 +31,7 @@ const LeaguesPage: React.FC = () => {
 
   const fetchLeagues = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("leagues")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("leagues").select("*").order("created_at", { ascending: false });
     if (error) toast.error("Error al cargar ligas");
     else setLeagues(data || []);
     setLoading(false);
@@ -65,28 +63,16 @@ const LeaguesPage: React.FC = () => {
   const handleDeleteLeague = async (leagueId: number) => {
     try {
       setLoading(true);
-  
-      // 1. Elimina jugadores activos de la liga
-      const { error: activePlayersError } = await supabase
-        .from("active_players")
-        .delete()
-        .eq("league_id", leagueId);
+
+      const { error: activePlayersError } = await supabase.from("active_players").delete().eq("league_id", leagueId);
       if (activePlayersError) throw activePlayersError;
-  
-      // 2. Elimina el partido actual de esa liga
-      const { error: matchError } = await supabase
-        .from("current_match")
-        .delete()
-        .eq("league_id", leagueId);
+
+      const { error: matchError } = await supabase.from("current_match").delete().eq("league_id", leagueId);
       if (matchError) throw matchError;
-  
-      // 3. Ahora sí, elimina la liga
-      const { error: leagueError } = await supabase
-        .from("leagues")
-        .delete()
-        .eq("id", leagueId);
+
+      const { error: leagueError } = await supabase.from("leagues").delete().eq("id", leagueId);
       if (leagueError) throw leagueError;
-  
+
       toast.success("Liga eliminada");
       fetchLeagues();
     } catch (err: any) {
@@ -100,72 +86,64 @@ const LeaguesPage: React.FC = () => {
       setLoading(false);
     }
   };
-  
 
-  if (selectedLeague)
+  if (selectedLeague) {
     return (
-      <div className="mx-auto px-3 py-4 sm:px-4 sm:py-6 space-y-4">
-        <button
-          onClick={() => setSelectedLeague(null)}
-          className="btn-secondary w-full sm:w-auto"
-        >
-          <span className="text-lg leading-none">←</span>
-          Volver a lista de ligas
-        </button>
-        <div className="app-card rounded-2xl p-4 sm:p-5 space-y-2">
-          <h2 className="text-3xl font-bold">{selectedLeague.name}</h2>
-          <p className="text-[hsl(var(--muted-foreground))]">{selectedLeague.description}</p>
-        </div>
-        <div className="card p-4 sm:p-6">
-          <LeagueManager leagueId={selectedLeague.id} />
-        </div>
-      </div>
-    );
-
-  return (
-    <div className="mx-auto px-3 py-4 sm:px-4 sm:py-6 space-y-5">
-      <PageHeader
-        title="Ligas"
-        subtitle="Crea y administra las ligas activas."
-        badge="Competencia"
+      <PageShell
+        title={selectedLeague.name}
+        subtitle={selectedLeague.description || "Liga activa"}
+        badge="League Manager"
         actions={
-          <button className="btn-primary w-full sm:w-auto" onClick={() => setShowModal(true)}>
-            Crear liga
+          <button onClick={() => setSelectedLeague(null)} className="btn-secondary w-full sm:w-auto">
+            Volver a ligas
           </button>
         }
-      />
+      >
+        <LeagueManager leagueId={selectedLeague.id} />
+      </PageShell>
+    );
+  }
 
-      {loading ? (
-        <div className="flex justify-center py-10">
-          <ArrowPathIcon className="w-10 h-10 animate-spin text-[hsl(var(--primary))]" />
-        </div>
-      ) : (
-        <ul className="space-y-3">
-          {leagues.length === 0 ? (
-            <li className="app-card p-6 text-center text-sm text-[hsl(var(--text-subtle))]">
-              Todavía no hay ligas registradas.
-            </li>
-          ) : null}
-          {leagues.map((l) => (
-            <LeagueItem
-              key={l.id}
-              league={l}
-              onSelect={() => setSelectedLeague(l)}
-              onDeleteRequest={() => {
-                setLeagueToDelete(l);
-                setShowConfirm(true);
-              }}
-            />
-          ))}
-        </ul>
-
-      )}
+  return (
+    <PageShell
+      title="Ligas"
+      subtitle="Crea y administra ligas activas sin perder fluidez en móvil."
+      badge="Competencia"
+      actions={
+        <button className="btn-primary w-full sm:w-auto" onClick={() => setShowModal(true)}>
+          Crear liga
+        </button>
+      }
+    >
+      <SectionCard>
+        {loading ? (
+          <div className="flex justify-center py-10">
+            <ArrowPathIcon className="h-9 w-9 animate-spin text-[hsl(var(--primary))]" />
+          </div>
+        ) : leagues.length === 0 ? (
+          <EmptyState title="Todavía no hay ligas registradas" description="Crea la primera liga para comenzar la gestión de equipos y rotaciones." />
+        ) : (
+          <ul className="space-y-2">
+            {leagues.map((l) => (
+              <LeagueItem
+                key={l.id}
+                league={l}
+                onSelect={() => setSelectedLeague(l)}
+                onDeleteRequest={() => {
+                  setLeagueToDelete(l);
+                  setShowConfirm(true);
+                }}
+              />
+            ))}
+          </ul>
+        )}
+      </SectionCard>
 
       <ModalShell
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         title="Nueva Liga"
-        maxWidthClassName="max-w-md"
+        maxWidthClassName="sm:max-w-md"
         actions={
           <>
             <button className="btn-secondary" onClick={() => setShowModal(false)}>
@@ -211,7 +189,7 @@ const LeaguesPage: React.FC = () => {
           setLeagueToDelete(null);
         }}
       />
-    </div>
+    </PageShell>
   );
 };
 

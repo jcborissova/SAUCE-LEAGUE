@@ -55,7 +55,7 @@ const TournamentResultsConfig: React.FC<Props> = ({ tournamentId }) => {
         {matches.map((match) => (
           <div
             key={match.id}
-            className="rounded-2xl border bg-[hsl(var(--card))] p-4 transition hover:shadow-md"
+            className="border bg-[hsl(var(--card))] p-4 transition-colors hover:bg-[hsl(var(--surface-2))]"
           >
             <div className="flex justify-between items-center mb-2">
               <span className="text-xs text-[hsl(var(--muted-foreground))]">{formatDate(match.match_date)}</span>
@@ -80,7 +80,7 @@ const TournamentResultsConfig: React.FC<Props> = ({ tournamentId }) => {
 
             <button
               onClick={() => setSelectedMatch(match.id)}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[hsl(var(--primary))] px-4 py-2 text-sm font-semibold text-[hsl(var(--primary-foreground))] hover:opacity-90"
+              className="btn-primary w-full"
             >
               <PencilSquareIcon className="w-4 h-4" />
               {match.winner_team ? "Editar resultado" : "Cargar resultado"}

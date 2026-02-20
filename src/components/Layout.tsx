@@ -18,17 +18,16 @@ import { useRole } from "../contexts/RoleContext";
 type NavItem = {
   to: string;
   label: string;
-  description: string;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   protected: boolean;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { to: "/", label: "Inicio", description: "Vista general", icon: HomeIcon, protected: false },
-  { to: "/players", label: "Jugadores", description: "Roster y perfiles", icon: UserGroupIcon, protected: true },
-  { to: "/leagues", label: "Ligas", description: "Equipos y reglas", icon: TrophyIcon, protected: true },
-  { to: "/matches", label: "Partidos", description: "Resultados y ritmo", icon: PlayIcon, protected: true },
-  { to: "/tournaments", label: "Torneos", description: "Calendario y llaves", icon: CalendarDaysIcon, protected: false },
+  { to: "/", label: "Inicio", icon: HomeIcon, protected: false },
+  { to: "/players", label: "Jugadores", icon: UserGroupIcon, protected: true },
+  { to: "/leagues", label: "Ligas", icon: TrophyIcon, protected: true },
+  { to: "/matches", label: "Partidos", icon: PlayIcon, protected: true },
+  { to: "/tournaments", label: "Torneos", icon: CalendarDaysIcon, protected: false },
 ];
 
 const Layout: React.FC = () => {
@@ -39,10 +38,7 @@ const Layout: React.FC = () => {
 
   const currentTheme = (theme === "system" ? systemTheme : theme) ?? "light";
   const isTournamentImmersive = location.pathname.startsWith("/tournaments/view/");
-  const visibleNavItems = useMemo(
-    () => NAV_ITEMS.filter((item) => !item.protected || role !== "visor"),
-    [role]
-  );
+  const visibleNavItems = useMemo(() => NAV_ITEMS.filter((item) => !item.protected || role !== "visor"), [role]);
 
   const activeSectionLabel = useMemo(() => {
     if (isTournamentImmersive) return "Torneo";
@@ -64,9 +60,7 @@ const Layout: React.FC = () => {
   useEffect(() => {
     if (!sidebarOpen) return;
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setSidebarOpen(false);
-      }
+      if (event.key === "Escape") setSidebarOpen(false);
     };
 
     window.addEventListener("keydown", handleEscape);
@@ -75,46 +69,31 @@ const Layout: React.FC = () => {
 
   return (
     <div className="relative min-h-screen overflow-x-clip bg-[hsl(var(--background))] text-[hsl(var(--foreground))]">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[22rem] bg-gradient-to-b from-[hsl(var(--primary)/0.22)] via-[hsl(var(--primary)/0.05)] to-transparent"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute right-[-6rem] top-[-5rem] -z-10 h-48 w-48 rounded-full bg-[hsl(var(--info)/0.18)] blur-3xl"
-      />
-
-      <header className="sticky top-0 z-50 border-b border-[hsl(var(--border)/0.75)] bg-[hsl(var(--background)/0.9)] backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--background)/0.7)]">
-        <div className="mx-auto flex h-16 w-full max-w-[1480px] items-center gap-3 px-4 sm:px-6 lg:px-8">
+      <header className="sticky top-0 z-40 border-b border-[hsl(var(--border)/0.9)] bg-[hsl(var(--background)/0.94)] backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--background)/0.8)]">
+        <div className="flex h-14 w-full items-center gap-2 px-3 sm:h-16 sm:px-4 lg:px-5">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[hsl(var(--border))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--muted))] lg:hidden"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[hsl(var(--border))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--muted))] lg:hidden"
             aria-label="Abrir menú"
           >
             <Bars3Icon className="h-6 w-6" />
           </button>
 
-          <NavLink to="/" className="flex items-center gap-3">
-            <img src={logo} alt="Sauce League" className="h-9 w-9 rounded-xl ring-1 ring-black/10 dark:ring-white/20" />
+          <NavLink to="/" className="flex items-center gap-2">
+            <img src={logo} alt="Sauce League" className="h-8 w-8 border border-[hsl(var(--border))]" />
             <div className="hidden sm:block">
-              <p className="text-sm font-semibold tracking-tight">Sauce League</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Gestión de competencia</p>
+              <p className="text-sm font-semibold leading-tight">Sauce League</p>
+              <p className="text-[11px] text-[hsl(var(--muted-foreground))]">{activeSectionLabel}</p>
             </div>
           </NavLink>
 
-          <div className="hidden md:flex md:items-center md:rounded-md md:border md:bg-[hsl(var(--muted)/0.52)] md:px-3.5 md:py-1.5">
-            <span className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Sección activa</span>
-            <span className="mx-2 h-4 w-px bg-[hsl(var(--border))]" />
-            <span className="text-sm font-semibold">{activeSectionLabel}</span>
-          </div>
-
           <div className="ml-auto flex items-center gap-2">
-            <span className="hidden rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.72)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))] sm:inline-flex">
+            <span className="hidden border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))] sm:inline-flex">
               {role === "admin" ? "Admin" : "Visor"}
             </span>
             <button
               onClick={toggleTheme}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[hsl(var(--border))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--muted))]"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[hsl(var(--border))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--muted))]"
               aria-label="Cambiar tema"
             >
               {currentTheme === "dark" ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
@@ -123,108 +102,106 @@ const Layout: React.FC = () => {
         </div>
       </header>
 
-      <div
-        className={`mx-auto w-full max-w-[1480px] px-4 sm:px-6 lg:px-8 ${
-          isTournamentImmersive ? "py-3 sm:py-4 lg:py-5" : "py-6 lg:py-8"
-        }`}
-      >
-        {sidebarOpen && (
-          <button
-            type="button"
-            aria-label="Cerrar menú"
-            className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
+      {sidebarOpen ? (
+        <button
+          type="button"
+          aria-label="Cerrar menú"
+          className="fixed inset-0 z-40 bg-black/42 backdrop-blur-[1px] lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      ) : null}
 
-        <div
-          className={`grid grid-cols-1 gap-5 lg:gap-6 ${
-            isTournamentImmersive ? "lg:grid-cols-[252px_minmax(0,1fr)]" : "lg:grid-cols-[272px_minmax(0,1fr)]"
+      <div className="relative lg:min-h-[calc(100vh-4rem)] lg:pl-[248px]">
+        <aside
+          className={`fixed inset-y-0 left-0 z-50 w-72 border-r border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] p-4 transition-transform duration-[var(--motion-tab)] lg:top-16 lg:z-30 lg:h-[calc(100vh-4rem)] lg:w-[248px] lg:translate-x-0 lg:border-r lg:border-l-0 lg:border-y-0 lg:bg-[hsl(var(--surface-1))] lg:p-0 ${
+            sidebarOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
-          <aside
-            className={`fixed inset-y-0 left-0 z-50 w-72 border-r border-[hsl(var(--border))] bg-[hsl(var(--background))] px-4 py-6 shadow-xl transition-transform duration-[var(--motion-tab)] lg:sticky lg:top-24 lg:z-20 lg:w-auto lg:translate-x-0 lg:rounded-2xl lg:border lg:bg-[hsl(var(--card)/0.9)] lg:p-3 ${
-              isTournamentImmersive ? "lg:h-[calc(100vh-6.35rem)]" : "lg:h-[calc(100vh-7.1rem)]"
-            } ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
-          >
-            <div className="mb-6 flex items-center justify-between px-1">
-              <div className="flex items-center gap-2">
-                <img src={logo} alt="Sauce League" className="h-9 w-9 rounded-xl ring-1 ring-black/10 dark:ring-white/20" />
-                <div>
-                  <p className="text-sm font-semibold">Navegación</p>
-                  <p className="text-xs text-[hsl(var(--muted-foreground))]">Accesos principales</p>
-                </div>
-              </div>
-              <button
-                className="rounded-lg p-1 text-[hsl(var(--muted-foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] lg:hidden"
-                onClick={() => setSidebarOpen(false)}
-                aria-label="Cerrar menú"
-              >
-                <XMarkIcon className="h-6 w-6" />
-              </button>
-            </div>
+          <div className="mb-4 flex items-center justify-between lg:hidden">
+            <p className="text-sm font-semibold">Navegación</p>
+            <button
+              className="rounded-md p-1 text-[hsl(var(--muted-foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))]"
+              onClick={() => setSidebarOpen(false)}
+              aria-label="Cerrar menú"
+            >
+              <XMarkIcon className="h-6 w-6" />
+            </button>
+          </div>
 
-            <nav className="space-y-1.5">
-              {visibleNavItems.map(({ to, label, description, icon: Icon }) => (
+          <div className="hidden border-b px-4 py-4 lg:block">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--muted-foreground))]">
+              Navegación
+            </p>
+          </div>
+          <nav className="space-y-1.5 lg:px-3 lg:py-3">
+            {visibleNavItems.map(({ to, label, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === "/"}
+                onClick={() => setSidebarOpen(false)}
+                className={({ isActive }) =>
+                  `group relative flex min-h-[44px] items-center gap-3 px-3 py-2 text-sm font-medium transition-colors duration-[var(--motion-hover)] ${
+                    isActive
+                      ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--foreground))]"
+                      : "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted)/0.84)] hover:text-[hsl(var(--foreground))]"
+                  }`
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <span
+                      className={`absolute inset-y-1 left-0 w-1 transition-colors ${
+                        isActive ? "bg-[hsl(var(--primary))]" : "bg-transparent group-hover:bg-[hsl(var(--primary)/0.24)]"
+                      }`}
+                    />
+                    <Icon
+                      className={`h-5 w-5 shrink-0 ${
+                        isActive ? "text-[hsl(var(--primary))]" : "text-[hsl(var(--muted-foreground))]"
+                      }`}
+                    />
+                    <span className="truncate font-semibold">{label}</span>
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </nav>
+        </aside>
+
+        <main className="min-w-0 page-reveal px-3 py-3 pb-24 sm:px-4 sm:py-4 sm:pb-24 lg:px-6 lg:py-5 lg:pb-6">
+          <div className="mx-auto w-full max-w-[1200px]">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+
+      {!isTournamentImmersive ? (
+        <nav
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-[hsl(var(--border)/0.95)] bg-[hsl(var(--background)/0.97)] px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur lg:hidden"
+          aria-label="Navegación principal"
+        >
+          <ul className="grid grid-cols-5 gap-1">
+            {visibleNavItems.slice(0, 5).map(({ to, label, icon: Icon }) => (
+              <li key={to}>
                 <NavLink
-                  key={to}
                   to={to}
                   end={to === "/"}
-                  onClick={() => setSidebarOpen(false)}
                   className={({ isActive }) =>
-                    `group flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition-all duration-[var(--motion-hover)] ${
+                    `flex min-h-[50px] flex-col items-center justify-center gap-0.5 px-1 py-1 text-[11px] font-semibold transition-colors duration-[var(--motion-hover)] ${
                       isActive
-                        ? "bg-[hsl(var(--primary)/0.14)] text-[hsl(var(--foreground))] ring-1 ring-[hsl(var(--primary)/0.34)]"
-                        : "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted)/0.94)] hover:text-[hsl(var(--foreground))]"
+                        ? "bg-[hsl(var(--primary)/0.12)] text-[hsl(var(--primary))]"
+                        : "text-[hsl(var(--muted-foreground))]"
                     }`
                   }
                 >
-                  {({ isActive }) => (
-                    <>
-                      <Icon
-                        className={`h-5 w-5 shrink-0 ${
-                          isActive ? "text-[hsl(var(--primary))]" : "text-[hsl(var(--muted-foreground))]"
-                        }`}
-                      />
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold">{label}</p>
-                        <p
-                          className={`truncate text-xs ${
-                            isActive
-                              ? "text-[hsl(var(--primary))]"
-                              : "text-[hsl(var(--muted-foreground))] group-hover:text-[hsl(var(--foreground))]"
-                          }`}
-                        >
-                          {description}
-                        </p>
-                      </div>
-                    </>
-                  )}
+                  <Icon className="h-4 w-4" />
+                  <span className="truncate">{label}</span>
                 </NavLink>
-              ))}
-            </nav>
-
-            <div className="mt-6 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.58)] p-3 text-xs text-[hsl(var(--muted-foreground))]">
-              <p className="font-semibold uppercase tracking-wide">Tip</p>
-              <p className="mt-1 leading-relaxed">
-                En móvil puedes cerrar este panel tocando fuera del menú o usando la tecla Escape.
-              </p>
-            </div>
-          </aside>
-
-          <main className="min-w-0">
-            {isTournamentImmersive ? (
-              <div className="page-reveal">
-                <Outlet />
-              </div>
-            ) : (
-              <div className="page-reveal min-h-[calc(100vh-9rem)] rounded-2xl border border-[hsl(var(--border)/0.9)] bg-[hsl(var(--card)/0.88)] p-4 sm:p-6 lg:p-8">
-                <Outlet />
-              </div>
-            )}
-          </main>
-        </div>
-      </div>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      ) : null}
     </div>
   );
 };
