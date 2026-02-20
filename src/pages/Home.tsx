@@ -8,6 +8,7 @@ import {
   TrophyIcon,
   UserGroupIcon,
 } from "@heroicons/react/24/solid";
+import { DocumentTextIcon } from "@heroicons/react/24/outline";
 
 import PageShell from "../components/ui/PageShell";
 import SectionCard from "../components/ui/SectionCard";
@@ -17,11 +18,13 @@ import { useRole } from "../contexts/RoleContext";
 import { supabase } from "../lib/supabase";
 import {
   getLeaders,
+  getTournamentSettings,
   getTournamentAnalyticsSnapshot,
   getTournamentResultsOverview,
   getTournamentResultsSummary,
 } from "../services/tournamentAnalytics";
 import type { TournamentLeaderRow, TournamentResultSummary } from "../types/tournament-analytics";
+import { TOURNAMENT_RULES_PDF_URL } from "../constants/tournamentRules";
 import leaguesHomeImage from "../assets/home/leagues-home.jpg";
 import matchesHomeImage from "../assets/home/matches-home.jpg";
 
@@ -54,6 +57,7 @@ type TournamentHomeInsight = {
   leader: TournamentHomeLeader | null;
   bestTeam: TeamStandingSummary | null;
   worstTeam: TeamStandingSummary | null;
+  rulesPdfUrl: string;
   resultsSummary: TournamentResultSummary;
   stats: Array<{ label: string; value: string }>;
 };
@@ -183,12 +187,14 @@ const buildTournamentInsight = ({
   leaderRow,
   standings,
   summary,
+  rulesPdfUrl,
 }: {
   tournamentId: string;
   tournamentName: string;
   leaderRow: TournamentLeaderRow | undefined;
   standings: TeamStandingSummary[];
   summary: TournamentResultSummary;
+  rulesPdfUrl: string | null;
 }): TournamentHomeInsight => {
   const now = new Date();
   const seed = getDaySeed(now) + getStringSeed(tournamentId);
@@ -251,6 +257,7 @@ const buildTournamentInsight = ({
     leader,
     bestTeam,
     worstTeam,
+    rulesPdfUrl: rulesPdfUrl ?? TOURNAMENT_RULES_PDF_URL,
     resultsSummary: summary,
     stats: [
       { label: "Partidos", value: String(summary.playedMatches) },
@@ -302,11 +309,12 @@ const TournamentModeHome = () => {
         const tournamentId = String(currentTournament.id);
         const tournamentName = String(currentTournament.name ?? "Torneo activo");
 
-        const [leaderResult, snapshotResult, matchesResult, standingsResult] = await Promise.allSettled([
+        const [leaderResult, snapshotResult, matchesResult, standingsResult, settingsResult] = await Promise.allSettled([
           getLeaders({ tournamentId, phase: "regular", metric: "points", limit: 1 }),
           getTournamentAnalyticsSnapshot(tournamentId, "regular"),
           getTournamentResultsOverview(tournamentId),
           loadTeamStandings(tournamentId),
+          getTournamentSettings(tournamentId),
         ]);
 
         const leaders = leaderResult.status === "fulfilled" ? leaderResult.value : [];
@@ -326,6 +334,9 @@ const TournamentModeHome = () => {
               }))
             : [];
 
+        const rulesPdfUrl =
+          settingsResult.status === "fulfilled" ? settingsResult.value.rulesPdfUrl : null;
+
         const summary = getTournamentResultsSummary(matches);
         const nextInsight = buildTournamentInsight({
           tournamentId,
@@ -333,6 +344,7 @@ const TournamentModeHome = () => {
           leaderRow: leaders[0],
           standings,
           summary,
+          rulesPdfUrl,
         });
 
         if (!cancelled) setInsight(nextInsight);
@@ -516,6 +528,10 @@ const TournamentModeHome = () => {
                 <Link to="/tournaments" className="btn-secondary w-full sm:w-auto">
                   Ver todos los torneos
                 </Link>
+                <a href={insight.rulesPdfUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary w-full sm:w-auto">
+                  <DocumentTextIcon className="h-4 w-4" />
+                  Reglamento
+                </a>
               </div>
             </div>
           </SectionCard>

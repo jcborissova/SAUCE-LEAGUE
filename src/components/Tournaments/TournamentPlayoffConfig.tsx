@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { ArrowPathIcon, BoltIcon } from "@heroicons/react/24/solid";
 import TournamentPlayoffOverview from "./TournamentPlayoffOverview";
@@ -67,22 +67,24 @@ const TournamentPlayoffConfig: React.FC<Props> = ({ tournamentId }) => {
   const [generating, setGenerating] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
   const [editor, setEditor] = useState<PlayoffEditorState>(defaultEditorState);
+  const [rulesPdfUrl, setRulesPdfUrl] = useState<string | null>(null);
 
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
       const settings = await getTournamentSettings(tournamentId);
       setEditor(parseFromSettings(settings));
+      setRulesPdfUrl(settings.rulesPdfUrl);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No se pudo cargar la configuración de playoffs.");
     } finally {
       setLoading(false);
     }
-  };
+  }, [tournamentId]);
 
   useEffect(() => {
     loadSettings();
-  }, [tournamentId]);
+  }, [loadSettings]);
 
   const finalFormat = useMemo(
     () => ({
@@ -129,6 +131,7 @@ const TournamentPlayoffConfig: React.FC<Props> = ({ tournamentId }) => {
         tournamentId,
         seasonType: editor.seasonType,
         playoffFormat: finalFormat,
+        rulesPdfUrl,
       });
       toast.success("Configuración de playoffs guardada.");
       setRefreshToken((value) => value + 1);
@@ -165,17 +168,17 @@ const TournamentPlayoffConfig: React.FC<Props> = ({ tournamentId }) => {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-2xl border bg-[hsl(var(--card))] p-4 sm:p-5 space-y-4">
+    <div className="space-y-4 sm:space-y-5">
+      <section className="app-card space-y-4 p-4 sm:p-5">
         <div>
-          <h3 className="text-lg sm:text-xl font-bold">Configuración de Playoffs</h3>
+          <h3 className="text-lg font-bold tracking-tight sm:text-xl">Configuración de playoffs</h3>
           <p className="text-sm text-[hsl(var(--muted-foreground))]">
             Ajusta reglas de handicap y formato de series. La generación usa top 4 de la tabla regular.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <label className="flex items-center gap-3 rounded-xl border px-3 py-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <label className="flex min-h-[44px] items-center gap-3 border bg-[hsl(var(--surface-2))] px-3 py-2">
             <input
               type="checkbox"
               checked={editor.enabled}
@@ -190,7 +193,7 @@ const TournamentPlayoffConfig: React.FC<Props> = ({ tournamentId }) => {
             <span className="text-sm font-medium">Habilitar playoffs</span>
           </label>
 
-          <label className="rounded-xl border px-3 py-2 text-sm flex items-center justify-between gap-3">
+          <label className="border bg-[hsl(var(--surface-2))] px-3 py-2 text-sm">
             <span className="font-medium">Tipo de temporada</span>
             <select
               value={editor.seasonType}
@@ -200,14 +203,14 @@ const TournamentPlayoffConfig: React.FC<Props> = ({ tournamentId }) => {
                   seasonType: event.target.value as "regular_only" | "regular_plus_playoffs",
                 }))
               }
-              className="rounded-lg border px-2 py-1 bg-[hsl(var(--background))]"
+              className="select-base mt-2"
             >
               <option value="regular_plus_playoffs">Regular + Playoffs</option>
               <option value="regular_only">Solo Regular</option>
             </select>
           </label>
 
-          <label className="rounded-xl border px-3 py-2 text-sm flex items-center justify-between gap-3">
+          <label className="border bg-[hsl(var(--surface-2))] px-3 py-2 text-sm">
             <span className="font-medium">1vN: victorias top seed</span>
             <input
               type="number"
@@ -219,11 +222,11 @@ const TournamentPlayoffConfig: React.FC<Props> = ({ tournamentId }) => {
                   handicapTopSeed: Number(event.target.value),
                 }))
               }
-              className="w-20 rounded-lg border px-2 py-1 text-center bg-[hsl(var(--background))]"
+              className="input-base mt-2 w-full"
             />
           </label>
 
-          <label className="rounded-xl border px-3 py-2 text-sm flex items-center justify-between gap-3">
+          <label className="border bg-[hsl(var(--surface-2))] px-3 py-2 text-sm">
             <span className="font-medium">1vN: victorias seed bajo</span>
             <input
               type="number"
@@ -235,11 +238,11 @@ const TournamentPlayoffConfig: React.FC<Props> = ({ tournamentId }) => {
                   handicapBottomSeed: Number(event.target.value),
                 }))
               }
-              className="w-20 rounded-lg border px-2 py-1 text-center bg-[hsl(var(--background))]"
+              className="input-base mt-2 w-full"
             />
           </label>
 
-          <label className="rounded-xl border px-3 py-2 text-sm flex items-center justify-between gap-3">
+          <label className="border bg-[hsl(var(--surface-2))] px-3 py-2 text-sm">
             <span className="font-medium">Serie 2v3 (Best Of)</span>
             <input
               type="number"
@@ -252,11 +255,11 @@ const TournamentPlayoffConfig: React.FC<Props> = ({ tournamentId }) => {
                   semiBestOf: Number(event.target.value),
                 }))
               }
-              className="w-20 rounded-lg border px-2 py-1 text-center bg-[hsl(var(--background))]"
+              className="input-base mt-2 w-full"
             />
           </label>
 
-          <label className="rounded-xl border px-3 py-2 text-sm flex items-center justify-between gap-3">
+          <label className="border bg-[hsl(var(--surface-2))] px-3 py-2 text-sm">
             <span className="font-medium">Finals (Best Of)</span>
             <input
               type="number"
@@ -269,7 +272,7 @@ const TournamentPlayoffConfig: React.FC<Props> = ({ tournamentId }) => {
                   finalsBestOf: Number(event.target.value),
                 }))
               }
-              className="w-20 rounded-lg border px-2 py-1 text-center bg-[hsl(var(--background))]"
+              className="input-base mt-2 w-full"
             />
           </label>
         </div>
@@ -279,7 +282,7 @@ const TournamentPlayoffConfig: React.FC<Props> = ({ tournamentId }) => {
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold hover:bg-[hsl(var(--muted))] disabled:opacity-60"
+            className="btn-secondary w-full sm:w-auto"
           >
             {saving && <ArrowPathIcon className="w-4 h-4 animate-spin" />}
             Guardar configuración
@@ -288,13 +291,13 @@ const TournamentPlayoffConfig: React.FC<Props> = ({ tournamentId }) => {
             type="button"
             onClick={handleGenerate}
             disabled={generating || !editor.enabled || editor.seasonType === "regular_only"}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[hsl(var(--primary))] px-4 py-2 text-sm font-semibold text-[hsl(var(--primary-foreground))] hover:opacity-90 disabled:opacity-60"
+            className="btn-primary w-full sm:w-auto disabled:opacity-60"
           >
             {generating ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <BoltIcon className="w-4 h-4" />}
             Generar Playoffs
           </button>
         </div>
-      </div>
+      </section>
 
       <TournamentPlayoffOverview key={refreshToken} tournamentId={tournamentId} />
     </div>

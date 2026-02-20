@@ -323,69 +323,103 @@ const handleSave = async () => {
 
 
   return (
-    <div className="space-y-8">
-      <h3 className="text-2xl font-bold">Configurar Calendario</h3>
+    <div className="space-y-4 sm:space-y-5">
+      <section className="app-card space-y-4 p-4 sm:p-5">
+        <div>
+          <h3 className="text-lg font-bold tracking-tight sm:text-xl">Calendario del torneo</h3>
+          <p className="text-sm text-[hsl(var(--text-subtle))]">Genera jornadas automáticas y guarda el fixture oficial.</p>
+        </div>
 
-      <div className="app-panel p-4 sm:p-6 space-y-4">
-        <label className="block text-[hsl(var(--text-strong))] font-medium">Juegos que debe jugar cada equipo</label>
-        <input
-          type="number"
-          min={1}
-          value={gamesPerTeam}
-          onChange={(e) => setGamesPerTeam(Number(e.target.value))}
-          className="input-base w-full md:w-60"
-        />
-
-        <button
-          onClick={generateMatches}
-          disabled={generating}
-          className="btn-primary w-full md:w-auto"
-        >
-          {generating ? "Generando..." : "Generar Partidos"}
-        </button>
-      </div>
-
-      {previewMatches.length > 0 && (
-        <div className="space-y-4">
-          <h4 className="text-xl font-bold text-[hsl(var(--primary))]">Partidos Generados (sin guardar)</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {previewMatches.map((match, idx) => (
-              <div
-                key={idx}
-                className="app-card p-4 flex flex-col space-y-2 transition-colors hover:bg-[hsl(var(--surface-2))]"
-              >
-                <p className="font-semibold">{match.team_a} vs {match.team_b}</p>
-                <p className="text-sm text-[hsl(var(--text-subtle))]">{match.match_date} - {match.match_time}</p>
-              </div>
-            ))}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="border bg-[hsl(var(--surface-2))] px-3 py-2">
+            <p className="text-[11px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Equipos</p>
+            <p className="text-sm font-semibold">{teams.length}</p>
           </div>
-          <button
-            onClick={handleSave}
-            className="btn-primary"
-          >
-            Guardar en Base de Datos
+          <div className="border bg-[hsl(var(--surface-2))] px-3 py-2">
+            <p className="text-[11px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Guardados</p>
+            <p className="text-sm font-semibold">{matches.length}</p>
+          </div>
+          <div className="border bg-[hsl(var(--surface-2))] px-3 py-2">
+            <p className="text-[11px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">En preview</p>
+            <p className="text-sm font-semibold">{previewMatches.length}</p>
+          </div>
+          <div className="border bg-[hsl(var(--surface-2))] px-3 py-2">
+            <p className="text-[11px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Inicio</p>
+            <p className="text-sm font-semibold">{startDate || "--"}</p>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,220px)_minmax(0,220px)_auto] sm:items-end">
+          <label className="space-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">Juegos por equipo</span>
+            <input
+              type="number"
+              min={1}
+              value={gamesPerTeam}
+              onChange={(e) => setGamesPerTeam(Number(e.target.value))}
+              className="input-base"
+            />
+          </label>
+
+          <label className="space-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">Fecha base</span>
+            <input type="text" value={startDate || "Sin fecha"} readOnly className="input-base" />
+          </label>
+
+          <button onClick={generateMatches} disabled={generating} className="btn-primary w-full sm:w-auto">
+            {generating ? "Generando..." : "Generar partidos"}
           </button>
         </div>
-      )}
+      </section>
 
-      <h3 className="text-xl font-bold text-[hsl(var(--primary))] mt-10">Partidos Guardados</h3>
-      {loading ? (
-        <p className="text-center text-[hsl(var(--text-subtle))]">Cargando...</p>
-      ) : matches.length === 0 ? (
-        <p className="text-center text-[hsl(var(--text-subtle))]">No hay partidos programados aún.</p>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {matches.map((match) => (
-            <div
-              key={match.id}
-              className="app-card p-4 flex flex-col space-y-2 transition-colors hover:bg-[hsl(var(--surface-2))]"
-            >
-              <p className="font-semibold">{match.team_a} vs {match.team_b}</p>
-              <p className="text-sm text-[hsl(var(--text-subtle))]">{match.match_date} - {match.match_time}</p>
+      {previewMatches.length > 0 ? (
+        <section className="app-card space-y-4 p-4 sm:p-5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h4 className="text-base font-semibold sm:text-lg">Partidos generados (sin guardar)</h4>
+              <p className="text-sm text-[hsl(var(--text-subtle))]">Revisa el resultado antes de confirmar en base de datos.</p>
             </div>
-          ))}
-        </div>
-      )}
+            <button onClick={handleSave} className="btn-primary w-full sm:w-auto">
+              Guardar en base de datos
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {previewMatches.map((match, idx) => (
+              <article key={idx} className="border bg-[hsl(var(--surface-1))] p-3">
+                <p className="text-sm font-semibold">
+                  {match.team_a} <span className="text-[hsl(var(--text-subtle))]">vs</span> {match.team_b}
+                </p>
+                <p className="mt-1 text-xs text-[hsl(var(--text-subtle))]">
+                  {match.match_date} · {match.match_time}
+                </p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="app-card space-y-4 p-4 sm:p-5">
+        <h4 className="text-base font-semibold sm:text-lg">Partidos guardados</h4>
+        {loading ? (
+          <p className="text-sm text-[hsl(var(--text-subtle))]">Cargando partidos...</p>
+        ) : matches.length === 0 ? (
+          <p className="text-sm text-[hsl(var(--text-subtle))]">No hay partidos programados aún.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {matches.map((match) => (
+              <article key={match.id} className="border bg-[hsl(var(--surface-1))] p-3">
+                <p className="text-sm font-semibold">
+                  {match.team_a} <span className="text-[hsl(var(--text-subtle))]">vs</span> {match.team_b}
+                </p>
+                <p className="mt-1 text-xs text-[hsl(var(--text-subtle))]">
+                  {match.match_date} · {match.match_time}
+                </p>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 };

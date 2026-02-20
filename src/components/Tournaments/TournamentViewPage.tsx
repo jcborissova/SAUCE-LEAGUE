@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import type { Player } from "../../types/player";
 import { ArrowPathIcon } from "@heroicons/react/24/solid";
-import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import { ArrowDownTrayIcon, ArrowLeftIcon, ArrowTopRightOnSquareIcon, DocumentTextIcon } from "@heroicons/react/24/outline";
 import { Link, useParams } from "react-router-dom";
 
 import TournamentScheduleView from "./TournamentScheduleView";
@@ -15,6 +15,9 @@ import TournamentStatsOverview from "./TournamentStatsOverview";
 
 import SegmentedControl from "../ui/SegmentedControl";
 import EmptyState from "../ui/EmptyState";
+import ModalShell from "../ui/ModalShell";
+import { TOURNAMENT_RULES_PDF_URL, TOURNAMENT_RULES_TITLE } from "../../constants/tournamentRules";
+import { getTournamentSettings } from "../../services/tournamentAnalytics";
 
 type Team = {
   id: number;
@@ -38,6 +41,7 @@ const TournamentViewPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<MainTabKey>("matches");
   const [matchesSubtab, setMatchesSubtab] = useState<MatchesSubtab>("schedule");
   const [statsSubtab, setStatsSubtab] = useState<StatsSubtab>("analytics");
+  const [rulesOpen, setRulesOpen] = useState(false);
 
   const [tournamentName, setTournamentName] = useState("Sauce League");
   const [tournamentLoading, setTournamentLoading] = useState(false);
@@ -45,6 +49,7 @@ const TournamentViewPage: React.FC = () => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
   const [teamsLoaded, setTeamsLoaded] = useState(false);
+  const [rulesPdfUrl, setRulesPdfUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!tournamentId) return;
@@ -101,7 +106,28 @@ const TournamentViewPage: React.FC = () => {
     fetchTeamsAndPlayers();
   }, [activeTab, teamsLoaded, tournamentId]);
 
+  useEffect(() => {
+    if (!tournamentId) return;
+    let cancelled = false;
+
+    const loadRules = async () => {
+      try {
+        const settings = await getTournamentSettings(tournamentId);
+        if (!cancelled) setRulesPdfUrl(settings.rulesPdfUrl);
+      } catch {
+        if (!cancelled) setRulesPdfUrl(null);
+      }
+    };
+
+    loadRules();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tournamentId]);
+
   const totalPlayers = useMemo(() => teams.reduce((acc, team) => acc + team.players.length, 0), [teams]);
+  const resolvedRulesPdfUrl = rulesPdfUrl || TOURNAMENT_RULES_PDF_URL;
 
   if (!tournamentId) {
     return (
@@ -133,13 +159,19 @@ const TournamentViewPage: React.FC = () => {
                 </h1>
               </div>
 
-              <Link
-                to="/tournaments"
-                className="inline-flex min-h-[42px] items-center gap-2 rounded-[6px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] px-4 text-sm font-semibold text-[hsl(var(--foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--surface-2))]"
-              >
-                <ArrowLeftIcon className="h-4 w-4" />
-                Volver
-              </Link>
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={() => setRulesOpen(true)} className="btn-secondary px-3">
+                  <DocumentTextIcon className="h-4 w-4" />
+                  Reglamento
+                </button>
+                <Link
+                  to="/tournaments"
+                  className="inline-flex min-h-[42px] items-center gap-2 rounded-[6px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] px-4 text-sm font-semibold text-[hsl(var(--foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--surface-2))]"
+                >
+                  <ArrowLeftIcon className="h-4 w-4" />
+                  Volver
+                </Link>
+              </div>
             </div>
           </div>
 
@@ -228,6 +260,42 @@ const TournamentViewPage: React.FC = () => {
           </div>
         ) : null}
       </section>
+
+      <ModalShell
+        isOpen={rulesOpen}
+        onClose={() => setRulesOpen(false)}
+        title={TOURNAMENT_RULES_TITLE}
+        subtitle="Consulta las reglas oficiales del torneo."
+        maxWidthClassName="sm:max-w-5xl"
+        actions={
+          <>
+            <a href={resolvedRulesPdfUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary">
+              <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+              Abrir en pestaña
+            </a>
+            <a href={resolvedRulesPdfUrl} download className="btn-secondary">
+              <ArrowDownTrayIcon className="h-4 w-4" />
+              Descargar
+            </a>
+            <button type="button" className="btn-primary" onClick={() => setRulesOpen(false)}>
+              Cerrar
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="overflow-hidden rounded-[8px] border border-[hsl(var(--border)/0.9)] bg-[hsl(var(--surface-2))]">
+            <iframe
+              src={`${resolvedRulesPdfUrl}#toolbar=0`}
+              title={TOURNAMENT_RULES_TITLE}
+              className="h-[68vh] w-full"
+            />
+          </div>
+          <p className="text-xs text-[hsl(var(--text-subtle))]">
+            Si tu navegador bloquea la vista embebida, usa "Abrir en pestaña" o "Descargar".
+          </p>
+        </div>
+      </ModalShell>
     </div>
   );
 };
