@@ -37,12 +37,19 @@ const ModalShell: React.FC<ModalShellProps> = ({
     <div className="modal-shell" role="dialog" aria-modal="true">
       <button type="button" className="absolute inset-0" aria-label="Cerrar modal" onClick={onClose} />
       <div className={`modal-card soft-scrollbar relative ${maxWidthClassName}`.trim()}>
-        <div className="mb-4 flex items-start justify-between gap-3 border-b border-[hsl(var(--border)/0.92)] pb-3">
+        <div className="pointer-events-none absolute left-1/2 top-2 h-1 w-14 -translate-x-1/2 rounded-full bg-[hsl(var(--border))] sm:hidden" />
+
+        <div className="mb-4 flex items-start justify-between gap-3 border-b border-[hsl(var(--border)/0.92)] pb-3 pt-2 sm:pt-0">
           <div>
             <h2 className="app-title text-lg sm:text-xl">{title}</h2>
             {subtitle ? <p className="app-subtitle mt-1">{subtitle}</p> : null}
           </div>
-          <button type="button" onClick={onClose} className="btn-secondary h-10 w-10 p-0" aria-label="Cerrar">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-[6px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] text-[hsl(var(--muted-foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))]"
+            aria-label="Cerrar"
+          >
             <XMarkIcon className="h-5 w-5" />
           </button>
         </div>

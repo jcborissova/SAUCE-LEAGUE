@@ -6,7 +6,7 @@ type PanelProps = {
 };
 
 const Panel: React.FC<PanelProps> = ({ children, className = "" }) => {
-  return <section className={`app-panel p-4 sm:p-5 ${className}`.trim()}>{children}</section>;
+  return <section className={`app-panel px-4 py-3 sm:px-5 sm:py-4 ${className}`.trim()}>{children}</section>;
 };
 
 export default Panel;

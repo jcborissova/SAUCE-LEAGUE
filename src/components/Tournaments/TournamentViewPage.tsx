@@ -121,13 +121,13 @@ const TournamentViewPage: React.FC = () => {
 
   return (
     <div className="w-full space-y-4">
-      <header className="w-full py-1">
-        <div className="overflow-hidden border border-[hsl(var(--border)/0.9)] bg-[hsl(var(--surface-1))] shadow-[0_1px_0_hsl(var(--border)/0.35)]">
-          <div className="relative border-b border-white/12 bg-[linear-gradient(118deg,hsl(var(--primary)/0.94),hsl(var(--primary)/0.76))] text-[hsl(var(--primary-foreground))]">
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_14%,hsl(var(--text-inverse)/0.2),transparent_38%),radial-gradient(circle_at_88%_82%,hsl(var(--text-inverse)/0.12),transparent_30%)]" />
-            <div className="relative flex w-full flex-wrap items-center justify-between gap-3 px-3 py-4 sm:px-4 sm:py-5 lg:px-5">
+      <header className="w-full">
+        <div className="overflow-hidden border border-[hsl(var(--border)/0.92)] bg-[hsl(var(--surface-1))] shadow-[0_1px_0_hsl(var(--border)/0.35)]">
+          <div className="h-0.5 bg-[linear-gradient(90deg,hsl(var(--primary)),hsl(var(--chart-2)))]" />
+          <div className="border-b bg-[hsl(var(--surface-1))]">
+            <div className="flex w-full flex-wrap items-center justify-between gap-3 px-3 py-4 sm:px-4 sm:py-5 lg:px-5">
               <div className="min-w-0">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-white/72">Torneo</p>
+                <p className="text-[11px] uppercase tracking-[0.16em] text-[hsl(var(--text-subtle))]">Torneo</p>
                 <h1 className="truncate text-2xl font-bold sm:text-3xl">
                   {tournamentLoading ? "Cargando torneo..." : tournamentName}
                 </h1>
@@ -135,7 +135,7 @@ const TournamentViewPage: React.FC = () => {
 
               <Link
                 to="/tournaments"
-                className="inline-flex min-h-[42px] items-center gap-2 rounded-lg border border-white/35 bg-white/10 px-4 text-sm font-semibold text-white transition-colors duration-[var(--motion-hover)] hover:bg-white/18"
+                className="inline-flex min-h-[42px] items-center gap-2 rounded-[6px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] px-4 text-sm font-semibold text-[hsl(var(--foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--surface-2))]"
               >
                 <ArrowLeftIcon className="h-4 w-4" />
                 Volver
@@ -153,8 +153,8 @@ const TournamentViewPage: React.FC = () => {
                   onClick={() => setActiveTab(tab.key)}
                   className={`relative min-h-[48px] px-2 text-[13px] font-semibold transition-colors duration-[var(--motion-tab)] sm:text-sm ${
                     active
-                      ? "bg-[hsl(var(--primary)/0.09)] text-[hsl(var(--primary))]"
-                      : "text-[hsl(var(--text-subtle))] hover:bg-[hsl(var(--surface-2)/0.75)] hover:text-[hsl(var(--foreground))]"
+                      ? "text-[hsl(var(--primary))]"
+                      : "text-[hsl(var(--text-subtle))] hover:bg-[hsl(var(--surface-2)/0.6)] hover:text-[hsl(var(--foreground))]"
                   }`}
                   aria-current={active ? "page" : undefined}
                 >

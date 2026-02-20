@@ -22,8 +22,8 @@ const TeamPanel: React.FC<Props> = ({
 }) => {
   const bgColor =
     color === "blue"
-      ? "from-[hsl(var(--primary)/0.15)] via-[hsl(var(--primary)/0.05)]"
-      : "from-[hsl(var(--success)/0.20)] via-[hsl(var(--success)/0.08)]";
+      ? "from-[hsl(var(--primary)/0.08)] via-[hsl(var(--surface-1))]"
+      : "from-[hsl(var(--success)/0.12)] via-[hsl(var(--surface-1))]";
   const textColor = color === "blue" ? "text-[hsl(var(--primary))]" : "text-[hsl(var(--success))]";
   const buttonColor =
     color === "blue"
@@ -31,8 +31,8 @@ const TeamPanel: React.FC<Props> = ({
       : "bg-[hsl(var(--success))] text-[hsl(var(--primary-foreground))]";
 
   return (
-    <div className={`bg-gradient-to-br ${bgColor} rounded-xl px-6 py-4 text-center shadow-sm border`}>
-      <h3 className={`text-lg font-bold ${textColor} mb-2 tracking-wide`}>
+    <div className={`bg-gradient-to-br ${bgColor} rounded-[10px] border px-6 py-4 text-center shadow-[0_1px_0_hsl(var(--border)/0.32)]`}>
+      <h3 className={`mb-2 text-lg font-bold tracking-wide ${textColor}`}>
         {teamLabel}
       </h3>
 
@@ -42,19 +42,19 @@ const TeamPanel: React.FC<Props> = ({
       <div className="flex flex-wrap justify-center gap-2 mt-4">
         <button
           onClick={onScore}
-          className={`${buttonColor} px-4 py-2 rounded-lg text-sm font-semibold shadow hover:opacity-90 transition`}
+          className={`${buttonColor} rounded-[8px] px-4 py-2 text-sm font-semibold shadow transition hover:opacity-90`}
         >
           +1
         </button>
         <button
           onClick={onUnscore}
-          className="bg-[hsl(var(--muted))] text-[hsl(var(--foreground))] px-4 py-2 rounded-lg text-sm font-semibold border hover:bg-[hsl(var(--muted)/0.80)] transition"
+          className="rounded-[8px] border bg-[hsl(var(--muted))] px-4 py-2 text-sm font-semibold text-[hsl(var(--foreground))] transition hover:bg-[hsl(var(--muted)/0.8)]"
         >
           -1
         </button>
         <button
           onClick={onFoul}
-          className="bg-destructive text-destructive-foreground px-4 py-2 rounded-lg text-sm font-semibold shadow hover:opacity-90 transition"
+          className="rounded-[8px] bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground shadow transition hover:opacity-90"
         >
           Foul
         </button>

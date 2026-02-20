@@ -19,7 +19,7 @@ const badgeClassByVariant: Record<BadgeVariant, string> = {
 const Badge: React.FC<BadgeProps> = ({ children, className = "", variant = "default" }) => {
   return (
     <span
-      className={`inline-flex items-center rounded-lg border px-2.5 py-1 text-xs font-semibold ${badgeClassByVariant[variant]} ${className}`.trim()}
+      className={`inline-flex items-center rounded-[var(--radius)] border px-2.5 py-1 text-xs font-semibold ${badgeClassByVariant[variant]} ${className}`.trim()}
     >
       {children}
     </span>

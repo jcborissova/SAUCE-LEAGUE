@@ -12,7 +12,7 @@ import {
   MoonIcon,
 } from "@heroicons/react/24/solid";
 import { useTheme } from "next-themes";
-import logo from "../assets/sl-logo-white.png";
+import logo from "../assets/sauce-league-logo-mark.png";
 import { useRole } from "../contexts/RoleContext";
 
 type NavItem = {
@@ -69,31 +69,33 @@ const Layout: React.FC = () => {
 
   return (
     <div className="relative min-h-screen overflow-x-clip bg-[hsl(var(--background))] text-[hsl(var(--foreground))]">
-      <header className="sticky top-0 z-40 border-b border-[hsl(var(--border)/0.9)] bg-[hsl(var(--background)/0.94)] backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--background)/0.8)]">
+      <header className="sticky top-0 z-40 border-b border-[hsl(var(--border)/0.86)] bg-[hsl(var(--background)/0.9)] shadow-[0_1px_0_hsl(var(--border)/0.36)] backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--background)/0.78)]">
         <div className="flex h-14 w-full items-center gap-2 px-3 sm:h-16 sm:px-4 lg:px-5">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[hsl(var(--border))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--muted))] lg:hidden"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-[6px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--muted))] lg:hidden"
             aria-label="Abrir menú"
           >
             <Bars3Icon className="h-6 w-6" />
           </button>
 
-          <NavLink to="/" className="flex items-center gap-2">
-            <img src={logo} alt="Sauce League" className="h-8 w-8 border border-[hsl(var(--border))]" />
+          <NavLink to="/" className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] border border-[hsl(var(--border)/0.9)] bg-[hsl(var(--surface-1))] p-0.5 shadow-[0_2px_10px_hsl(var(--background)/0.2)]">
+              <img src={logo} alt="Sauce League" className="h-full w-full object-contain" />
+            </span>
             <div className="hidden sm:block">
-              <p className="text-sm font-semibold leading-tight">Sauce League</p>
-              <p className="text-[11px] text-[hsl(var(--muted-foreground))]">{activeSectionLabel}</p>
+              <p className="text-sm font-bold leading-tight tracking-tight">Sauce League</p>
+              <p className="text-xs text-[hsl(var(--muted-foreground))]">{activeSectionLabel}</p>
             </div>
           </NavLink>
 
           <div className="ml-auto flex items-center gap-2">
-            <span className="hidden border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))] sm:inline-flex">
+            <span className="hidden rounded-[6px] border border-[hsl(var(--border)/0.85)] bg-[hsl(var(--surface-1))] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))] sm:inline-flex">
               {role === "admin" ? "Admin" : "Visor"}
             </span>
             <button
               onClick={toggleTheme}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[hsl(var(--border))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--muted))]"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-[6px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--muted))]"
               aria-label="Cambiar tema"
             >
               {currentTheme === "dark" ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
@@ -111,9 +113,9 @@ const Layout: React.FC = () => {
         />
       ) : null}
 
-      <div className="relative lg:min-h-[calc(100vh-4rem)] lg:pl-[248px]">
+      <div className="relative lg:min-h-[calc(100vh-4rem)] lg:pl-[244px]">
         <aside
-          className={`fixed inset-y-0 left-0 z-50 w-72 border-r border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] p-4 transition-transform duration-[var(--motion-tab)] lg:top-16 lg:z-30 lg:h-[calc(100vh-4rem)] lg:w-[248px] lg:translate-x-0 lg:border-r lg:border-l-0 lg:border-y-0 lg:bg-[hsl(var(--surface-1))] lg:p-0 ${
+          className={`fixed inset-y-0 left-0 z-50 w-72 border-r border-[hsl(var(--border)/0.9)] bg-[hsl(var(--surface-1))] p-4 shadow-[1px_0_0_hsl(var(--border)/0.46)] transition-transform duration-[var(--motion-tab)] lg:top-16 lg:z-30 lg:h-[calc(100vh-4rem)] lg:w-[244px] lg:translate-x-0 lg:border-r lg:border-l-0 lg:border-y-0 lg:p-0 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
@@ -128,12 +130,18 @@ const Layout: React.FC = () => {
             </button>
           </div>
 
-          <div className="hidden border-b px-4 py-4 lg:block">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--muted-foreground))]">
-              Navegación
-            </p>
+          <div className="hidden border-b border-[hsl(var(--border)/0.86)] px-4 py-4 lg:block">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] p-0.5">
+                <img src={logo} alt="Sauce League" className="h-full w-full object-contain" />
+              </span>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[hsl(var(--muted-foreground))]">Navegación</p>
+                <p className="text-sm font-bold">Sauce League</p>
+              </div>
+            </div>
           </div>
-          <nav className="space-y-1.5 lg:px-3 lg:py-3">
+          <nav className="space-y-1 lg:px-3 lg:py-3">
             {visibleNavItems.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}
@@ -141,9 +149,9 @@ const Layout: React.FC = () => {
                 end={to === "/"}
                 onClick={() => setSidebarOpen(false)}
                 className={({ isActive }) =>
-                  `group relative flex min-h-[44px] items-center gap-3 px-3 py-2 text-sm font-medium transition-colors duration-[var(--motion-hover)] ${
+                  `group relative flex min-h-[44px] items-center gap-3 rounded-[8px] px-3 py-2 text-sm font-medium transition-colors duration-[var(--motion-hover)] ${
                     isActive
-                      ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--foreground))]"
+                      ? "bg-[hsl(var(--primary)/0.11)] text-[hsl(var(--foreground))]"
                       : "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted)/0.84)] hover:text-[hsl(var(--foreground))]"
                   }`
                 }
@@ -151,15 +159,23 @@ const Layout: React.FC = () => {
                 {({ isActive }) => (
                   <>
                     <span
-                      className={`absolute inset-y-1 left-0 w-1 transition-colors ${
+                      className={`absolute inset-y-1 left-0 w-0.5 transition-colors ${
                         isActive ? "bg-[hsl(var(--primary))]" : "bg-transparent group-hover:bg-[hsl(var(--primary)/0.24)]"
                       }`}
                     />
-                    <Icon
-                      className={`h-5 w-5 shrink-0 ${
-                        isActive ? "text-[hsl(var(--primary))]" : "text-[hsl(var(--muted-foreground))]"
+                    <span
+                      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] border ${
+                        isActive
+                          ? "border-[hsl(var(--primary)/0.3)] bg-[hsl(var(--surface-1))]"
+                          : "border-transparent bg-transparent"
                       }`}
-                    />
+                    >
+                      <Icon
+                        className={`h-[18px] w-[18px] ${
+                          isActive ? "text-[hsl(var(--primary))]" : "text-[hsl(var(--muted-foreground))]"
+                        }`}
+                      />
+                    </span>
                     <span className="truncate font-semibold">{label}</span>
                   </>
                 )}
@@ -169,7 +185,7 @@ const Layout: React.FC = () => {
         </aside>
 
         <main className="min-w-0 page-reveal px-3 py-3 pb-24 sm:px-4 sm:py-4 sm:pb-24 lg:px-6 lg:py-5 lg:pb-6">
-          <div className="mx-auto w-full max-w-[1200px]">
+          <div className="mx-auto w-full max-w-[1220px]">
             <Outlet />
           </div>
         </main>
@@ -177,24 +193,24 @@ const Layout: React.FC = () => {
 
       {!isTournamentImmersive ? (
         <nav
-          className="fixed inset-x-0 bottom-0 z-40 border-t border-[hsl(var(--border)/0.95)] bg-[hsl(var(--background)/0.97)] px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur lg:hidden"
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-[hsl(var(--border)/0.9)] bg-[hsl(var(--background)/0.96)] px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 shadow-[0_-1px_0_hsl(var(--border)/0.5)] backdrop-blur lg:hidden"
           aria-label="Navegación principal"
         >
-          <ul className="grid grid-cols-5 gap-1">
+          <ul className="grid grid-cols-5 gap-0.5">
             {visibleNavItems.slice(0, 5).map(({ to, label, icon: Icon }) => (
               <li key={to}>
                 <NavLink
                   to={to}
                   end={to === "/"}
                   className={({ isActive }) =>
-                    `flex min-h-[50px] flex-col items-center justify-center gap-0.5 px-1 py-1 text-[11px] font-semibold transition-colors duration-[var(--motion-hover)] ${
+                    `relative flex min-h-[50px] flex-col items-center justify-center gap-0.5 px-1 py-1 text-xs font-semibold transition-colors duration-[var(--motion-hover)] ${
                       isActive
-                        ? "bg-[hsl(var(--primary)/0.12)] text-[hsl(var(--primary))]"
+                        ? "bg-[hsl(var(--primary)/0.08)] text-[hsl(var(--primary))]"
                         : "text-[hsl(var(--muted-foreground))]"
                     }`
                   }
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className="h-[18px] w-[18px]" />
                   <span className="truncate">{label}</span>
                 </NavLink>
               </li>

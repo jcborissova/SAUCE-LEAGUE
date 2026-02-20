@@ -105,7 +105,7 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({ tea
         </p>
       </header>
 
-      <div className="rounded-lg border bg-[hsl(var(--surface-1))] p-3 sm:p-4">
+      <div className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3 shadow-[0_1px_0_hsl(var(--border)/0.28)] sm:p-4">
         <label className="relative block w-full sm:max-w-[360px]">
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-subtle))]" />
           <input
@@ -129,11 +129,13 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({ tea
             const expanded = expandedTeamId === team.id;
 
             return (
-              <article key={team.id} className="overflow-hidden rounded-lg border bg-[hsl(var(--surface-1))]">
+              <article key={team.id} className="overflow-hidden rounded-[10px] border bg-[hsl(var(--surface-1))] shadow-[0_1px_0_hsl(var(--border)/0.25)]">
                 <button
                   type="button"
                   onClick={() => setExpandedTeamId(expanded ? null : team.id)}
-                  className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--surface-2)/0.72)]"
+                  className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--surface-2)/0.72)] ${
+                    expanded ? "bg-[hsl(var(--surface-2)/0.55)]" : ""
+                  }`}
                   aria-expanded={expanded}
                   aria-controls={`team-panel-${team.id}`}
                 >
@@ -157,7 +159,7 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({ tea
                     ) : (
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                         {visiblePlayers.map((player) => (
-                          <article key={player.id} className="overflow-hidden rounded-lg border bg-[hsl(var(--surface-1))]">
+                          <article key={player.id} className="overflow-hidden rounded-[10px] border bg-[hsl(var(--surface-1))]">
                             <div className="relative h-32 bg-[hsl(var(--surface-2))]">
                               {player.photo ? (
                                 <img src={player.photo} alt={player.fullName} className="h-full w-full object-cover" />
@@ -166,7 +168,7 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({ tea
                                   <UserCircleIcon className="h-14 w-14 text-[hsl(var(--text-subtle))]" />
                                 </div>
                               )}
-                              <span className="absolute right-2 top-2 rounded-md border border-white/35 bg-black/45 px-2 py-1 text-xs font-bold text-white">
+                              <span className="absolute right-2 top-2 rounded-[6px] border border-white/35 bg-black/45 px-2 py-1 text-xs font-bold text-white">
                                 #{player.jersey}
                               </span>
                             </div>

@@ -41,11 +41,11 @@ const ScorePanel: React.FC<Props> = ({
 }) => {
   return (
     <section className={`w-full space-y-4 ${isFullscreen ? "text-lg" : "text-base"}`}>
-      <header className="grid grid-cols-1 gap-3 border bg-[hsl(var(--surface-1))] p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+      <header className="grid grid-cols-1 gap-3 rounded-[10px] border bg-[hsl(var(--surface-1))] p-3 shadow-[0_1px_0_hsl(var(--border)/0.32)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
         <div className="flex flex-wrap items-center gap-2">
           <div>
             <p className="text-xs uppercase tracking-wide text-[hsl(var(--muted-foreground))]">Tiempo</p>
-            <p className="text-3xl font-black tabular-nums sm:text-4xl">{time}</p>
+            <p className="text-2xl font-black tabular-nums sm:text-3xl">{time}</p>
           </div>
           <span className="h-8 w-px bg-[hsl(var(--border))]" />
           <div>
@@ -69,7 +69,7 @@ const ScorePanel: React.FC<Props> = ({
         </div>
       </header>
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
         <TeamBox
           label="Equipo A"
           score={scoreA}
@@ -114,9 +114,9 @@ const TeamBox = ({
   const scoreColor = accent === "primary" ? "text-[hsl(var(--foreground))]" : "text-[hsl(var(--success))]";
 
   return (
-    <article className="border bg-[hsl(var(--surface-1))] p-4">
+    <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3 shadow-[0_1px_0_hsl(var(--border)/0.32)] sm:p-4">
       <p className={`text-sm font-semibold ${accentColor}`}>{label}</p>
-      <p className={`mt-1 text-6xl font-black tabular-nums ${scoreColor}`}>{score}</p>
+      <p className={`mt-1 text-[2.5rem] font-black tabular-nums sm:text-5xl lg:text-6xl ${scoreColor}`}>{score}</p>
       <p className="mt-1 text-xs uppercase tracking-wide text-[hsl(var(--muted-foreground))]">Faltas</p>
       <p className="text-2xl font-semibold text-[hsl(var(--destructive))] tabular-nums">{fouls}</p>
 

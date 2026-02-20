@@ -74,7 +74,7 @@ const GameModal: React.FC<Props> = ({ onClose, onFinish }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/56 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="relative h-[100dvh] w-full overflow-y-auto border bg-[hsl(var(--background))] p-3 pb-24 sm:h-auto sm:max-h-[94vh] sm:max-w-5xl sm:p-5 sm:pb-5">
+      <div className="relative h-[100dvh] w-full overflow-y-auto border border-[hsl(var(--border)/0.72)] bg-[hsl(var(--background))] p-3 pb-16 shadow-[0_-8px_30px_hsl(var(--background)/0.32)] landscape:h-auto landscape:max-h-screen landscape:overflow-y-auto sm:h-auto sm:max-h-[94vh] sm:max-w-5xl sm:rounded-[10px] sm:p-5 sm:pb-5">
         <ScorePanel
           scoreA={scoreA}
           scoreB={scoreB}
@@ -103,10 +103,10 @@ const GameModal: React.FC<Props> = ({ onClose, onFinish }) => {
             setIsRunning(false);
             onClose();
           }}
-          className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center border text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+          className="absolute right-2 top-2 inline-flex h-10 w-10 items-center justify-center rounded-[8px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] text-[hsl(var(--muted-foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))]"
           aria-label="Cerrar"
         >
-          ✕
+          <span className="text-sm font-semibold">✕</span>
         </button>
       </div>
     </div>

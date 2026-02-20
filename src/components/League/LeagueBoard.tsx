@@ -27,9 +27,14 @@ const SortableItem: React.FC<{ player: LeaguePlayer; onRemove: (id: number) => v
 
 const SortableLeagueBoard: React.FC<Props> = ({ players, onRemove }) => {
   return (
-    <div id="league-dropzone" className="border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] p-3 sm:p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h4 className="font-semibold">Lista activa</h4>
+    <div id="league-dropzone" className="rounded-[10px] border border-dashed border-[hsl(var(--primary)/0.34)] bg-[hsl(var(--surface-2)/0.58)] p-3 sm:p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <h4 className="font-semibold">Lista activa</h4>
+          <span className="inline-flex items-center border bg-[hsl(var(--surface-1))] px-2 py-0.5 text-xs font-semibold tabular-nums">
+            {players.length}
+          </span>
+        </div>
         <span className="text-xs text-[hsl(var(--muted-foreground))]">Arrastra para ordenar</span>
       </div>
 

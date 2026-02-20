@@ -2,6 +2,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { toast } from "react-toastify";
 import { EyeIcon, LockClosedIcon } from "@heroicons/react/24/outline";
+import logo from "../assets/sauce-league-logo-mark.png";
 
 type Role = "admin" | "visor" | null;
 type RoleContextType = {
@@ -60,40 +61,29 @@ const RoleProvider = ({ children }: { children: ReactNode }) => {
 
   if (accessPending) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[hsl(var(--surface-2))] to-[hsl(var(--surface-3))] px-4">
-        <div className="app-card shadow-2xl rounded-3xl p-8 sm:p-10 max-w-md w-full space-y-6 relative">
-          {/* Logo */}
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[hsl(var(--surface-2))] to-[hsl(var(--surface-3))] px-4">
+        <div className="app-card relative w-full max-w-md space-y-6 p-8 shadow-[0_12px_40px_hsl(var(--primary)/0.16)] sm:p-10">
           <div className="flex justify-center">
-            <img
-              src="/sl-logo-white.png"
-              alt="Sauce League Logo"
-              className="w-20 h-20 object-contain drop-shadow"
-            />
+            <span className="flex h-20 w-20 items-center justify-center rounded-[10px] border border-[hsl(var(--border)/0.82)] bg-white p-2 shadow-[0_8px_24px_hsl(var(--primary)/0.16)]">
+              <img src={logo} alt="Sauce League Logo" className="h-full w-full object-contain" />
+            </span>
           </div>
 
           <div className="text-center">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-[hsl(var(--text-strong))] tracking-tight">
+            <h1 className="text-2xl font-extrabold tracking-tight text-[hsl(var(--text-strong))] sm:text-3xl">
               Acceso al Torneo
             </h1>
-            <p className="text-sm text-[hsl(var(--text-subtle))] mt-1">
-              Selecciona cómo deseas ingresar
-            </p>
+            <p className="mt-1 text-sm text-[hsl(var(--text-subtle))]">Selecciona cómo deseas ingresar</p>
           </div>
 
           {step === "choose" && (
             <div className="space-y-4">
-              <button
-                onClick={() => handleAccess("view")}
-                className="btn-secondary w-full py-3"
-              >
+              <button onClick={() => handleAccess("view")} className="btn-secondary w-full py-3">
                 <EyeIcon className="w-5 h-5" />
                 Solo ver el torneo
               </button>
 
-              <button
-                onClick={() => handleAccess("admin")}
-                className="btn-primary w-full py-3"
-              >
+              <button onClick={() => handleAccess("admin")} className="btn-primary w-full py-3">
                 <LockClosedIcon className="w-5 h-5" />
                 Modo administrador
               </button>

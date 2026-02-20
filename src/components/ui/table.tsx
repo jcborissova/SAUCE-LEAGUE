@@ -21,7 +21,7 @@ export const TableHeader = React.forwardRef<HTMLTableSectionElement, React.HTMLA
     <thead
       ref={ref}
       className={cn(
-        "bg-[hsl(var(--muted)/0.78)] text-[hsl(var(--muted-foreground))] uppercase text-[11px] font-semibold tracking-wide",
+        "bg-[hsl(var(--muted)/0.78)] text-[hsl(var(--muted-foreground))] uppercase text-xs font-semibold tracking-wide",
         className
       )}
       {...props}

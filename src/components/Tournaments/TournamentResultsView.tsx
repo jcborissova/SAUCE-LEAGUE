@@ -178,7 +178,7 @@ const TournamentResultsView = ({
             <article key={group.key} className="app-card overflow-hidden">
               <div className="flex items-center justify-between gap-2 border-b bg-[hsl(var(--surface-2))] px-3 py-2.5">
                 <h3 className="text-sm font-semibold capitalize">{group.label}</h3>
-                <span className="text-[11px] text-[hsl(var(--text-subtle))]">{group.rows.length} juego(s)</span>
+                <span className="text-xs text-[hsl(var(--text-subtle))]">{group.rows.length} juego(s)</span>
               </div>
 
               <div className="divide-y">
@@ -389,40 +389,69 @@ const TeamBoxscoreTable = ({ title, rows }: { title: string; rows: TournamentRes
       {rows.length === 0 ? (
         <p className="px-3 py-3 text-sm text-[hsl(var(--text-subtle))]">Sin estadísticas registradas.</p>
       ) : (
-        <div className="soft-scrollbar overflow-x-auto">
-          <table className="w-full min-w-[740px] text-sm">
-            <thead className="text-[11px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">
-              <tr>
-                <th className="px-2 py-2 text-left">Jugador</th>
-                <th className="px-2 py-2 text-center">PTS</th>
-                <th className="px-2 py-2 text-center">REB</th>
-                <th className="px-2 py-2 text-center">AST</th>
-                <th className="px-2 py-2 text-center">STL</th>
-                <th className="px-2 py-2 text-center">BLK</th>
-                <th className="px-2 py-2 text-center">TO</th>
-                <th className="px-2 py-2 text-center">FLS</th>
-                <th className="px-2 py-2 text-center">FGM/FGA</th>
-                <th className="px-2 py-2 text-center">FG%</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {rows.map((row) => (
-                <tr key={`${title}-${row.playerId}`}>
-                  <td className="px-2 py-2 font-medium">{row.playerName}</td>
-                  <td className="px-2 py-2 text-center tabular-nums font-semibold">{row.points}</td>
-                  <td className="px-2 py-2 text-center tabular-nums">{row.rebounds}</td>
-                  <td className="px-2 py-2 text-center tabular-nums">{row.assists}</td>
-                  <td className="px-2 py-2 text-center tabular-nums">{row.steals}</td>
-                  <td className="px-2 py-2 text-center tabular-nums">{row.blocks}</td>
-                  <td className="px-2 py-2 text-center tabular-nums">{row.turnovers}</td>
-                  <td className="px-2 py-2 text-center tabular-nums">{row.fouls}</td>
-                  <td className="px-2 py-2 text-center tabular-nums">{row.fgm}/{row.fga}</td>
-                  <td className="px-2 py-2 text-center tabular-nums">{row.fgPct.toFixed(1)}%</td>
+        <>
+          {/* Mobile card layout */}
+          <div className="divide-y md:hidden">
+            {rows.map((row) => (
+              <div key={`mob-${title}-${row.playerId}`} className="px-3 py-2.5">
+                <p className="truncate text-sm font-semibold">{row.playerName}</p>
+                <div className="mt-1.5 grid grid-cols-3 gap-1 text-center">
+                  <div className="rounded border bg-[hsl(var(--surface-2)/0.6)] px-1 py-1">
+                    <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">PTS</p>
+                    <p className="text-sm font-bold tabular-nums">{row.points}</p>
+                  </div>
+                  <div className="rounded border bg-[hsl(var(--surface-2)/0.6)] px-1 py-1">
+                    <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">REB</p>
+                    <p className="text-sm font-semibold tabular-nums">{row.rebounds}</p>
+                  </div>
+                  <div className="rounded border bg-[hsl(var(--surface-2)/0.6)] px-1 py-1">
+                    <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">AST</p>
+                    <p className="text-sm font-semibold tabular-nums">{row.assists}</p>
+                  </div>
+                </div>
+                <p className="mt-1 text-[11px] text-[hsl(var(--text-subtle))] tabular-nums">
+                  STL {row.steals} · BLK {row.blocks} · TO {row.turnovers} · FLS {row.fouls} · FG {row.fgm}/{row.fga} ({row.fgPct.toFixed(0)}%)
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop table layout */}
+          <div className="soft-scrollbar hidden overflow-x-auto md:block">
+            <table className="w-full min-w-[740px] text-sm">
+              <thead className="text-xs uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+                <tr>
+                  <th className="px-2 py-2 text-left">Jugador</th>
+                  <th className="px-2 py-2 text-center">PTS</th>
+                  <th className="px-2 py-2 text-center">REB</th>
+                  <th className="px-2 py-2 text-center">AST</th>
+                  <th className="px-2 py-2 text-center">STL</th>
+                  <th className="px-2 py-2 text-center">BLK</th>
+                  <th className="px-2 py-2 text-center">TO</th>
+                  <th className="px-2 py-2 text-center">FLS</th>
+                  <th className="px-2 py-2 text-center">FGM/FGA</th>
+                  <th className="px-2 py-2 text-center">FG%</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y">
+                {rows.map((row) => (
+                  <tr key={`${title}-${row.playerId}`}>
+                    <td className="px-2 py-2 font-medium">{row.playerName}</td>
+                    <td className="px-2 py-2 text-center tabular-nums font-semibold">{row.points}</td>
+                    <td className="px-2 py-2 text-center tabular-nums">{row.rebounds}</td>
+                    <td className="px-2 py-2 text-center tabular-nums">{row.assists}</td>
+                    <td className="px-2 py-2 text-center tabular-nums">{row.steals}</td>
+                    <td className="px-2 py-2 text-center tabular-nums">{row.blocks}</td>
+                    <td className="px-2 py-2 text-center tabular-nums">{row.turnovers}</td>
+                    <td className="px-2 py-2 text-center tabular-nums">{row.fouls}</td>
+                    <td className="px-2 py-2 text-center tabular-nums">{row.fgm}/{row.fga}</td>
+                    <td className="px-2 py-2 text-center tabular-nums">{row.fgPct.toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </section>
   );

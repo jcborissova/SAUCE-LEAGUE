@@ -18,7 +18,7 @@ const SegmentedControl = <T extends string>({
 }: SegmentedControlProps<T>) => {
   return (
     <div
-      className={`inline-flex w-full items-stretch overflow-hidden rounded-md border border-[hsl(var(--border)/0.92)] bg-[hsl(var(--surface-2)/0.86)] p-1 ${className}`.trim()}
+      className={`inline-flex w-full items-stretch overflow-hidden rounded-[10px] border border-[hsl(var(--border)/0.9)] bg-[hsl(var(--surface-2)/0.85)] p-1 ${className}`.trim()}
     >
       {options.map((option) => {
         const active = option.value === value;
@@ -28,9 +28,9 @@ const SegmentedControl = <T extends string>({
             key={option.value}
             type="button"
             onClick={() => onChange(option.value)}
-            className={`min-h-[44px] flex-1 rounded-sm px-3 text-sm font-semibold transition-all duration-[var(--motion-tab)] ${
+            className={`min-h-[44px] flex-1 rounded-[7px] px-3 text-sm font-semibold transition-all duration-[var(--motion-tab)] ${
               active
-                ? "border border-[hsl(var(--primary)/0.45)] bg-[hsl(var(--primary)/0.9)] text-[hsl(var(--primary-foreground))]"
+                ? "border border-[hsl(var(--border)/0.9)] bg-[hsl(var(--surface-1))] text-[hsl(var(--foreground))] shadow-[inset_0_-2px_0_hsl(var(--primary))]"
                 : "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--surface-1))] hover:text-[hsl(var(--foreground))]"
             }`}
             aria-pressed={active}

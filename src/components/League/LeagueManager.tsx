@@ -273,7 +273,7 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
 
   return (
     <div className="space-y-4 pb-20 lg:pb-6">
-      <SectionCard title="Guest + Available Pool" description="Agrega invitados y arma la cola activa con drag & drop.">
+      <SectionCard title="Plantilla y cola activa" description="Agrega invitados y organiza la rotación con drag & drop.">
         <div className="space-y-3">
           <GuestInput onAddGuest={handleAddGuest} />
 
@@ -285,7 +285,7 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
             <DndContext onDragEnd={handleDragEnd}>
               {available.length > 0 ? (
                 <div className="space-y-2">
-                  <p className="text-sm font-semibold">Jugadores disponibles</p>
+                  <p className="text-sm font-semibold tracking-tight">Jugadores disponibles</p>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {available.map((p) => (
                       <PlayerCard
@@ -313,7 +313,7 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
         </div>
       </SectionCard>
 
-      <SectionCard title="Match Controls" description="Inicia partido y configura quintetos iniciales cuando sea necesario.">
+      <SectionCard title="Control del partido" description="Inicia el juego y ajusta quintetos iniciales cuando sea necesario.">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <button onClick={generateMatch} disabled={players.length < 10} className="btn-primary w-full sm:w-auto disabled:opacity-50">
             Iniciar partido
@@ -325,13 +325,13 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
       </SectionCard>
 
       {activePlayers.length === 10 ? (
-        <SectionCard title="Playing now" description="Quintetos actualmente en cancha.">
+        <SectionCard title="En cancha" description="Quintetos activos del partido actual.">
           <TeamList players={[...activeTeamA, ...activeTeamB]} teamMode />
         </SectionCard>
       ) : null}
 
       {waitingList.length > 0 ? (
-        <SectionCard title="Next up / Waiting" description="Orden de espera según llegada y rotación.">
+        <SectionCard title="Siguiente turno / Espera" description="Orden de espera según llegada y rotación.">
           <TeamList players={waitingList} />
         </SectionCard>
       ) : null}
@@ -357,7 +357,7 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
         onClose={() => setSelectionOpen(false)}
         title="Configurar quintetos iniciales"
         subtitle="Elige 5 para Equipo A y 5 para Equipo B."
-        maxWidthClassName="sm:max-w-5xl"
+        maxWidthClassName="sm:max-w-3xl"
         actions={
           <>
             <button
@@ -401,7 +401,7 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
                     <button
                       type="button"
                       onClick={() => toggleSelection("A", p.id)}
-                      className={`h-8 w-10 border text-xs font-semibold ${
+                      className={`h-10 w-10 border text-xs font-semibold ${
                         selectedA.includes(p.id) ? "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]" : ""
                       }`}
                     >
@@ -410,7 +410,7 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
                     <button
                       type="button"
                       onClick={() => toggleSelection("B", p.id)}
-                      className={`h-8 w-10 border text-xs font-semibold ${
+                      className={`h-10 w-10 border text-xs font-semibold ${
                         selectedB.includes(p.id) ? "bg-[hsl(var(--success))] text-[hsl(var(--primary-foreground))]" : ""
                       }`}
                     >
@@ -436,7 +436,7 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
                     <span className="truncate">
                       {p.names} {p.lastnames}
                     </span>
-                    <button className="text-xs text-[hsl(var(--muted-foreground))]" onClick={() => toggleSelection("A", id)}>
+                    <button className="min-h-[36px] px-2 text-xs text-[hsl(var(--muted-foreground))]" onClick={() => toggleSelection("A", id)}>
                       Quitar
                     </button>
                   </div>
@@ -459,7 +459,7 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
                     <span className="truncate">
                       {p.names} {p.lastnames}
                     </span>
-                    <button className="text-xs text-[hsl(var(--muted-foreground))]" onClick={() => toggleSelection("B", id)}>
+                    <button className="min-h-[36px] px-2 text-xs text-[hsl(var(--muted-foreground))]" onClick={() => toggleSelection("B", id)}>
                       Quitar
                     </button>
                   </div>
