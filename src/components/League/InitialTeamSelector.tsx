@@ -26,11 +26,11 @@ const InitialTeamSelector: React.FC<Props> = ({ players, onConfirm }) => {
 
   return (
     <div className="space-y-8">
-      <h3 className="font-bold text-xl text-center text-blue-950">Seleccionar Quintetos Iniciales</h3>
+      <h3 className="font-bold text-xl text-center">Seleccionar Quintetos Iniciales</h3>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <div>
-          <h4 className="font-semibold text-blue-800 mb-2">Equipo A</h4>
+          <h4 className="font-semibold text-[hsl(var(--primary))] mb-2">Equipo A</h4>
           <div className="grid grid-cols-2 gap-3">
             {teamA.map((p) => (
               <PlayerCard key={p.id} player={p} onDoubleClick={() => handleRemove(p)} />
@@ -38,7 +38,7 @@ const InitialTeamSelector: React.FC<Props> = ({ players, onConfirm }) => {
           </div>
         </div>
         <div>
-          <h4 className="font-semibold text-blue-800 mb-2">Equipo B</h4>
+          <h4 className="font-semibold text-[hsl(var(--primary))] mb-2">Equipo B</h4>
           <div className="grid grid-cols-2 gap-3">
             {teamB.map((p) => (
               <PlayerCard key={p.id} player={p} onDoubleClick={() => handleRemove(p)} />
@@ -47,8 +47,8 @@ const InitialTeamSelector: React.FC<Props> = ({ players, onConfirm }) => {
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-xl shadow-md">
-        <h4 className="font-semibold mb-2 text-blue-950">Jugadores Disponibles</h4>
+      <div className="app-card p-4 rounded-xl">
+        <h4 className="font-semibold mb-2">Jugadores Disponibles</h4>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           {players.map((p) => {
             const isSelected = teamA.includes(p) || teamB.includes(p);
@@ -64,7 +64,7 @@ const InitialTeamSelector: React.FC<Props> = ({ players, onConfirm }) => {
       <div className="text-center">
         <button
           disabled={isConfirmDisabled}
-          className={`px-6 py-2 rounded-xl text-white text-sm ${isConfirmDisabled ? "bg-gray-400" : "bg-blue-950 hover:bg-blue-800"}`}
+          className={`btn-primary ${isConfirmDisabled ? "opacity-60" : ""}`}
           onClick={() => onConfirm(teamA, teamB)}
         >
           Confirmar Quintetos

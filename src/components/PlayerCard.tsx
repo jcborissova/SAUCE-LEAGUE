@@ -12,33 +12,33 @@ interface PlayerCardProps {
 
 const PlayerCard: React.FC<PlayerCardProps> = ({ player, mode = "view", onDelete }) => {
   return (
-    <div className="bg-white shadow-md rounded-lg p-4 flex items-center justify-between transition hover:shadow-lg">
-      <div className="flex items-center space-x-4">
+    <div className="card flex items-center justify-between p-4 gap-3 hover:shadow-lg transition">
+      <div className="flex items-center gap-3">
         {player.photo ? (
           <img
             src={player.photo}
             alt={`${player.names} ${player.lastnames}`}
-            className="w-12 h-12 rounded-full object-cover border border-gray-300"
+            className="w-12 h-12 rounded-full object-cover border"
           />
         ) : (
-          <div className="w-12 h-12 bg-gray-200 text-gray-500 rounded-full flex items-center justify-center font-bold">
+          <div className="w-12 h-12 bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] rounded-full flex items-center justify-center font-bold">
             #{player.jerseynumber}
           </div>
         )}
-        <div>
-          <h3 className="text-base font-bold">
+        <div className="space-y-0.5">
+          <h3 className="text-sm font-semibold leading-tight">
             {player.names} {player.lastnames}
           </h3>
-          <p className="text-xs text-gray-500">#{player.jerseynumber}</p>
+          <p className="text-xs text-[hsl(var(--muted-foreground))]">#{player.jerseynumber}</p>
           {player.backjerseyname && (
-            <p className="text-xs text-gray-400 italic">{player.backjerseyname}</p>
+            <p className="text-[11px] text-[hsl(var(--muted-foreground))] italic">{player.backjerseyname}</p>
           )}
 
           {mode === "manage" && (
-            <>
-              {player.description && <p className="text-sm text-gray-600">{player.description}</p>}
-              {player.cedula && <p className="text-xs text-gray-400">Cédula: {player.cedula}</p>}
-            </>
+            <div className="space-y-0.5 text-xs text-[hsl(var(--muted-foreground))]">
+              {player.description && <p>{player.description}</p>}
+              {player.cedula && <p>Cédula: {player.cedula}</p>}
+            </div>
           )}
         </div>
       </div>
@@ -46,7 +46,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, mode = "view", onDelete
       {mode === "manage" && onDelete && (
         <button
           onClick={() => onDelete(player.id)}
-          className="text-red-600 hover:text-red-800 flex items-center gap-1 transition"
+          className="text-destructive hover:opacity-80 flex items-center gap-1 transition"
           title="Eliminar jugador"
         >
           <TrashIcon className="h-5 w-5" />

@@ -42,27 +42,27 @@ const ScorePanel: React.FC<Props> = ({
 }) => {
   return (
     <div
-      className={`bg-white px-4 py-6 w-full max-w-5xl mx-auto space-y-6 ${
+      className={`card px-4 py-6 w-full max-w-5xl mx-auto space-y-6 transition-colors ${
         isFullscreen ? "text-xl sm:text-2xl" : "text-base"
       }`}
     >
       {/* Tiempo y puntos meta */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-center sm:text-left items-center">
         <div>
-          <p className="text-sm text-gray-500">⏱ Tiempo</p>
-          <p className="font-bold text-3xl text-blue-900">{time}</p>
+          <p className="text-sm text-[hsl(var(--muted-foreground))]">⏱ Tiempo</p>
+          <p className="font-bold text-3xl">{time}</p>
           <div className="flex flex-wrap justify-center sm:justify-start gap-2 mt-2">
             <button
               onClick={onStartPause}
-              className={`px-4 py-1 rounded-full text-sm font-semibold shadow ${
-                isRunning ? "bg-yellow-500 text-white" : "bg-blue-800 text-white"
+              className={`px-4 py-2 rounded-full text-sm font-semibold shadow ${
+                isRunning ? "bg-[hsl(var(--warning))] text-[hsl(var(--foreground))]" : "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]"
               } hover:opacity-90 transition`}
             >
               {isRunning ? "Pausar" : "Iniciar"}
             </button>
             <button
               onClick={onReset}
-              className="px-4 py-1 rounded-full text-sm font-semibold bg-gray-200 text-gray-800 hover:bg-gray-300 transition"
+              className="px-4 py-2 rounded-full text-sm font-semibold border text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition"
             >
               Reiniciar
             </button>
@@ -70,40 +70,40 @@ const ScorePanel: React.FC<Props> = ({
         </div>
 
         <div>
-          <p className="text-sm text-gray-500">🎯 Puntos Meta</p>
+          <p className="text-sm text-[hsl(var(--muted-foreground))]">🎯 Puntos meta</p>
           <input
             type="number"
             value={maxPoints}
             onChange={(e) => onMaxPointsChange(Number(e.target.value))}
-            className="mt-1 border rounded-lg px-3 py-2 text-center text-lg font-semibold text-blue-800 shadow-sm w-28 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            className="mt-1 border rounded-lg px-3 py-2 text-center text-lg font-semibold shadow-sm w-28 bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
           />
         </div>
       </div>
 
       {/* Paneles de equipos */}
-      <div className="flex flex-col sm:flex-row gap-6 text-center">
+      <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 text-center">
         {/* Equipo A */}
-        <div className="flex-1 bg-blue-50 rounded-xl p-4 space-y-2">
-          <p className="text-sm font-semibold text-blue-800">Equipo A</p>
-          <p className="text-5xl font-bold text-blue-700">{scoreA}</p>
-          <p className="text-sm text-gray-500">Faltas</p>
-          <p className="text-2xl text-red-600 font-semibold">{foulsA}</p>
+        <div className="flex-1 rounded-2xl p-5 space-y-2 border bg-gradient-to-br from-[hsl(var(--primary)/0.10)] via-[hsl(var(--primary)/0.5)] to-transparent">
+          <p className="text-sm font-semibold text-[hsl(var(--primary))]">Equipo A</p>
+          <p className="text-5xl sm:text-6xl font-black">{scoreA}</p>
+          <p className="text-sm text-[hsl(var(--muted-foreground))]">Faltas</p>
+          <p className="text-2xl sm:text-3xl text-destructive font-semibold">{foulsA}</p>
           <div className="flex flex-wrap justify-center gap-2 mt-3">
             <button
               onClick={onScoreA}
-              className="bg-blue-800 text-white px-4 py-1 rounded text-sm font-medium"
+              className="bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] px-4 py-2 rounded-lg text-sm font-semibold shadow hover:opacity-90"
             >
               +1
             </button>
             <button
               onClick={onUnscoreA}
-              className="bg-gray-700 text-white px-4 py-1 rounded text-sm font-medium"
+              className="bg-[hsl(var(--muted))] text-[hsl(var(--foreground))] px-4 py-2 rounded-lg text-sm font-semibold border hover:bg-[hsl(var(--muted)/0.80)]"
             >
               -1
             </button>
             <button
               onClick={onFoulA}
-              className="bg-red-600 text-white px-4 py-1 rounded text-sm font-medium"
+              className="bg-destructive text-destructive-foreground px-4 py-2 rounded-lg text-sm font-semibold shadow hover:opacity-90"
             >
               Foul
             </button>
@@ -111,27 +111,27 @@ const ScorePanel: React.FC<Props> = ({
         </div>
 
         {/* Equipo B */}
-        <div className="flex-1 bg-green-50 rounded-xl p-4 space-y-2">
-          <p className="text-sm font-semibold text-green-800">Equipo B</p>
-          <p className="text-5xl font-bold text-green-700">{scoreB}</p>
-          <p className="text-sm text-gray-500">Faltas</p>
-          <p className="text-2xl text-red-600 font-semibold">{foulsB}</p>
+        <div className="flex-1 rounded-2xl p-5 space-y-2 border bg-gradient-to-br from-[hsl(var(--success)/0.20)] via-[hsl(var(--success)/0.08)] to-transparent">
+          <p className="text-sm font-semibold text-[hsl(var(--success))]">Equipo B</p>
+          <p className="text-5xl sm:text-6xl font-black text-[hsl(var(--success))]">{scoreB}</p>
+          <p className="text-sm text-[hsl(var(--muted-foreground))]">Faltas</p>
+          <p className="text-2xl sm:text-3xl text-destructive font-semibold">{foulsB}</p>
           <div className="flex flex-wrap justify-center gap-2 mt-3">
             <button
               onClick={onScoreB}
-              className="bg-green-800 text-white px-4 py-1 rounded text-sm font-medium"
+              className="bg-[hsl(var(--success))] text-[hsl(var(--primary-foreground))] px-4 py-2 rounded-lg text-sm font-semibold shadow hover:opacity-90"
             >
               +1
             </button>
             <button
               onClick={onUnscoreB}
-              className="bg-gray-700 text-white px-4 py-1 rounded text-sm font-medium"
+              className="bg-[hsl(var(--muted))] text-[hsl(var(--foreground))] px-4 py-2 rounded-lg text-sm font-semibold border hover:bg-[hsl(var(--muted)/0.80)]"
             >
               -1
             </button>
             <button
               onClick={onFoulB}
-              className="bg-red-600 text-white px-4 py-1 rounded text-sm font-medium"
+              className="bg-destructive text-destructive-foreground px-4 py-2 rounded-lg text-sm font-semibold shadow hover:opacity-90"
             >
               Foul
             </button>

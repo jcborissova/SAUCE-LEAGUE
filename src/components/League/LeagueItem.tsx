@@ -25,14 +25,14 @@ const LeagueItem: React.FC<Props> = ({ league, onSelect, onDeleteRequest }) => {
   return (
     <li
       {...handlers}
-      className="group bg-white rounded-xl px-5 py-4 shadow flex justify-between items-center transition hover:shadow-lg hover:bg-blue-50"
+      className="group app-card rounded-xl px-4 py-4 sm:px-5 flex justify-between items-center transition hover:shadow-md hover:bg-[hsl(var(--muted))]"
     >
       <div onClick={onSelect} className="cursor-pointer w-full">
-        <h3 className="text-base font-semibold text-blue-950">{league.name}</h3>
+        <h3 className="text-base font-semibold">{league.name}</h3>
         {league.description && (
-          <p className="text-sm text-gray-600 truncate">{league.description}</p>
+          <p className="text-sm text-[hsl(var(--text-subtle))] truncate">{league.description}</p>
         )}
-        <p className="text-xs text-gray-400 mt-1">
+        <p className="text-xs text-[hsl(var(--text-subtle))] mt-1">
           Creado el {new Date(league.created_at).toLocaleDateString()}
         </p>
       </div>
@@ -43,7 +43,7 @@ const LeagueItem: React.FC<Props> = ({ league, onSelect, onDeleteRequest }) => {
           e.stopPropagation();
           onDeleteRequest();
         }}
-        className="ml-4 text-red-500 hover:text-red-700 transition"
+        className="ml-4 text-[hsl(var(--destructive))] hover:opacity-80 transition"
         title="Eliminar"
       >
         <TrashIcon className="w-5 h-5" />

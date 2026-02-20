@@ -43,65 +43,65 @@ const AddPlayerModal: React.FC<Props> = ({
   };
 
   const inputStyle =
-    "w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-950";
+    "input-base";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white w-full max-w-md rounded-xl shadow-xl p-6 animate-fadeIn">
-        <h3 className="text-xl font-semibold text-blue-950 mb-4 text-center">
-          {mode === "add" ? "Add New Player" : "Edit Player"}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="card w-full max-w-md p-6 animate-fadeIn shadow-2xl">
+        <h3 className="text-xl font-semibold text-center">
+          {mode === "add" ? "Agregar jugador" : "Editar jugador"}
         </h3>
 
-        <div className="space-y-4">
-        {previewURL && (
-          <img
-            src={previewURL}
-            alt="Preview"
-            className="w-24 h-24 object-cover rounded-full mx-auto"
-          />
-        )}
+        <div className="space-y-4 mt-4">
+          {previewURL && (
+            <img
+              src={previewURL}
+              alt="Preview"
+              className="w-24 h-24 object-cover rounded-full mx-auto border"
+            />
+          )}
 
-        <div className="text-center">
-          <input
-            type="file"
-            accept="image/*"
-            ref={fileInputRef}
-            onChange={handlePhotoChange}
-            className="hidden"
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="text-sm text-blue-900 hover:underline"
-          >
-            {previewURL ? "Cambiar Foto" : "Subir Foto"}
-          </button>
-        </div>
+          <div className="text-center">
+            <input
+              type="file"
+              accept="image/*"
+              ref={fileInputRef}
+              onChange={handlePhotoChange}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="text-sm text-[hsl(var(--primary))] hover:underline"
+            >
+              {previewURL ? "Cambiar foto" : "Subir foto"}
+            </button>
+          </div>
 
           <input
             type="text"
-            placeholder="First Names"
+            placeholder="Nombres"
             className={inputStyle}
             value={newPlayer.names}
             onChange={(e) => setNewPlayer((p) => ({ ...p, names: e.target.value }))}
           />
           <input
             type="text"
-            placeholder="Last Names"
+            placeholder="Apellidos"
             className={inputStyle}
             value={newPlayer.lastnames}
             onChange={(e) => setNewPlayer((p) => ({ ...p, lastnames: e.target.value }))}
           />
           <input
             type="text"
-            placeholder="Back Jersey Name"
+            placeholder="Nombre dorsal"
             className={inputStyle}
             value={newPlayer.backjerseyname}
             onChange={(e) => setNewPlayer((p) => ({ ...p, backjerseyname: e.target.value }))}
           />
           <input
             type="number"
-            placeholder="Jersey Number"
+            placeholder="Número de jersey"
             className={inputStyle}
             value={newPlayer.jerseynumber}
             onChange={(e) => setNewPlayer((p) => ({ ...p, jerseynumber: e.target.value }))}
@@ -115,25 +115,25 @@ const AddPlayerModal: React.FC<Props> = ({
           />
           <input
             type="text"
-            placeholder="Description"
+            placeholder="Descripción"
             className={inputStyle}
             value={newPlayer.description}
             onChange={(e) => setNewPlayer((p) => ({ ...p, description: e.target.value }))}
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mt-6">
+        <div className="grid grid-cols-2 gap-3 mt-6">
           <button
             onClick={onClose}
-            className="w-full px-4 py-2 rounded-lg border text-gray-700 hover:bg-gray-100 transition"
+            className="w-full px-4 py-2 rounded-lg border text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition"
           >
-            Cancel
+            Cancelar
           </button>
           <button
             onClick={onSubmit}
-            className="w-full px-4 py-2 rounded-lg bg-blue-950 text-white hover:bg-blue-800 transition"
+            className="w-full px-4 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-semibold hover:opacity-90 transition"
           >
-            Save
+            Guardar
           </button>
         </div>
       </div>

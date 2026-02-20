@@ -1,9 +1,20 @@
 import React from "react";
-import { TrashIcon, PencilIcon, EyeIcon, UserPlusIcon } from "@heroicons/react/24/solid";
+import { UserPlusIcon } from "@heroicons/react/24/solid";
 import type { Player } from "../types/player";
+import ActionMenu from "./ui/action-menu";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./ui/table";
 
 interface PlayerTableProps {
   players: Player[];
+  resultSummary?: string;
   onDelete: (id: number) => void;
   onOpenModal: () => void;
   onEdit: (player: Player) => void;
@@ -12,79 +23,128 @@ interface PlayerTableProps {
 
 const PlayerTable: React.FC<PlayerTableProps> = ({
   players,
+  resultSummary,
   onDelete,
   onOpenModal,
   onEdit,
   onView,
 }) => {
   return (
-    <div className="bg-white rounded-lg shadow-md p-4">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold text-blue-950">Player List</h2>
+    <div className="app-card p-4 sm:p-6 space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+        <div>
+          <h2 className="text-xl font-semibold">Jugadores</h2>
+          <p className="text-sm text-[hsl(var(--muted-foreground))]">Gestión y edición del roster.</p>
+          {resultSummary ? (
+            <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">{resultSummary}</p>
+          ) : null}
+        </div>
         <button
           onClick={onOpenModal}
-          className="flex items-center gap-2 bg-blue-950 text-white px-4 py-2 rounded hover:bg-blue-800 transition"
+          className="inline-flex items-center gap-2 bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] px-4 py-2 rounded-lg font-semibold shadow-sm hover:opacity-90 transition"
         >
           <UserPlusIcon className="h-5 w-5" />
-          <span className="hidden sm:inline">Add Player</span>
+          <span className="hidden sm:inline">Nuevo jugador</span>
+          <span className="sm:hidden">Añadir</span>
         </button>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-blue-950 text-white">
-            <tr>
-              <th className="p-3 text-left font-semibold">#</th>
-              <th className="p-3 text-left font-semibold">Name</th>
-              <th className="p-3 text-left font-semibold hidden md:table-cell">Back Name</th>
-              <th className="p-3 text-left font-semibold hidden lg:table-cell">Description</th>
-              <th className="p-3 text-left font-semibold hidden lg:table-cell">Cédula</th>
-              <th className="p-3 text-left font-semibold hidden xl:table-cell">Photo</th>
-              <th className="p-3 text-center font-semibold">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {players.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="p-10 text-center text-gray-600 font-semibold">
-                  🚫 No players registered.
-                </td>
-              </tr>
-            ) : (
-              players.map((p) => (
-                <tr key={p.id} className="hover:bg-gray-50">
-                  <td className="p-3 font-medium text-gray-800">#{p.jerseynumber}</td>
-                  <td className="p-3 text-gray-700">{p.names} {p.lastnames}</td>
-                  <td className="p-3 text-gray-700 hidden md:table-cell">{p.backjerseyname}</td>
-                  <td className="p-3 text-gray-600 hidden lg:table-cell">{p.description}</td>
-                  <td className="p-3 text-gray-600 hidden lg:table-cell">{p.cedula}</td>
-                  <td className="p-3 hidden xl:table-cell">
-                    {p.photo ? (
-                      <img
-                        src={p.photo}
-                        alt="Photo"
-                        className="w-8 h-8 rounded-full object-cover"
+      <div className="hidden md:block">
+        <TableContainer className="max-h-[68vh] overflow-auto">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--muted)/0.9)]">
+              <TableRow>
+                <TableHead>#</TableHead>
+                <TableHead>Nombre</TableHead>
+                <TableHead>Back Name</TableHead>
+                <TableHead>Descripción</TableHead>
+                <TableHead>Cédula</TableHead>
+                <TableHead>Foto</TableHead>
+                <TableHead className="text-center">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {players.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="p-10 text-center text-[hsl(var(--muted-foreground))] font-semibold">
+                    No hay jugadores registrados.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                players.map((p, index) => (
+                  <TableRow
+                    key={p.id}
+                    className={index % 2 === 0 ? "bg-[hsl(var(--card))]" : "bg-[hsl(var(--surface-1))]"}
+                  >
+                    <TableCell className="font-semibold text-[hsl(var(--foreground))]">#{p.jerseynumber}</TableCell>
+                    <TableCell>{p.names} {p.lastnames}</TableCell>
+                    <TableCell className="text-[hsl(var(--muted-foreground))] max-w-[180px] truncate" title={p.backjerseyname}>
+                      {p.backjerseyname}
+                    </TableCell>
+                    <TableCell className="text-[hsl(var(--muted-foreground))] max-w-[260px] truncate" title={p.description || ""}>
+                      {p.description || "—"}
+                    </TableCell>
+                    <TableCell className="text-[hsl(var(--muted-foreground))]">{p.cedula}</TableCell>
+                    <TableCell>
+                      {p.photo ? (
+                        <img
+                          src={p.photo}
+                          alt="Foto"
+                          className="w-10 h-10 rounded-full object-cover border"
+                        />
+                      ) : (
+                        <span className="text-[hsl(var(--muted-foreground))] italic">Sin foto</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center whitespace-nowrap">
+                      <ActionMenu
+                        onView={() => onView(p)}
+                        onEdit={() => onEdit(p)}
+                        onDelete={() => onDelete(p.id)}
                       />
-                    ) : (
-                      <span className="text-gray-400 italic">No photo</span>
-                    )}
-                  </td>
-                  <td className="p-3 flex justify-center gap-2 text-center">
-                    <button onClick={() => onView(p)} className="text-blue-500 hover:text-blue-700" title="View">
-                      <EyeIcon className="h-5 w-5" />
-                    </button>
-                    <button onClick={() => onEdit(p)} className="text-yellow-500 hover:text-yellow-600" title="Edit">
-                      <PencilIcon className="h-5 w-5" />
-                    </button>
-                    <button onClick={() => onDelete(p.id)} className="text-red-600 hover:text-red-800" title="Delete">
-                      <TrashIcon className="h-5 w-5" />
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="md:hidden space-y-3">
+        {players.length === 0 && (
+          <div className="rounded-xl border p-4 text-center text-[hsl(var(--muted-foreground))]">
+            No hay jugadores registrados.
+          </div>
+        )}
+        {players.map((p) => (
+          <div key={p.id} className="rounded-xl border p-4 bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))] shadow-sm">
+            <div className="flex items-center gap-3">
+              {p.photo ? (
+                <img src={p.photo} alt="Foto" className="w-12 h-12 rounded-full object-cover border" />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] flex items-center justify-center font-semibold">#{p.jerseynumber}</div>
+              )}
+              <div className="flex-1">
+                <p className="font-semibold">{p.names} {p.lastnames}</p>
+                <p className="text-xs text-[hsl(var(--muted-foreground))] truncate" title={p.backjerseyname}>
+                  {p.backjerseyname}
+                </p>
+                <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-0.5">
+                  Jersey #{p.jerseynumber} • Cédula {p.cedula}
+                </p>
+              </div>
+              <ActionMenu
+                onView={() => onView(p)}
+                onEdit={() => onEdit(p)}
+                onDelete={() => onDelete(p.id)}
+                className="ml-auto"
+              />
+            </div>
+            {p.description && <p className="text-sm text-[hsl(var(--muted-foreground))] mt-2">{p.description}</p>}
+          </div>
+        ))}
       </div>
     </div>
   );

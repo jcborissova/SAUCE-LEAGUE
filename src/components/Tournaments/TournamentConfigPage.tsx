@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import TournamentTeamsConfig from "./TournamentTeamsConfig";
 import TournamentScheduleConfig from "./TournamentScheduleConfig";
 import TournamentResultsConfig from "./TournamentResultsConfig";
+import TournamentPlayoffConfig from "./TournamentPlayoffConfig";
 import { ArrowPathIcon } from "@heroicons/react/24/solid";
 
 type Props = {
@@ -13,18 +14,18 @@ type Props = {
 
 const TournamentConfigPage: React.FC<Props> = ({ isOpen, onClose, tournamentId }) => {
   const [globalLoading, setGlobalLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"teams" | "schedule" | "results">("teams");
+  const [activeTab, setActiveTab] = useState<"teams" | "schedule" | "results" | "playoffs">("teams");
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center px-4 z-50">
-      <div className="bg-white w-full max-w-5xl rounded-3xl p-6 overflow-y-auto max-h-[95vh] shadow-2xl relative">
+    <div className="modal-shell">
+      <div className="modal-card max-w-5xl relative">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-blue-900">Configuración del Torneo</h2>
+          <h2 className="text-xl font-bold">Configuración del Torneo</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-700 text-2xl font-bold transition"
+            className="btn-secondary h-9 w-9 rounded-lg p-0 text-2xl"
           >
             ×
           </button>
@@ -36,14 +37,15 @@ const TournamentConfigPage: React.FC<Props> = ({ isOpen, onClose, tournamentId }
             { id: "teams", label: "Equipos" },
             { id: "schedule", label: "Calendario" },
             { id: "results", label: "Resultados" },
+            { id: "playoffs", label: "Playoffs" },
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               className={`px-4 py-2 ${
                 activeTab === tab.id
-                  ? "border-b-2 border-blue-600 text-blue-600 font-bold"
-                  : "text-gray-600"
+                  ? "border-b-2 border-[hsl(var(--primary))] text-[hsl(var(--primary))] font-bold"
+                  : "text-[hsl(var(--text-subtle))]"
               }`}
             >
               {tab.label}
@@ -64,11 +66,14 @@ const TournamentConfigPage: React.FC<Props> = ({ isOpen, onClose, tournamentId }
         {activeTab === "results" && (
           <TournamentResultsConfig tournamentId={tournamentId} />
         )}
+        {activeTab === "playoffs" && (
+          <TournamentPlayoffConfig tournamentId={tournamentId} />
+        )}
 
         {/* Loader */}
         {globalLoading && (
-          <div className="absolute inset-0 bg-white/70 flex justify-center items-center rounded-3xl">
-            <ArrowPathIcon className="w-10 h-10 animate-spin text-blue-600" />
+          <div className="absolute inset-0 bg-[hsl(var(--background)/0.75)] flex justify-center items-center rounded-3xl">
+            <ArrowPathIcon className="w-10 h-10 animate-spin text-[hsl(var(--primary))]" />
           </div>
         )}
       </div>

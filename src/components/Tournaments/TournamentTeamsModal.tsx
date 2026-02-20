@@ -155,19 +155,19 @@ const TournamentTeamsModal: React.FC<Props> = ({ isOpen, onClose, tournamentId }
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center px-4 z-50">
-      <div className="bg-white w-full max-w-6xl rounded-3xl p-8 overflow-y-auto max-h-[95vh] shadow-2xl relative animate-fade-in">
+    <div className="modal-shell">
+      <div className="modal-card max-w-6xl animate-fade-in">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-blue-900 flex items-center gap-2">
-            <UserGroupIcon className="w-7 h-7 text-blue-600" />
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <UserGroupIcon className="w-7 h-7 text-[hsl(var(--primary))]" />
             Configurar Equipos
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-2xl font-bold transition">×</button>
+          <button onClick={onClose} className="btn-secondary h-9 w-9 rounded-lg p-0 text-2xl">×</button>
         </div>
 
         <button
           onClick={addTeam}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-2xl mb-6 transition"
+          className="btn-primary rounded-2xl mb-6"
           disabled={loading || saving}
         >
           <PlusIcon className="w-5 h-5" />
@@ -188,7 +188,7 @@ const TournamentTeamsModal: React.FC<Props> = ({ isOpen, onClose, tournamentId }
               placeholder="Nombre del equipo"
               value={teams[activeTeamIndex].name}
               onChange={(e) => handleNameChange(activeTeamIndex, e.target.value)}
-              className="w-full border border-gray-300 rounded-xl px-4 py-3 mb-6 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+              className="input-base text-base sm:text-lg mb-6"
             />
 
             <TeamPlayersGrid
@@ -203,14 +203,14 @@ const TournamentTeamsModal: React.FC<Props> = ({ isOpen, onClose, tournamentId }
         <div className="flex justify-end gap-3 mt-8">
           <button
             onClick={onClose}
-            className="px-5 py-2 rounded-2xl bg-gray-300 hover:bg-gray-400 text-sm font-medium transition"
+            className="btn-secondary rounded-2xl"
             disabled={saving}
           >
             Cancelar
           </button>
           <button
             onClick={saveTeams}
-            className="px-5 py-2 rounded-2xl bg-green-600 text-white hover:bg-green-700 text-sm font-medium transition flex items-center gap-2"
+            className="btn-primary rounded-2xl"
             disabled={saving}
           >
             {saving && <ArrowPathIcon className="w-5 h-5 animate-spin" />}

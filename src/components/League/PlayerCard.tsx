@@ -26,7 +26,7 @@ const PlayerCard: React.FC<Props> = ({ player, onDelete, onDoubleClick, dragProp
 
   return (
     <div
-      className="relative bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 text-center text-sm sm:text-base font-medium text-blue-950 hover:shadow-md transition w-full"
+      className="relative card px-4 py-3 text-center text-sm sm:text-base font-medium hover:shadow-md transition w-full"
       onDoubleClick={onDoubleClick}
     >
       {/* Botón Eliminar */}
@@ -38,7 +38,7 @@ const PlayerCard: React.FC<Props> = ({ player, onDelete, onDoubleClick, dragProp
               e.stopPropagation();
               onDelete(player.id);
             }}
-            className="text-gray-400 hover:text-red-600"
+            className="text-[hsl(var(--muted-foreground))] hover:text-destructive"
           >
             <XMarkIcon className="w-5 h-5" />
           </button>
@@ -50,7 +50,7 @@ const PlayerCard: React.FC<Props> = ({ player, onDelete, onDoubleClick, dragProp
         <div
           {...dragProps.listeners}
           {...dragProps.attributes}
-          className="absolute bottom-1 left-1 text-gray-300 hover:text-gray-500 cursor-grab z-10"
+          className="absolute bottom-1 left-1 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] cursor-grab z-10"
           title="Arrastrar"
         >
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -66,14 +66,14 @@ const PlayerCard: React.FC<Props> = ({ player, onDelete, onDoubleClick, dragProp
 
       {/* Contenido */}
       <div className="pointer-events-auto">
-        <p className="truncate font-semibold text-blue-950">
+        <p className="truncate font-semibold">
           {player.names} {player.lastnames}
         </p>
         {player.isGuest && (
-          <p className="text-xs text-gray-500 font-normal">(Invitado)</p>
+          <p className="text-xs text-[hsl(var(--text-subtle))] font-normal">(Invitado)</p>
         )}
         {arrivalTimeFormatted && (
-          <p className="text-xs text-gray-400 font-normal mt-1">
+          <p className="text-xs text-[hsl(var(--text-subtle))] font-normal mt-1">
             {arrivalTimeFormatted}
           </p>
         )}

@@ -151,7 +151,7 @@ const TournamentScheduleConfig: React.FC<Props> = ({ tournamentId }) => {
           team_a: a,
           team_b: b,
           match_date: currentDate.format("YYYY-MM-DD"),
-          match_time: index === 0 ? "18:15" : "19:15",
+          match_time: index === 0 ? "17:15" : "18:15",
           tournament_id: tournamentId,
         });
 
@@ -220,86 +220,126 @@ const handleSave = async () => {
 
     if (insertError) throw insertError;
 
-    // 5. Obtener ligas existentes
-    const { data: leagues, error: leaguesError } = await supabase
+    // 5. (Opcional) asociar current_match a la primera liga disponible.
+    // Esto no debe bloquear el guardado del torneo si no hay ligas creadas.
+    const { data: leagues } = await supabase
       .from("leagues")
-      .select("id");
+      .select("id")
+      .limit(1);
 
-    if (leaguesError || !leagues) throw leaguesError;
+    const leagueId = leagues?.[0]?.id;
 
-    const leagueId = leagues[0]?.id;
+    if (leagueId) {
+      const currentMatchInsert = insertedMatches.map((match) => ({
+        match_id: match.id,
+        league_id: leagueId,
+      }));
 
-    if (!leagueId) throw new Error("No se encontró ninguna liga válida.");
+      const { error: currentMatchError } = await supabase
+        .from("current_match")
+        .insert(currentMatchInsert);
 
-    // 6. Insertar en current_match
-    const currentMatchInsert = insertedMatches.map((match) => ({
-      match_id: match.id,
-      league_id: leagueId,
-    }));
+      if (currentMatchError) {
+        console.warn("No se pudieron crear registros en current_match:", currentMatchError.message);
+      }
+    }
 
-    const { error: currentMatchError } = await supabase
-      .from("current_match")
-      .insert(currentMatchInsert);
+    // 6. Construir participantes del partido desde equipos del torneo (teams + team_players)
+    const { data: tournamentTeams, error: tournamentTeamsError } = await supabase
+      .from("teams")
+      .select("name, team_players(player_id)")
+      .eq("tournament_id", tournamentId);
 
-    if (currentMatchError) throw currentMatchError;
+    if (tournamentTeamsError) throw tournamentTeamsError;
 
-    // 7. Obtener jugadores activos para esa liga
-    const { data: activePlayers, error: activeError } = await supabase
-      .from("active_players")
-      .select("player_id, team")
-      .eq("league_id", leagueId);
+    const playersByTeamName = new Map<string, number[]>();
 
-    if (activeError) throw activeError;
+    (tournamentTeams ?? []).forEach((team: any) => {
+      const playerIds = (team.team_players ?? [])
+        .map((tp: any) => Number(tp.player_id))
+        .filter((playerId: number) => Number.isFinite(playerId));
 
-    // 8. Insertar en match_players
-    const allMatchPlayers: any[] = [];
+      playersByTeamName.set(team.name, playerIds);
+    });
+
+    const allMatchPlayers: Array<{ match_id: number; player_id: number; team: "A" | "B" }> = [];
+    const uniqueKeys = new Set<string>();
 
     insertedMatches.forEach((match) => {
-      activePlayers?.forEach((p) => {
+      const teamAPlayers = playersByTeamName.get(match.team_a) ?? [];
+      const teamBPlayers = playersByTeamName.get(match.team_b) ?? [];
+
+      teamAPlayers.forEach((playerId) => {
+        const uniqueKey = `${match.id}-${playerId}`;
+        if (uniqueKeys.has(uniqueKey)) return;
+
+        uniqueKeys.add(uniqueKey);
         allMatchPlayers.push({
           match_id: match.id,
-          player_id: p.player_id,
-          team: p.team,
+          player_id: playerId,
+          team: "A",
+        });
+      });
+
+      teamBPlayers.forEach((playerId) => {
+        const uniqueKey = `${match.id}-${playerId}`;
+        if (uniqueKeys.has(uniqueKey)) return;
+
+        uniqueKeys.add(uniqueKey);
+        allMatchPlayers.push({
+          match_id: match.id,
+          player_id: playerId,
+          team: "B",
         });
       });
     });
 
     if (allMatchPlayers.length > 0) {
-      const { error: insertPlayersError } = await supabase
-        .from("match_players")
-        .insert(allMatchPlayers);
+      const chunkSize = 1000;
 
-      if (insertPlayersError) throw insertPlayersError;
+      for (let i = 0; i < allMatchPlayers.length; i += chunkSize) {
+        const chunk = allMatchPlayers.slice(i, i + chunkSize);
+        const { error: insertPlayersError } = await supabase
+          .from("match_players")
+          .insert(chunk);
+
+        if (insertPlayersError) throw insertPlayersError;
+      }
     }
 
-    toast.success("Partidos y jugadores guardados correctamente.");
+    if (allMatchPlayers.length === 0) {
+      toast.warn("Partidos guardados, pero sin jugadores asignados. Revisa la configuración de equipos.");
+    } else {
+      toast.success("Partidos y jugadores guardados correctamente.");
+    }
+
     setMatches(insertedMatches);
     setPreviewMatches([]);
   } catch (error) {
     console.error(error);
-    toast.error("Error al guardar los partidos.");
+    toast.error(error instanceof Error ? error.message : "Error al guardar los partidos.");
   }
 };
 
 
   return (
     <div className="space-y-8">
-      <h3 className="text-2xl font-bold text-blue-900">Configurar Calendario</h3>
+      <h3 className="text-2xl font-bold">Configurar Calendario</h3>
 
-      <div className="bg-gray-50 rounded-xl border p-6 space-y-4 shadow-sm">
-        <label className="block text-gray-700 font-medium">Juegos que debe jugar cada equipo</label>
+      <div className="app-panel p-4 sm:p-6 space-y-4">
+        <label className="block text-[hsl(var(--text-strong))] font-medium">Juegos que debe jugar cada equipo</label>
         <input
           type="number"
           min={1}
           value={gamesPerTeam}
           onChange={(e) => setGamesPerTeam(Number(e.target.value))}
-          className="border border-gray-300 rounded-lg px-4 py-2 w-full md:w-60 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+          className="input-base w-full md:w-60"
         />
 
         <button
           onClick={generateMatches}
           disabled={generating}
-          className="bg-green-600 text-white font-semibold px-6 py-2 rounded-full hover:bg-green-700 transition w-full md:w-auto"
+          className="btn-primary w-full md:w-auto rounded-full"
         >
           {generating ? "Generando..." : "Generar Partidos"}
         </button>
@@ -307,41 +347,41 @@ const handleSave = async () => {
 
       {previewMatches.length > 0 && (
         <div className="space-y-4">
-          <h4 className="text-xl font-bold text-blue-800">Partidos Generados (sin guardar)</h4>
+          <h4 className="text-xl font-bold text-[hsl(var(--primary))]">Partidos Generados (sin guardar)</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {previewMatches.map((match, idx) => (
               <div
                 key={idx}
-                className="bg-white border rounded-xl shadow p-4 flex flex-col space-y-2 hover:shadow-md transition"
+                className="app-card rounded-xl p-4 flex flex-col space-y-2 hover:shadow-md transition"
               >
-                <p className="font-semibold text-blue-900">{match.team_a} vs {match.team_b}</p>
-                <p className="text-sm text-gray-500">{match.match_date} - {match.match_time}</p>
+                <p className="font-semibold">{match.team_a} vs {match.team_b}</p>
+                <p className="text-sm text-[hsl(var(--text-subtle))]">{match.match_date} - {match.match_time}</p>
               </div>
             ))}
           </div>
           <button
             onClick={handleSave}
-            className="bg-blue-600 text-white px-6 py-2 rounded-full hover:bg-blue-700 transition"
+            className="btn-primary rounded-full"
           >
             Guardar en Base de Datos
           </button>
         </div>
       )}
 
-      <h3 className="text-xl font-bold text-blue-800 mt-10">Partidos Guardados</h3>
+      <h3 className="text-xl font-bold text-[hsl(var(--primary))] mt-10">Partidos Guardados</h3>
       {loading ? (
-        <p className="text-center text-gray-500">Cargando...</p>
+        <p className="text-center text-[hsl(var(--text-subtle))]">Cargando...</p>
       ) : matches.length === 0 ? (
-        <p className="text-center text-gray-500">No hay partidos programados aún.</p>
+        <p className="text-center text-[hsl(var(--text-subtle))]">No hay partidos programados aún.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {matches.map((match) => (
             <div
               key={match.id}
-              className="bg-white border rounded-xl shadow p-4 flex flex-col space-y-2 hover:shadow-md transition"
+              className="app-card rounded-xl p-4 flex flex-col space-y-2 hover:shadow-md transition"
             >
-              <p className="font-semibold text-blue-900">{match.team_a} vs {match.team_b}</p>
-              <p className="text-sm text-gray-500">{match.match_date} - {match.match_time}</p>
+              <p className="font-semibold">{match.team_a} vs {match.team_b}</p>
+              <p className="text-sm text-[hsl(var(--text-subtle))]">{match.match_date} - {match.match_time}</p>
             </div>
           ))}
         </div>

@@ -166,7 +166,7 @@ const TournamentTeamsConfig: React.FC<Props> = ({ tournamentId, setGlobalLoading
     <div>
       <button
         onClick={addTeam}
-        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-2xl mb-6 transition"
+        className="btn-primary rounded-2xl mb-6"
         disabled={saving}
       >
         <PlusIcon className="w-5 h-5" />
@@ -179,8 +179,8 @@ const TournamentTeamsConfig: React.FC<Props> = ({ tournamentId, setGlobalLoading
             key={team.id}
             className={`flex items-center border rounded-2xl px-4 py-2 whitespace-nowrap font-medium transition ${
               activeTeamIndex === idx
-                ? "bg-blue-600 text-white border-blue-600 shadow-md"
-                : "bg-white text-blue-700 border-blue-700"
+                ? "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] border-[hsl(var(--primary))] shadow-md"
+                : "bg-[hsl(var(--surface-1))] text-[hsl(var(--primary))] border-[hsl(var(--border))]"
             }`}
           >
             <button
@@ -191,7 +191,7 @@ const TournamentTeamsConfig: React.FC<Props> = ({ tournamentId, setGlobalLoading
             </button>
             <button
               onClick={() => deleteTeam(idx)}
-              className="ml-2 p-1 text-red-500 hover:text-red-700 transition"
+              className="ml-2 p-1 text-[hsl(var(--destructive))] hover:opacity-80 transition"
             >
               <XMarkIcon className="w-4 h-4" />
             </button>
@@ -200,29 +200,29 @@ const TournamentTeamsConfig: React.FC<Props> = ({ tournamentId, setGlobalLoading
       </div>
 
       {activeTeamIndex !== null && teams[activeTeamIndex] && (
-        <div className="rounded-2xl bg-gray-50 border border-gray-200 shadow-lg p-6 transition">
+        <div className="rounded-2xl app-panel p-4 sm:p-6 transition">
           <input
             type="text"
             placeholder="Nombre del equipo"
             value={teams[activeTeamIndex].name}
             onChange={(e) => handleNameChange(activeTeamIndex, e.target.value)}
-            className="w-full border border-gray-300 rounded-xl px-4 py-3 mb-6 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+            className="input-base text-base sm:text-lg mb-6"
           />
 
-          <div className="grid grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl border border-gray-200 shadow p-4">
-              <h4 className="text-base font-semibold mb-3 text-blue-800">Jugadores disponibles</h4>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+            <div className="app-card rounded-xl p-4">
+              <h4 className="text-base font-semibold mb-3 text-[hsl(var(--primary))]">Jugadores disponibles</h4>
               <ul className="space-y-2 overflow-y-auto max-h-72">
                 {availablePlayers.map((player) => (
                   <li
                     key={player.id}
-                    className="flex justify-between items-center bg-gray-50 hover:bg-blue-50 rounded-lg px-3 py-2 transition cursor-pointer"
+                    className="flex justify-between items-center bg-[hsl(var(--surface-2))] hover:bg-[hsl(var(--muted))] rounded-lg px-3 py-2 transition cursor-pointer"
                     onDoubleClick={() => assignPlayer(player.id)}
                   >
                     <span className="text-sm font-medium">{player.names} {player.lastnames} #{player.jerseynumber}</span>
                     <button
                       onClick={() => assignPlayer(player.id)}
-                      className="p-1 text-green-600 hover:text-green-800 transition"
+                      className="p-1 text-[hsl(var(--success))] hover:opacity-80 transition"
                     >
                       <ArrowRightIcon className="w-5 h-5" />
                     </button>
@@ -231,19 +231,19 @@ const TournamentTeamsConfig: React.FC<Props> = ({ tournamentId, setGlobalLoading
               </ul>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 shadow p-4">
-              <h4 className="text-base font-semibold mb-3 text-blue-800">Jugadores en el equipo</h4>
+            <div className="app-card rounded-xl p-4">
+              <h4 className="text-base font-semibold mb-3 text-[hsl(var(--primary))]">Jugadores en el equipo</h4>
               <ul className="space-y-2 overflow-y-auto max-h-72">
                 {currentTeamPlayers.map((player) => (
                   <li
                     key={player.id}
-                    className="flex justify-between items-center bg-gray-50 hover:bg-red-50 rounded-lg px-3 py-2 transition cursor-pointer"
+                    className="flex justify-between items-center bg-[hsl(var(--surface-2))] hover:bg-[hsl(var(--muted))] rounded-lg px-3 py-2 transition cursor-pointer"
                     onDoubleClick={() => removePlayer(player.id)}
                   >
                     <span className="text-sm font-medium">{player.names} {player.lastnames} #{player.jerseynumber}</span>
                     <button
                       onClick={() => removePlayer(player.id)}
-                      className="p-1 text-red-600 hover:text-red-800 transition"
+                      className="p-1 text-[hsl(var(--destructive))] hover:opacity-80 transition"
                     >
                       <ArrowLeftIcon className="w-5 h-5" />
                     </button>
@@ -258,7 +258,7 @@ const TournamentTeamsConfig: React.FC<Props> = ({ tournamentId, setGlobalLoading
       <div className="flex justify-end gap-3 mt-8">
         <button
           onClick={saveTeams}
-          className="px-5 py-2 rounded-2xl bg-green-600 text-white hover:bg-green-700 text-sm font-medium transition flex items-center gap-2"
+          className="btn-primary rounded-2xl"
           disabled={saving}
         >
           {saving && <ArrowPathIcon className="w-5 h-5 animate-spin" />}

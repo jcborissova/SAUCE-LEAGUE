@@ -73,8 +73,8 @@ const GameModal: React.FC<Props> = ({ onClose, onFinish }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-2">
-      <div className="bg-white rounded-2xl shadow-xl p-4 w-full max-w-5xl space-y-6 relative">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-2 sm:px-4">
+      <div className="card rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-5xl space-y-6 relative">
         <ScorePanel
           scoreA={scoreA}
           scoreB={scoreB}
@@ -102,7 +102,8 @@ const GameModal: React.FC<Props> = ({ onClose, onFinish }) => {
             setIsRunning(false);
             onClose();
           }}
-          className="absolute top-2 right-4 text-gray-400 hover:text-gray-700 text-lg font-bold"
+          className="absolute top-3 right-4 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] text-lg font-bold"
+          aria-label="Cerrar"
         >
           ✕
         </button>

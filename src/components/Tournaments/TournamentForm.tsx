@@ -32,24 +32,24 @@ const TournamentForm: React.FC<{ onCreated: () => void }> = ({ onCreated }) => {
   };
 
   return (
-    <div className="bg-white p-4 rounded-xl shadow-md space-y-4">
-      <h3 className="text-lg font-semibold text-blue-950 mb-3">Crear Nuevo Torneo</h3>
+    <div className="app-card p-4 rounded-xl space-y-4">
+      <h3 className="text-lg font-semibold mb-3">Crear Nuevo Torneo</h3>
 
       <div>
-        <label className="font-semibold text-blue-900">Nombre:</label>
+        <label className="font-semibold">Nombre:</label>
         <input
           type="text"
-          className="w-full border p-2 rounded mt-1"
+          className="input-base mt-1"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
       </div>
 
       <div>
-        <label className="font-semibold text-blue-900">Fecha de inicio:</label>
+        <label className="font-semibold">Fecha de inicio:</label>
         <input
           type="date"
-          className="w-full border p-2 rounded mt-1"
+          className="input-base mt-1"
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
         />
@@ -57,7 +57,7 @@ const TournamentForm: React.FC<{ onCreated: () => void }> = ({ onCreated }) => {
 
       <div className="text-center">
         <button
-          className="bg-blue-950 text-white px-6 py-2 rounded-xl text-sm hover:bg-blue-800 transition disabled:opacity-50"
+          className="btn-primary"
           disabled={loading}
           onClick={handleSubmit}
         >

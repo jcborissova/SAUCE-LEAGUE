@@ -1,258 +1,148 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useState } from "react";
-import { supabase } from "../../lib/supabase";
-import { TrophyIcon } from "@heroicons/react/24/solid";
+import { useEffect, useMemo, useState } from "react";
+import dayjs from "dayjs";
 import LoadingSpinner from "../LoadingSpinner";
+import {
+  getTournamentResultsOverview,
+  getTournamentResultsSummary,
+} from "../../services/tournamentAnalytics";
+import type { TournamentResultMatchOverview } from "../../types/tournament-analytics";
 
-type Match = {
-  id: number;
-  match_date: string;
-  match_time: string;
-  team_a: string;
-  team_b: string;
-  winner_team: string | null;
+const formatDateLabel = (value: string | null) => {
+  if (!value) return "Fecha por definir";
+  const parsed = dayjs(value);
+  return parsed.isValid() ? parsed.format("dddd DD MMM YYYY") : "Fecha por definir";
 };
 
-type PlayerStat = {
-  player_id: number;
-  points: number;
-  player: {
-    names: string;
-    lastnames: string;
-  };
-};
+const formatTime = (value: string | null) => (value ? String(value).slice(0, 5) : "--:--");
 
-type TeamPlayersMap = {
-  [teamName: string]: number[];
-};
-
-const TournamentResultsView = ({ tournamentId }: { tournamentId: string }) => {
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
-  const [playerStats, setPlayerStats] = useState<PlayerStat[]>([]);
-  const [teamPlayersMap, setTeamPlayersMap] = useState<TeamPlayersMap>({});
+const TournamentResultsView = ({
+  tournamentId,
+  embedded = false,
+}: {
+  tournamentId: string;
+  embedded?: boolean;
+}) => {
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [matches, setMatches] = useState<TournamentResultMatchOverview[]>([]);
 
   useEffect(() => {
-    const fetchMatches = async () => {
-      const { data, error } = await supabase
-        .from("matches")
-        .select("*")
-        .eq("tournament_id", tournamentId)
-        .not("winner_team", "is", null)
-        .order("match_date", { ascending: true });
+    const loadResults = async () => {
+      setLoading(true);
+      setErrorMessage(null);
 
-      if (!error) setMatches(data || []);
-    };
-
-    const fetchTeamPlayers = async () => {
-      const { data, error } = await supabase
-        .from("teams")
-        .select("name, team_players(player_id)")
-        .eq("tournament_id", tournamentId);
-
-      if (!error && data) {
-        const map: TeamPlayersMap = {};
-        for (const team of data) {
-          map[team.name] = team.team_players.map((tp: any) => tp.player_id);
-        }
-        setTeamPlayersMap(map);
+      try {
+        const rows = await getTournamentResultsOverview(tournamentId);
+        setMatches(rows);
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error ? error.message : "No se pudieron cargar los resultados del torneo."
+        );
+      } finally {
+        setLoading(false);
       }
     };
 
-    fetchMatches();
-    fetchTeamPlayers();
+    loadResults();
   }, [tournamentId]);
 
-  const fetchStats = async (match: Match) => {
-    setLoading(true);
-    setSelectedMatch(match);
+  const summary = useMemo(() => getTournamentResultsSummary(matches), [matches]);
 
-    const { data, error } = await supabase
-      .from("player_stats")
-      .select("player_id, points, player:players(id, names, lastnames)")
-      .eq("match_id", match.id);
+  const groupedResults = useMemo(() => {
+    const grouped = new Map<string, TournamentResultMatchOverview[]>();
 
-    if (!error && data) {
-      const stats: PlayerStat[] = data.map((stat: any) => ({
-        player_id: stat.player_id,
-        points: stat.points,
-        player: stat.player
-          ? {
-              names: stat.player.names,
-              lastnames: stat.player.lastnames,
-            }
-          : { names: "", lastnames: "" },
+    matches.forEach((match) => {
+      const key = match.matchDate ?? "__sin_fecha__";
+      const rows = grouped.get(key) ?? [];
+      rows.push(match);
+      grouped.set(key, rows);
+    });
+
+    return Array.from(grouped.entries())
+      .sort((a, b) => {
+        if (a[0] === "__sin_fecha__") return 1;
+        if (b[0] === "__sin_fecha__") return -1;
+        return new Date(b[0]).getTime() - new Date(a[0]).getTime();
+      })
+      .map(([key, rows]) => ({
+        key,
+        label: formatDateLabel(key === "__sin_fecha__" ? null : key),
+        rows: rows.sort((a, b) => formatTime(b.matchTime).localeCompare(formatTime(a.matchTime))),
       }));
-      setPlayerStats(stats);
-    }
-
-    setLoading(false);
-  };
-
-  const groupByTeam = (teamName: string) => {
-    const playerIds = teamPlayersMap[teamName] || [];
-    return playerStats
-      .filter((s) => playerIds.includes(s.player_id))
-      .sort((a, b) => b.points - a.points);
-  };
-
-  const getTeamTotal = (teamName: string) => {
-    return groupByTeam(teamName).reduce((sum, s) => sum + s.points, 0);
-  };
-
-  const getUngroupedStats = () => {
-    const assignedIds = Object.values(teamPlayersMap).flat();
-    return playerStats
-      .filter((s) => !assignedIds.includes(s.player_id))
-      .sort((a, b) => b.points - a.points);
-  };
+  }, [matches]);
 
   return (
-    <div className="max-w-7xl mx-auto px-2 sm:px-4 py-6 space-y-8">
-      <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-center text-gray-800">
-        Resultados del Torneo
-      </h2>
+    <section className="space-y-4">
+      {!embedded ? (
+        <header className="space-y-1">
+          <h2 className="text-xl sm:text-2xl font-bold">Resultados</h2>
+          <p className="text-sm text-[hsl(var(--text-subtle))]">Marcador simple por partido: equipos y puntos.</p>
+        </header>
+      ) : (
+        <p className="text-sm text-[hsl(var(--text-subtle))]">Resultados del torneo en formato simple.</p>
+      )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-        {matches.map((match) => (
-          <div
-            key={match.id}
-            onClick={() => fetchStats(match)}
-            className={`cursor-pointer rounded-lg border border-gray-300 bg-white p-4 sm:p-5 transition hover:shadow-md ${
-              selectedMatch?.id === match.id ? "ring-2 ring-blue-500" : ""
-            }`}
-          >
-<div className="flex flex-col items-center sm:items-start sm:flex-row sm:justify-between gap-2 mb-3 border-b pb-2">
-  <div className="text-center sm:text-left flex-1">
-    <h3 className="text-sm sm:text-base font-bold text-gray-800">
-      {match.team_a}
-    </h3>
-    <div className="my-1">
-      <span className="inline-block px-3 py-0.5 rounded-full bg-blue-100 text-blue-600 text-xs sm:text-sm font-semibold shadow-sm tracking-widest">
-        VS
-      </span>
-    </div>
-    <h3 className="text-sm sm:text-base font-bold text-gray-800">
-      {match.team_b}
-    </h3>
-  </div>
-
-  {match.winner_team && (
-    <div className="flex items-center gap-1 text-green-600 text-xs sm:text-sm font-semibold">
-      <TrophyIcon className="w-4 h-4" />
-      <span className="truncate max-w-[140px]">{match.winner_team}</span>
-    </div>
-  )}
-</div>
-
-            <p className="text-xs sm:text-sm text-gray-500">
-              {match.match_date} • {match.match_time}
-            </p>
-          </div>
-        ))}
+      <div className="text-xs text-[hsl(var(--text-subtle))]">
+        Partidos: <span className="font-semibold text-[hsl(var(--foreground))]">{summary.playedMatches}</span>
+        <span className="mx-1">•</span>
+        Con marcador: <span className="font-semibold text-[hsl(var(--foreground))]">{summary.matchesWithStats}</span>
       </div>
 
-      {selectedMatch && (
-        <div className="bg-white border rounded-xl shadow-md px-4 sm:px-6 py-5">
-          <div className="text-center mb-6">
-            <h3 className="text-xl sm:text-2xl font-bold text-gray-800">
-              {selectedMatch.team_a}
-            </h3>
+      {errorMessage ? (
+        <div className="rounded-md border border-[hsl(var(--destructive)/0.35)] bg-[hsl(var(--destructive)/0.08)] px-3 py-2 text-sm text-[hsl(var(--destructive))]">
+          {errorMessage}
+        </div>
+      ) : null}
 
-            <div className="my-1 sm:my-2">
-              <span className="inline-block px-3 py-0.5 rounded-full bg-blue-100 text-blue-600 text-xs sm:text-sm font-semibold shadow-sm tracking-widest">
-                VS
-              </span>
-            </div>
+      {loading ? (
+        <LoadingSpinner label="Cargando resultados" />
+      ) : groupedResults.length === 0 ? (
+        <div className="app-card p-6 text-center text-sm text-[hsl(var(--text-subtle))]">
+          No hay resultados cargados todavía.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {groupedResults.map((group) => (
+            <article key={group.key} className="app-card overflow-hidden">
+              <div className="border-b bg-[hsl(var(--surface-2))] px-3 py-2.5">
+                <h3 className="text-sm font-semibold capitalize">{group.label}</h3>
+              </div>
 
-            <h3 className="text-xl sm:text-2xl font-bold text-gray-800">
-              {selectedMatch.team_b}
-            </h3>
+              <div className="divide-y">
+                {group.rows.map((match) => {
+                  const hasScore = match.hasStats;
+                  const winnerIsA = match.winnerTeam === match.teamA;
+                  const winnerIsB = match.winnerTeam === match.teamB;
 
-            <p className="mt-2 text-sm sm:text-base text-gray-500 italic">
-              Estadísticas del partido
-            </p>
-          </div>
+                  return (
+                    <div key={match.matchId} className="px-3 py-3">
+                      <div className="flex items-center justify-between text-xs text-[hsl(var(--text-subtle))]">
+                        <span>{formatTime(match.matchTime)}</span>
+                        <span>{match.winnerTeam ? "Finalizado" : "Programado"}</span>
+                      </div>
 
-          {loading ? (
-            <LoadingSpinner />
-          ) : playerStats.length === 0 ? (
-            <p className="text-center text-sm text-gray-500">
-              No hay estadísticas disponibles.
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              {[selectedMatch.team_a, selectedMatch.team_b].map((team) => (
-                <div key={team}>
-                  <h4 className="text-sm sm:text-base font-semibold text-blue-700 mb-2">
-                    {team}
-                  </h4>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs sm:text-sm text-left border border-gray-200 rounded-md">
-                      <thead className="bg-gray-100 text-gray-700 uppercase text-[10px] sm:text-xs font-bold">
-                        <tr>
-                          <th className="px-3 py-2">Jugador</th>
-                          <th className="px-3 py-2 text-center">Puntos</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {groupByTeam(team).map((stat, idx) => (
-                          <tr key={idx} className="bg-white hover:bg-gray-50">
-                            <td className="px-3 py-2 text-gray-800">
-                              {stat.player.names} {stat.player.lastnames}
-                            </td>
-                            <td className="px-3 py-2 text-center font-bold text-blue-800">
-                              {stat.points}
-                            </td>
-                          </tr>
-                        ))}
-                        <tr className="bg-blue-50 font-bold">
-                          <td className="px-3 py-2 text-gray-900">Total</td>
-                          <td className="px-3 py-2 text-center text-blue-900">
-                            {getTeamTotal(team)}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ))}
+                      <div className="mt-1 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                        <p className={`truncate text-sm font-semibold ${winnerIsA ? "text-[hsl(var(--primary))]" : ""}`}>
+                          {match.teamA}
+                        </p>
 
-              {getUngroupedStats().length > 0 && (
-                <div className="lg:col-span-2">
-                  <h4 className="text-sm sm:text-base font-semibold text-red-700 mb-2">
-                    Sin equipo
-                  </h4>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs sm:text-sm text-left border border-gray-200 rounded-md">
-                      <thead className="bg-gray-100 text-gray-700 uppercase text-[10px] sm:text-xs font-bold">
-                        <tr>
-                          <th className="px-3 py-2">Jugador</th>
-                          <th className="px-3 py-2 text-center">Puntos</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {getUngroupedStats().map((stat, idx) => (
-                          <tr key={idx} className="bg-white hover:bg-gray-50">
-                            <td className="px-3 py-2 text-gray-800">
-                              {stat.player.names} {stat.player.lastnames}
-                            </td>
-                            <td className="px-3 py-2 text-center font-bold text-blue-800">
-                              {stat.points}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+                        <span className="text-base font-black tabular-nums">
+                          {hasScore ? `${match.teamAPoints} - ${match.teamBPoints}` : "-- - --"}
+                        </span>
+
+                        <p className={`truncate text-right text-sm font-semibold ${winnerIsB ? "text-[hsl(var(--primary))]" : ""}`}>
+                          {match.teamB}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </article>
+          ))}
         </div>
       )}
-    </div>
+    </section>
   );
 };
 

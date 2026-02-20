@@ -1,1 +1,234 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: 212 42% 98%;
+    --foreground: 221 36% 14%;
+    --muted: 213 34% 94%;
+    --muted-foreground: 218 16% 43%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 221 36% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 221 36% 14%;
+    --border: 215 30% 86%;
+    --input: 215 30% 86%;
+    --primary: 208 88% 36%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 214 36% 95%;
+    --secondary-foreground: 221 36% 14%;
+    --accent: 214 36% 95%;
+    --accent-foreground: 221 36% 14%;
+    --destructive: 0 74% 52%;
+    --destructive-foreground: 0 0% 98%;
+    --ring: 208 88% 36%;
+    --radius: 10px;
+    --surface-1: 0 0% 100%;
+    --surface-2: 213 37% 96%;
+    --surface-3: 214 31% 92%;
+    --text-subtle: 218 16% 43%;
+    --text-strong: 221 36% 14%;
+    --text-inverse: 0 0% 100%;
+    --success: 145 62% 39%;
+    --warning: 39 98% 47%;
+    --info: 208 88% 44%;
+    --chart-1: 208 88% 36%;
+    --chart-2: 196 92% 44%;
+    --chart-3: 150 60% 39%;
+    --chart-4: 36 94% 47%;
+    --chart-5: 9 84% 54%;
+    --chart-6: 172 74% 37%;
+    --chart-7: 201 88% 42%;
+    --chart-8: 337 79% 50%;
+
+    --motion-hover: 140ms;
+    --motion-tab: 220ms;
+    --motion-reveal: 280ms;
+    --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .dark {
+    --background: 223 30% 9%;
+    --foreground: 210 40% 96%;
+    --muted: 219 25% 15%;
+    --muted-foreground: 216 18% 69%;
+    --popover: 223 30% 9%;
+    --popover-foreground: 210 40% 96%;
+    --card: 222 28% 12%;
+    --card-foreground: 210 40% 96%;
+    --border: 219 21% 23%;
+    --input: 219 21% 23%;
+    --primary: 206 96% 64%;
+    --primary-foreground: 224 28% 12%;
+    --secondary: 219 25% 16%;
+    --secondary-foreground: 210 40% 96%;
+    --accent: 219 25% 16%;
+    --accent-foreground: 210 40% 96%;
+    --destructive: 0 64% 43%;
+    --destructive-foreground: 210 40% 98%;
+    --ring: 206 96% 64%;
+    --surface-1: 222 28% 12%;
+    --surface-2: 219 25% 16%;
+    --surface-3: 219 22% 21%;
+    --text-subtle: 216 18% 69%;
+    --text-strong: 210 40% 96%;
+    --text-inverse: 210 40% 98%;
+    --success: 145 63% 46%;
+    --warning: 39 98% 61%;
+    --info: 206 96% 64%;
+    --chart-1: 206 96% 64%;
+    --chart-2: 196 92% 63%;
+    --chart-3: 145 63% 52%;
+    --chart-4: 39 98% 62%;
+    --chart-5: 9 86% 63%;
+    --chart-6: 172 74% 53%;
+    --chart-7: 201 93% 62%;
+    --chart-8: 337 86% 65%;
+  }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    @apply bg-[hsl(var(--background))] text-[hsl(var(--foreground))] antialiased;
+    font-family: "Space Grotesk", system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(circle at 18% -2%, hsl(var(--primary) / 0.14), transparent 34%),
+      radial-gradient(circle at 85% 0%, hsl(var(--info) / 0.09), transparent 31%);
+    background-attachment: fixed;
+    text-rendering: geometricPrecision;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    transition-timing-function: var(--ease-smooth);
+  }
+}
+
+@layer utilities {
+  .card {
+    @apply rounded-2xl border bg-[hsl(var(--card)/0.96)] text-[hsl(var(--card-foreground))];
+  }
+
+  .surface {
+    @apply bg-[hsl(var(--background))] text-[hsl(var(--foreground))];
+  }
+
+  .app-surface {
+    @apply bg-[hsl(var(--background))] text-[hsl(var(--foreground))];
+  }
+
+  .app-panel {
+    @apply rounded-xl border bg-[hsl(var(--surface-2)/0.82)] text-[hsl(var(--foreground))];
+  }
+
+  .app-card {
+    @apply rounded-xl border bg-[hsl(var(--surface-1)/0.94)] text-[hsl(var(--foreground))];
+  }
+
+  .app-title {
+    @apply font-bold tracking-tight text-[hsl(var(--text-strong))];
+  }
+
+  .app-subtitle {
+    @apply text-sm font-medium text-[hsl(var(--text-subtle))];
+  }
+
+  .app-muted {
+    @apply text-[hsl(var(--text-subtle))];
+  }
+
+  .soft-scrollbar {
+    scrollbar-color: hsl(var(--primary) / 0.4) transparent;
+    scrollbar-width: thin;
+  }
+
+  .soft-scrollbar::-webkit-scrollbar {
+    height: 9px;
+    width: 9px;
+  }
+
+  .soft-scrollbar::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--primary) / 0.38);
+    border-radius: 999px;
+  }
+
+  .soft-scrollbar::-webkit-scrollbar-track {
+    background-color: transparent;
+  }
+}
+
+@layer components {
+  .btn-base {
+    @apply inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60;
+    transition-duration: var(--motion-hover);
+  }
+
+  .btn-primary {
+    @apply inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-[hsl(var(--primary)/0.78)] bg-[hsl(var(--primary))] px-4 py-2 text-sm font-semibold text-[hsl(var(--primary-foreground))] disabled:cursor-not-allowed disabled:opacity-60;
+    transition-duration: var(--motion-hover);
+  }
+
+  .btn-primary:hover {
+    @apply brightness-[1.04];
+  }
+
+  .btn-secondary {
+    @apply inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border bg-[hsl(var(--surface-1))] px-4 py-2 text-sm font-semibold text-[hsl(var(--foreground))] disabled:cursor-not-allowed disabled:opacity-60;
+    transition-duration: var(--motion-hover);
+  }
+
+  .btn-secondary:hover {
+    @apply border-[hsl(var(--primary)/0.35)] bg-[hsl(var(--muted)/0.9)];
+  }
+
+  .btn-danger {
+    @apply inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-[hsl(var(--destructive)/0.7)] bg-[hsl(var(--destructive))] px-4 py-2 text-sm font-semibold text-[hsl(var(--destructive-foreground))] disabled:cursor-not-allowed disabled:opacity-60;
+    transition-duration: var(--motion-hover);
+  }
+
+  .btn-danger:hover {
+    @apply brightness-110;
+  }
+
+  .input-base {
+    @apply w-full rounded-lg border bg-[hsl(var(--surface-1))] px-3 py-2 text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--text-subtle))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring)/0.3)] focus:border-[hsl(var(--ring)/0.4)];
+    transition-duration: var(--motion-hover);
+  }
+
+  .select-base {
+    @apply rounded-lg border bg-[hsl(var(--surface-1))] px-3 py-2 text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring)/0.3)] focus:border-[hsl(var(--ring)/0.4)];
+    transition-duration: var(--motion-hover);
+  }
+
+  .textarea-base {
+    @apply w-full min-h-[96px] rounded-lg border bg-[hsl(var(--surface-1))] px-3 py-2 text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--text-subtle))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring)/0.3)] focus:border-[hsl(var(--ring)/0.4)];
+    transition-duration: var(--motion-hover);
+  }
+
+  .modal-shell {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/56 p-4 backdrop-blur-[3px];
+  }
+
+  .modal-card {
+    @apply w-full max-h-[92vh] overflow-y-auto rounded-2xl border bg-[hsl(var(--surface-1))] p-5 text-[hsl(var(--foreground))] shadow-[0_20px_52px_-38px_rgba(2,6,23,0.9)] sm:p-6;
+    animation: modal-enter var(--motion-reveal) var(--ease-smooth);
+  }
+}
+
+@keyframes modal-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

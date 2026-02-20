@@ -1,208 +1,279 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import React, { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
-import * as htmlToImage from "html-to-image";
+import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
+import { supabase } from "../../lib/supabase";
 import LoadingSpinner from "../LoadingSpinner";
 
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL!,
-  import.meta.env.VITE_SUPABASE_ANON_KEY!
-);
-
 type TeamStanding = {
+  teamId: number;
   name: string;
   pj: number;
   pg: number;
   pp: number;
-  points: number;
+  winPct: number;
 };
 
 type Props = {
   tournamentId: string;
+  embedded?: boolean;
 };
 
-const TournamentStandings: React.FC<Props> = ({ tournamentId }) => {
+const formatWinPct = (value: number) => `${(value * 100).toFixed(1)}%`;
+
+const TournamentStandings: React.FC<Props> = ({ tournamentId, embedded = false }) => {
   const [standings, setStandings] = useState<TeamStanding[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-  const loadStandings = async () => {
-    const { data: teams } = await supabase
-      .from("teams")
-      .select("id, name")
+  const loadStandingsFromView = async () => {
+    const { data, error } = await supabase
+      .from("tournament_regular_standings")
+      .select("team_id, team_name, games_played, wins, losses, win_pct")
       .eq("tournament_id", tournamentId);
 
-    const { data: matches } = await supabase
-      .from("matches")
-      .select("*")
-      .eq("tournament_id", tournamentId)
-      .not("winner_team", "is", null);
+    if (error) {
+      return null;
+    }
 
-    const teamStats: Record<string, TeamStanding> = {};
+    return (data || []).map((row) => ({
+      teamId: Number(row.team_id),
+      name: String(row.team_name),
+      pj: Number(row.games_played ?? 0),
+      pg: Number(row.wins ?? 0),
+      pp: Number(row.losses ?? 0),
+      winPct: Number(row.win_pct ?? 0),
+    }));
+  };
 
-    teams?.forEach((team) => {
-      teamStats[team.name] = {
+  const loadStandingsFallback = async () => {
+    const [{ data: teams, error: teamsError }, { data: matches, error: matchesError }] =
+      await Promise.all([
+        supabase.from("teams").select("id, name").eq("tournament_id", tournamentId),
+        supabase
+          .from("matches")
+          .select("team_a, team_b, winner_team")
+          .eq("tournament_id", tournamentId)
+          .not("winner_team", "is", null),
+      ]);
+
+    if (teamsError) throw teamsError;
+    if (matchesError) throw matchesError;
+
+    const grouped = new Map<string, TeamStanding>();
+
+    (teams || []).forEach((team) => {
+      grouped.set(team.name, {
+        teamId: team.id,
         name: team.name,
         pj: 0,
         pg: 0,
         pp: 0,
-        points: 0, // será reemplazado por diferencia
-      };
+        winPct: 0,
+      });
     });
 
-    matches?.forEach((match) => {
-      const {
-        team_a,
-        team_b,
-        winner_team,
-        score_team_a,
-        score_team_b,
-      } = match;
+    (matches || []).forEach((match) => {
+      const teamA = grouped.get(match.team_a);
+      const teamB = grouped.get(match.team_b);
+      if (!teamA || !teamB) return;
 
-      if (!teamStats[team_a] || !teamStats[team_b]) return;
+      teamA.pj += 1;
+      teamB.pj += 1;
 
-      teamStats[team_a].pj++;
-      teamStats[team_b].pj++;
-
-      const scoreA = score_team_a || 0;
-      const scoreB = score_team_b || 0;
-
-      if (winner_team === team_a) {
-        teamStats[team_a].pg++;
-        teamStats[team_b].pp++;
-      } else if (winner_team === team_b) {
-        teamStats[team_b].pg++;
-        teamStats[team_a].pp++;
+      if (match.winner_team === match.team_a) {
+        teamA.pg += 1;
+        teamB.pp += 1;
+      } else if (match.winner_team === match.team_b) {
+        teamB.pg += 1;
+        teamA.pp += 1;
       }
-
-      // Acumular puntos a favor y en contra
-      teamStats[team_a].points += scoreA - scoreB;
-      teamStats[team_b].points += scoreB - scoreA;
     });
 
-    const sorted = Object.values(teamStats).sort((a, b) => {
-      if (b.points !== a.points) return b.points - a.points;
-      return b.pg - a.pg;
-    });
-
-    setStandings(sorted);
-    setLoading(false);
+    return Array.from(grouped.values()).map((team) => ({
+      ...team,
+      winPct: team.pj > 0 ? team.pg / team.pj : 0,
+    }));
   };
 
-  loadStandings();
-}, [tournamentId]);
-
-
-  const handleExport = async () => {
-    const element = document.getElementById("tabla-posiciones");
-    if (!element) {
-      toast.error("No se encontró el contenedor");
-      return;
-    }
-
+  const loadStandings = async () => {
+    setLoading(true);
     try {
-      await new Promise((r) => setTimeout(r, 300));
-      const dataUrl = await htmlToImage.toPng(element, {
-        pixelRatio: 2,
-        cacheBust: true,
-        backgroundColor: "white",
-      });
-
-      const link = document.createElement("a");
-      link.download = `Tabla_Posiciones_SauceLeague.png`;
-      link.href = dataUrl;
-      link.click();
-      toast.success("Tabla exportada correctamente");
+      const fromView = await loadStandingsFromView();
+      const rows = fromView ?? (await loadStandingsFallback());
+      setStandings(rows);
     } catch (error) {
       console.error(error);
-      toast.error("Error al exportar tabla");
+      toast.error("No se pudo cargar la tabla de posiciones.");
+    } finally {
+      setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadStandings();
+  }, [tournamentId]);
+
+  const sorted = useMemo(
+    () =>
+      [...standings].sort((a, b) => {
+        if (b.pg !== a.pg) return b.pg - a.pg;
+        if (b.winPct !== a.winPct) return b.winPct - a.winPct;
+        return a.teamId - b.teamId;
+      }),
+    [standings]
+  );
+
+  const totalGames = useMemo(
+    () => Math.round(sorted.reduce((acc, team) => acc + team.pj, 0) / 2),
+    [sorted]
+  );
+  const maxWins = useMemo(
+    () => sorted.reduce((max, team) => Math.max(max, team.pg), 0),
+    [sorted]
+  );
+  const seededTeams = Math.min(4, sorted.length);
 
   if (loading) return <LoadingSpinner />;
 
-return (
-  <div className="w-full px-2 sm:px-4 lg:px-10">
-  <div
-    id="tabla-posiciones"
-    className="relative w-full max-w-full sm:max-w-2xl lg:max-w-4xl mx-auto rounded-xl shadow-2xl border border-blue-600 p-4 sm:p-6 overflow-hidden"
-    style={{
-      backgroundImage: `url('/game-bg.png')`,
-      backgroundSize: "cover",
-      backgroundPosition: "center",
-      backgroundRepeat: "no-repeat",
-    }}
-  >
-    {/* Overlay */}
-    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-0" />
+  if (sorted.length === 0) {
+    return (
+      <section className="space-y-4">
+        {!embedded ? (
+          <div>
+            <h3 className="text-xl sm:text-2xl font-bold">Tabla de Posiciones</h3>
+            <p className="text-sm text-[hsl(var(--text-subtle))]">
+              Orden oficial para siembra de playoffs (desempate por orden de equipo).
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-[hsl(var(--text-subtle))]">
+            Orden oficial para siembra de playoffs (desempate por orden de equipo).
+          </p>
+        )}
 
-    {/* Logo */}
-    <img
-      src="/sl-logo-white.png"
-      alt="Sauce League"
-      className="absolute top-3 right-3 w-12 sm:w-16 lg:w-20 z-0"
-    />
+        <div className="app-card p-5 text-center">
+          <p className="text-sm text-[hsl(var(--text-subtle))]">
+            Todavía no hay resultados cargados para calcular posiciones.
+          </p>
+        </div>
+      </section>
+    );
+  }
 
-    {/* Export Button */}
-    <button
-      onClick={handleExport}
-      className="absolute top-3 left-3 flex items-center gap-1 bg-yellow-400 text-black font-bold px-2 sm:px-3 py-1 text-[10px] sm:text-xs rounded-full shadow hover:bg-yellow-300 transition z-0"
-    >
-    </button>
+  return (
+    <section className="space-y-4 sm:space-y-5">
+      {!embedded ? (
+        <div>
+          <h3 className="text-xl sm:text-2xl font-bold">Tabla de Posiciones</h3>
+          <p className="text-sm text-[hsl(var(--text-subtle))]">
+            Orden oficial para siembra de playoffs (desempate por orden de equipo).
+          </p>
+        </div>
+      ) : (
+        <p className="text-sm text-[hsl(var(--text-subtle))]">
+          Orden oficial para siembra de playoffs (desempate por orden de equipo).
+        </p>
+      )}
 
-    {/* Title */}
-    <div className="relative z-0 text-center mt-14 sm:mt-16 mb-6">
-      <h2 className="text-xl sm:text-2xl md:text-3xl font-extrabold uppercase tracking-wider text-yellow-400 drop-shadow">
-        Tabla de Posiciones
-      </h2>
-      <p className="text-blue-100 text-xs sm:text-sm md:text-base font-medium italic">
-        Sauce League • Clasificación oficial
-      </p>
-    </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="app-card rounded-xl px-3 py-2.5">
+          <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+            Equipos
+          </p>
+          <p className="text-lg font-bold">{sorted.length}</p>
+        </div>
+        <div className="app-card rounded-xl px-3 py-2.5">
+          <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+            Partidos
+          </p>
+          <p className="text-lg font-bold">{totalGames}</p>
+        </div>
+        <div className="app-card rounded-xl px-3 py-2.5">
+          <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+            Zona Playoffs
+          </p>
+          <p className="text-lg font-bold">{seededTeams}</p>
+        </div>
+        <div className="app-card rounded-xl px-3 py-2.5">
+          <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+            Líder
+          </p>
+          <p className="text-sm font-semibold truncate">{sorted[0]?.name ?? "-"}</p>
+        </div>
+      </div>
 
-    {/* Table */}
-    <div className="relative z-0 overflow-x-auto">
-      <table className="w-full text-[10px] sm:text-xs md:text-sm text-white border-collapse">
-        <thead className="bg-blue-900/90 uppercase text-yellow-400">
-          <tr>
-            <th className="px-2 py-2 text-left">#</th>
-            <th className="px-2 py-2 text-left">Equipo</th>
-            <th className="px-2 py-2 text-center">PJ</th>
-            <th className="px-2 py-2 text-center">PG</th>
-            <th className="px-2 py-2 text-center">PP</th>
-           
-          </tr>
-        </thead>
-        <tbody>
-          {standings.map((team, idx) => (
-            <tr
-              key={team.name}
-              className={`${
-                idx % 2 === 0 ? "bg-white/5" : "bg-white/10"
-              } hover:bg-yellow-100/10 transition`}
-            >
-              <td className="px-2 py-2 font-bold">{idx + 1}</td>
-              <td className="px-2 py-2 font-semibold">{team.name}</td>
-              <td className="px-2 py-2 text-center">{team.pj}</td>
-              <td className="px-2 py-2 text-center text-green-400 font-bold">{team.pg}</td>
-              <td className="px-2 py-2 text-center text-red-400 font-bold">{team.pp}</td>
-              
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+      <div className="overflow-hidden rounded-2xl border bg-[hsl(var(--surface-1))]">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[660px] text-xs sm:text-sm">
+            <thead className="bg-[hsl(var(--surface-2))] text-[hsl(var(--text-subtle))] sticky top-0">
+              <tr>
+                <th className="px-3 py-2.5 sm:px-4 sm:py-3 text-left font-semibold">Seed</th>
+                <th className="px-3 py-2.5 sm:px-4 sm:py-3 text-left font-semibold">Equipo</th>
+                <th className="px-3 py-2.5 sm:px-4 sm:py-3 text-center font-semibold">PJ</th>
+                <th className="px-3 py-2.5 sm:px-4 sm:py-3 text-center font-semibold">PG</th>
+                <th className="px-3 py-2.5 sm:px-4 sm:py-3 text-center font-semibold">PP</th>
+                <th className="px-3 py-2.5 sm:px-4 sm:py-3 text-center font-semibold">Win%</th>
+                <th className="px-3 py-2.5 sm:px-4 sm:py-3 text-center font-semibold">Barra</th>
+                <th className="px-3 py-2.5 sm:px-4 sm:py-3 text-right font-semibold">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((team, index) => {
+                const seed = index + 1;
+                const playoffSpot = seed <= 4;
+                const winProgress = maxWins > 0 ? (team.pg / maxWins) * 100 : 0;
 
-    {/* Footer */}
-    <p className="relative z-10 text-center text-[10px] sm:text-xs text-white/60 mt-6 italic">
-      © Sauce League 2025
-    </p>
-  </div>
-</div>
-
-);
-
+                return (
+                  <tr
+                    key={team.teamId}
+                    className="border-t border-[hsl(var(--border))] hover:bg-[hsl(var(--surface-2))]"
+                  >
+                    <td className="px-3 py-2.5 sm:px-4 sm:py-3">
+                      <span
+                        className={`inline-flex h-6 min-w-6 items-center justify-center rounded-lg px-2 text-[11px] sm:h-7 sm:min-w-7 sm:text-xs font-bold ${
+                          playoffSpot
+                            ? "bg-[hsl(var(--primary)/0.16)] text-[hsl(var(--primary))]"
+                            : "bg-[hsl(var(--muted))] text-[hsl(var(--text-subtle))]"
+                        }`}
+                      >
+                        #{seed}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 sm:px-4 sm:py-3 font-semibold">{team.name}</td>
+                    <td className="px-3 py-2.5 sm:px-4 sm:py-3 text-center">{team.pj}</td>
+                    <td className="px-3 py-2.5 sm:px-4 sm:py-3 text-center font-semibold text-[hsl(var(--success))]">
+                      {team.pg}
+                    </td>
+                    <td className="px-3 py-2.5 sm:px-4 sm:py-3 text-center font-semibold text-[hsl(var(--destructive))]">
+                      {team.pp}
+                    </td>
+                    <td className="px-3 py-2.5 sm:px-4 sm:py-3 text-center">{formatWinPct(team.winPct)}</td>
+                    <td className="px-3 py-2.5 sm:px-4 sm:py-3">
+                      <div className="mx-auto h-1.5 w-16 sm:w-24 overflow-hidden rounded-full bg-[hsl(var(--surface-3))]">
+                        <div
+                          className="h-full rounded-full bg-[hsl(var(--primary))]"
+                          style={{ width: `${winProgress}%` }}
+                        />
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 sm:px-4 sm:py-3 text-right">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 sm:px-2.5 sm:py-1 text-[11px] sm:text-xs font-semibold ${
+                          playoffSpot
+                            ? "bg-[hsl(var(--success)/0.14)] text-[hsl(var(--success))]"
+                            : "bg-[hsl(var(--muted))] text-[hsl(var(--text-subtle))]"
+                        }`}
+                      >
+                        {playoffSpot ? "Playoffs" : "Fuera"}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  );
 };
 
 export default TournamentStandings;

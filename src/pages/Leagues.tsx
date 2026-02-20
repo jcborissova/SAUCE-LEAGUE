@@ -7,6 +7,9 @@ import LeagueManager from "../components/League/LeagueManager";
 import { ArrowPathIcon } from "@heroicons/react/16/solid";
 import ConfirmModal from "../components/ConfirmModal";
 import LeagueItem from "../components/League/LeagueItem";
+import ModalShell from "../components/ui/ModalShell";
+import PageHeader from "../components/ui/PageHeader";
+import Field from "../components/ui/Field";
 
 
 type League = {
@@ -77,14 +80,7 @@ const LeaguesPage: React.FC = () => {
         .eq("league_id", leagueId);
       if (matchError) throw matchError;
   
-      // 3. (Opcional) Elimina los resultados históricos si usas una tabla `matches`
-      const { error: matchesError } = await supabase
-        .from("matches")
-        .delete()
-        .eq("league_id", leagueId);
-      if (matchesError) throw matchesError;
-  
-      // 4. Ahora sí, elimina la liga
+      // 3. Ahora sí, elimina la liga
       const { error: leagueError } = await supabase
         .from("leagues")
         .delete()
@@ -108,38 +104,48 @@ const LeaguesPage: React.FC = () => {
 
   if (selectedLeague)
     return (
-      <div className="mx-auto px-4">
+      <div className="mx-auto px-3 py-4 sm:px-4 sm:py-6 space-y-4">
         <button
           onClick={() => setSelectedLeague(null)}
-          className="text-blue-700 text-sm mb-4 flex items-center"
+          className="btn-secondary w-full sm:w-auto"
         >
-          ← Volver a lista de ligas
+          <span className="text-lg leading-none">←</span>
+          Volver a lista de ligas
         </button>
-        <h2 className="text-2xl font-bold text-blue-950 mb-2">{selectedLeague.name}</h2>
-        <p className="text-gray-600 mb-6">{selectedLeague.description}</p>
-        <LeagueManager leagueId={selectedLeague.id} />
+        <div className="app-card rounded-2xl p-4 sm:p-5 space-y-2">
+          <h2 className="text-3xl font-bold">{selectedLeague.name}</h2>
+          <p className="text-[hsl(var(--muted-foreground))]">{selectedLeague.description}</p>
+        </div>
+        <div className="card p-4 sm:p-6">
+          <LeagueManager leagueId={selectedLeague.id} />
+        </div>
       </div>
     );
 
   return (
-    <div className="mx-auto px-4 py-6 space-y-6">
-      <h2 className="text-3xl font-bold text-blue-950">Ligas</h2>
-
-      <div>
-        <button
-          className="bg-blue-950 text-white px-6 py-2 rounded-xl hover:bg-blue-800 transition"
-          onClick={() => setShowModal(true)}
-        >
-          Crear nueva liga
-        </button>
-      </div>
+    <div className="mx-auto px-3 py-4 sm:px-4 sm:py-6 space-y-5">
+      <PageHeader
+        title="Ligas"
+        subtitle="Crea y administra las ligas activas."
+        badge="Competencia"
+        actions={
+          <button className="btn-primary w-full sm:w-auto" onClick={() => setShowModal(true)}>
+            Crear liga
+          </button>
+        }
+      />
 
       {loading ? (
         <div className="flex justify-center py-10">
-          <ArrowPathIcon className="w-10 h-10 animate-spin text-blue-600" />
+          <ArrowPathIcon className="w-10 h-10 animate-spin text-[hsl(var(--primary))]" />
         </div>
       ) : (
         <ul className="space-y-3">
+          {leagues.length === 0 ? (
+            <li className="app-card p-6 text-center text-sm text-[hsl(var(--text-subtle))]">
+              Todavía no hay ligas registradas.
+            </li>
+          ) : null}
           {leagues.map((l) => (
             <LeagueItem
               key={l.id}
@@ -155,51 +161,40 @@ const LeaguesPage: React.FC = () => {
 
       )}
 
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
-          <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md animate-fade-in">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-blue-950">Nueva Liga</h3>
-              <button
-                onClick={() => setShowModal(false)}
-                className="text-gray-400 hover:text-gray-600 text-2xl font-bold"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <input
-                type="text"
-                placeholder="Nombre"
-                value={newLeague.name}
-                onChange={(e) => setNewLeague((p) => ({ ...p, name: e.target.value }))}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring focus:border-blue-500"
-              />
-              <textarea
-                placeholder="Descripción"
-                value={newLeague.description}
-                onChange={(e) => setNewLeague((p) => ({ ...p, description: e.target.value }))}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring focus:border-blue-500"
-              />
-              <div className="flex justify-end gap-2">
-                <button
-                  className="px-4 py-2 rounded-lg bg-gray-300 hover:bg-gray-400 text-sm"
-                  onClick={() => setShowModal(false)}
-                >
-                  Cancelar
-                </button>
-                <button
-                  className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 text-sm"
-                  onClick={handleCreate}
-                >
-                  Guardar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ModalShell
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title="Nueva Liga"
+        maxWidthClassName="max-w-md"
+        actions={
+          <>
+            <button className="btn-secondary" onClick={() => setShowModal(false)}>
+              Cancelar
+            </button>
+            <button className="btn-primary" onClick={handleCreate}>
+              Guardar
+            </button>
+          </>
+        }
+      >
+        <Field label="Nombre">
+          <input
+            type="text"
+            placeholder="Nombre"
+            value={newLeague.name}
+            onChange={(e) => setNewLeague((p) => ({ ...p, name: e.target.value }))}
+            className="input-base"
+          />
+        </Field>
+        <Field label="Descripción">
+          <textarea
+            placeholder="Descripción"
+            value={newLeague.description}
+            onChange={(e) => setNewLeague((p) => ({ ...p, description: e.target.value }))}
+            className="textarea-base"
+          />
+        </Field>
+      </ModalShell>
 
       <ConfirmModal
         isOpen={showConfirm}

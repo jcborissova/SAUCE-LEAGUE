@@ -16,11 +16,11 @@ const TournamentList: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-bold text-blue-950 mb-4">Torneos Registrados</h2>
+      <h2 className="text-xl font-bold mb-4">Torneos Registrados</h2>
       {tournaments.map((t) => (
-        <div key={t.id} className="bg-white p-4 rounded-xl shadow-md">
-          <div className="font-semibold text-blue-900">{t.name}</div>
-          <div className="text-sm text-gray-500">Inicio: {t.start_date}</div>
+        <div key={t.id} className="app-card p-4 rounded-xl">
+          <div className="font-semibold">{t.name}</div>
+          <div className="text-sm text-[hsl(var(--text-subtle))]">Inicio: {t.start_date}</div>
         </div>
       ))}
     </div>

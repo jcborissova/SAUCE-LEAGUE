@@ -16,19 +16,20 @@ const TeamList: React.FC<Props> = ({ players, title, teamMode = false }) => {
     const quintetoB = players.slice(5, 10);
 
     return (
-      <div className="space-y-6">
-        {title && <h4 className="font-semibold text-blue-950 text-lg">{title}</h4>}
-        <div>
-          <h4 className="font-semibold text-blue-950">Quinteto A</h4>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            {quintetoA.map((player) => <PlayerCard key={player.id} player={player} />)}
+      <div className="space-y-4">
+        {title && <h4 className="font-semibold text-lg">{title}</h4>}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="card p-3">
+            <h4 className="font-semibold mb-2">Quinteto A</h4>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {quintetoA.map((player) => <PlayerCard key={player.id} player={player} />)}
+            </div>
           </div>
-        </div>
-
-        <div>
-          <h4 className="font-semibold text-blue-950">Quinteto B</h4>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            {quintetoB.map((player) => <PlayerCard key={player.id} player={player} />)}
+          <div className="card p-3">
+            <h4 className="font-semibold mb-2">Quinteto B</h4>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {quintetoB.map((player) => <PlayerCard key={player.id} player={player} />)}
+            </div>
           </div>
         </div>
       </div>
@@ -37,7 +38,7 @@ const TeamList: React.FC<Props> = ({ players, title, teamMode = false }) => {
 
   return (
     <div className="space-y-2">
-      {title && <h4 className="font-semibold text-blue-950 text-lg">{title}</h4>}
+      {title && <h4 className="font-semibold text-lg">{title}</h4>}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {players.map((player) => <PlayerCard key={player.id} player={player} />)}
       </div>

@@ -60,8 +60,8 @@ const RoleProvider = ({ children }: { children: ReactNode }) => {
 
   if (accessPending) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 px-4">
-        <div className="bg-white shadow-2xl rounded-3xl p-8 sm:p-10 max-w-md w-full space-y-6 relative">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[hsl(var(--surface-2))] to-[hsl(var(--surface-3))] px-4">
+        <div className="app-card shadow-2xl rounded-3xl p-8 sm:p-10 max-w-md w-full space-y-6 relative">
           {/* Logo */}
           <div className="flex justify-center">
             <img
@@ -72,10 +72,10 @@ const RoleProvider = ({ children }: { children: ReactNode }) => {
           </div>
 
           <div className="text-center">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-blue-900 tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-[hsl(var(--text-strong))] tracking-tight">
               Acceso al Torneo
             </h1>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-[hsl(var(--text-subtle))] mt-1">
               Selecciona cómo deseas ingresar
             </p>
           </div>
@@ -84,7 +84,7 @@ const RoleProvider = ({ children }: { children: ReactNode }) => {
             <div className="space-y-4">
               <button
                 onClick={() => handleAccess("view")}
-                className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-3 rounded-xl shadow transition"
+                className="btn-secondary w-full py-3"
               >
                 <EyeIcon className="w-5 h-5" />
                 Solo ver el torneo
@@ -92,7 +92,7 @@ const RoleProvider = ({ children }: { children: ReactNode }) => {
 
               <button
                 onClick={() => handleAccess("admin")}
-                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-xl shadow transition"
+                className="btn-primary w-full py-3"
               >
                 <LockClosedIcon className="w-5 h-5" />
                 Modo administrador
@@ -103,10 +103,10 @@ const RoleProvider = ({ children }: { children: ReactNode }) => {
           {step === "password" && (
             <div className="space-y-4">
               <div>
-                <h2 className="text-xl font-bold text-blue-900 text-center">
+                <h2 className="text-xl font-bold text-[hsl(var(--text-strong))] text-center">
                   Ingresa la contraseña
                 </h2>
-                <p className="text-sm text-gray-500 text-center mt-1">
+                <p className="text-sm text-[hsl(var(--text-subtle))] text-center mt-1">
                   Solo los administradores pueden continuar
                 </p>
               </div>
@@ -115,13 +115,13 @@ const RoleProvider = ({ children }: { children: ReactNode }) => {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="input-base"
                 placeholder="Contraseña de administrador"
               />
 
               <button
                 onClick={handlePasswordSubmit}
-                className="w-full bg-blue-700 hover:bg-blue-800 text-white py-2.5 font-semibold rounded-xl shadow transition"
+                className="btn-primary w-full py-2.5"
               >
                 Ingresar
               </button>
