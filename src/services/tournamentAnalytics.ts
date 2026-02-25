@@ -23,6 +23,7 @@ import type {
 } from "../types/tournament-analytics";
 import {
   computeBattleWinner,
+  computePct,
   computeFgPct,
   computeMvpScores,
   round2,
@@ -48,6 +49,12 @@ type EnrichedStatsRow = {
   fgm: number;
   fga: number;
   fg_pct: number;
+  ftm: number;
+  fta: number;
+  ft_pct: number;
+  tpm: number;
+  tpa: number;
+  tp_pct: number;
   team_name: string | null;
   phase: "regular" | "playoffs" | "finals";
 };
@@ -143,6 +150,10 @@ const buildPlayerLines = (
           fouls: 0,
           fgm: 0,
           fga: 0,
+          ftm: 0,
+          fta: 0,
+          tpm: 0,
+          tpa: 0,
         },
       };
 
@@ -160,6 +171,10 @@ const buildPlayerLines = (
       existing.totals.fouls += toNumber(row.fouls);
       existing.totals.fgm += toNumber(row.fgm);
       existing.totals.fga += toNumber(row.fga);
+      existing.totals.ftm += toNumber(row.ftm);
+      existing.totals.fta += toNumber(row.fta);
+      existing.totals.tpm += toNumber(row.tpm);
+      existing.totals.tpa += toNumber(row.tpa);
 
       grouped.set(row.player_id, existing);
     });
@@ -184,6 +199,8 @@ const buildPlayerLines = (
         fpg: gamesPlayed > 0 ? round2(entry.totals.fouls / gamesPlayed) : 0,
       },
       fgPct: computeFgPct(entry.totals.fgm, entry.totals.fga),
+      ftPct: computePct(entry.totals.ftm, entry.totals.fta),
+      tpPct: computePct(entry.totals.tpm, entry.totals.tpa),
     };
   });
 };
@@ -253,6 +270,12 @@ const loadLegacyStatsRows = async (tournamentId: string): Promise<EnrichedStatsR
       fgm: 0,
       fga: 0,
       fg_pct: 0,
+      ftm: 0,
+      fta: 0,
+      ft_pct: 0,
+      tpm: 0,
+      tpa: 0,
+      tp_pct: 0,
       team_name: null,
       phase: "regular",
     };
@@ -320,6 +343,12 @@ const toAnalyticsPlayerGame = (row: EnrichedStatsRow): TournamentAnalyticsPlayer
   fouls: toNumber(row.fouls),
   fgm: toNumber(row.fgm),
   fga: toNumber(row.fga),
+  ftm: toNumber(row.ftm),
+  fta: toNumber(row.fta),
+  ftPct: computePct(toNumber(row.ftm), toNumber(row.fta)),
+  tpm: toNumber(row.tpm),
+  tpa: toNumber(row.tpa),
+  tpPct: computePct(toNumber(row.tpm), toNumber(row.tpa)),
   fgPct: computeFgPct(toNumber(row.fgm), toNumber(row.fga)),
 });
 
@@ -330,7 +359,7 @@ const loadStatsRowsFromAnalyticsView = async (
   let query = supabase
     .from("tournament_analytics_player_game")
     .select(
-      "tournament_id, match_id, match_date, match_time, game_order, player_id, names, lastnames, photo, team_name, phase, points, rebounds, assists, steals, blocks, turnovers, fouls, fgm, fga, fg_pct"
+      "tournament_id, match_id, match_date, match_time, game_order, player_id, names, lastnames, photo, team_name, phase, points, rebounds, assists, steals, blocks, turnovers, fouls, fgm, fga, fg_pct, ftm, fta, ft_pct, tpm, tpa, tp_pct"
     )
     .eq("tournament_id", tournamentId)
     .order("match_date", { ascending: true })
@@ -367,6 +396,12 @@ const loadStatsRowsFromAnalyticsView = async (
     fgm: toNumber(row.fgm),
     fga: toNumber(row.fga),
     fg_pct: toNumber(row.fg_pct),
+    ftm: toNumber(row.ftm),
+    fta: toNumber(row.fta),
+    ft_pct: toNumber(row.ft_pct),
+    tpm: toNumber(row.tpm),
+    tpa: toNumber(row.tpa),
+    tp_pct: toNumber(row.tp_pct),
     team_name: row.team_name ? String(row.team_name) : null,
     phase: toAnalyticsPhase(row.phase),
   }));
@@ -379,7 +414,7 @@ const loadPlayerTotalsFromAnalyticsView = async (
   let query = supabase
     .from("tournament_analytics_player_totals")
     .select(
-      "tournament_id, phase, player_id, names, lastnames, photo, team_name, games_played, points, rebounds, assists, steals, blocks, turnovers, fouls, fgm, fga, fg_pct, ppg, rpg, apg, spg, bpg, topg, fpg"
+      "tournament_id, phase, player_id, names, lastnames, photo, team_name, games_played, points, rebounds, assists, steals, blocks, turnovers, fouls, fgm, fga, fg_pct, ftm, fta, ft_pct, tpm, tpa, tp_pct, ppg, rpg, apg, spg, bpg, topg, fpg"
     )
     .eq("tournament_id", tournamentId);
 
@@ -413,6 +448,10 @@ const loadPlayerTotalsFromAnalyticsView = async (
           fouls: toNumber(row.fouls),
           fgm: toNumber(row.fgm),
           fga: toNumber(row.fga),
+          ftm: toNumber(row.ftm),
+          fta: toNumber(row.fta),
+          tpm: toNumber(row.tpm),
+          tpa: toNumber(row.tpa),
         },
         perGame: {
           ppg: toNumber(row.ppg),
@@ -424,6 +463,8 @@ const loadPlayerTotalsFromAnalyticsView = async (
           fpg: toNumber(row.fpg),
         },
         fgPct: toNumber(row.fg_pct),
+        ftPct: toNumber(row.ft_pct) || computePct(toNumber(row.ftm), toNumber(row.fta)),
+        tpPct: toNumber(row.tp_pct) || computePct(toNumber(row.tpm), toNumber(row.tpa)),
       };
     });
   }
@@ -441,6 +482,10 @@ const loadPlayerTotalsFromAnalyticsView = async (
     const fouls = toNumber(row.fouls);
     const fgm = toNumber(row.fgm);
     const fga = toNumber(row.fga);
+    const ftm = toNumber(row.ftm);
+    const fta = toNumber(row.fta);
+    const tpm = toNumber(row.tpm);
+    const tpa = toNumber(row.tpa);
     const names = row.names ? String(row.names) : null;
     const lastnames = row.lastnames ? String(row.lastnames) : null;
     const fallbackName = fullName(names, lastnames) || `Jugador ${playerId}`;
@@ -463,6 +508,10 @@ const loadPlayerTotalsFromAnalyticsView = async (
           fouls: 0,
           fgm: 0,
           fga: 0,
+          ftm: 0,
+          fta: 0,
+          tpm: 0,
+          tpa: 0,
         },
         perGame: {
           ppg: 0,
@@ -474,6 +523,8 @@ const loadPlayerTotalsFromAnalyticsView = async (
           fpg: 0,
         },
         fgPct: 0,
+        ftPct: 0,
+        tpPct: 0,
       } as PlayerStatsLine);
 
     current.name = current.name || fallbackName;
@@ -489,6 +540,10 @@ const loadPlayerTotalsFromAnalyticsView = async (
     current.totals.fouls += fouls;
     current.totals.fgm += fgm;
     current.totals.fga += fga;
+    current.totals.ftm += ftm;
+    current.totals.fta += fta;
+    current.totals.tpm += tpm;
+    current.totals.tpa += tpa;
 
     merged.set(playerId, current);
   });
@@ -505,6 +560,8 @@ const loadPlayerTotalsFromAnalyticsView = async (
       fpg: entry.gamesPlayed > 0 ? round2(entry.totals.fouls / entry.gamesPlayed) : 0,
     },
     fgPct: computeFgPct(entry.totals.fgm, entry.totals.fga),
+    ftPct: computePct(entry.totals.ftm, entry.totals.fta),
+    tpPct: computePct(entry.totals.tpm, entry.totals.tpa),
   }));
 };
 
@@ -1112,6 +1169,10 @@ export const saveMatchStats = async (payload: {
       fouls: Math.max(0, Math.floor(toNumber(row.fouls))),
       fgm: Math.max(0, Math.floor(toNumber(row.fgm))),
       fga: Math.max(0, Math.floor(toNumber(row.fga))),
+      ftm: Math.max(0, Math.floor(toNumber(row.ftm))),
+      fta: Math.max(0, Math.floor(toNumber(row.fta))),
+      tpm: Math.max(0, Math.floor(toNumber(row.tpm))),
+      tpa: Math.max(0, Math.floor(toNumber(row.tpa))),
     };
 
     if (!participantIds.has(normalized.playerId)) {
@@ -1120,6 +1181,22 @@ export const saveMatchStats = async (payload: {
 
     if (normalized.fgm > normalized.fga) {
       throw new Error(`FGM no puede ser mayor que FGA para el jugador ${normalized.playerId}.`);
+    }
+
+    if (normalized.ftm > normalized.fta) {
+      throw new Error(`FTM no puede ser mayor que FTA para el jugador ${normalized.playerId}.`);
+    }
+
+    if (normalized.tpm > normalized.tpa) {
+      throw new Error(`3PM no puede ser mayor que 3PA para el jugador ${normalized.playerId}.`);
+    }
+
+    if (normalized.tpa > normalized.fga) {
+      throw new Error(`3PA no puede ser mayor que FGA para el jugador ${normalized.playerId}.`);
+    }
+
+    if (normalized.tpm > normalized.fgm) {
+      throw new Error(`3PM no puede ser mayor que FGM para el jugador ${normalized.playerId}.`);
     }
 
     return normalized;
@@ -1162,6 +1239,10 @@ export const saveMatchStats = async (payload: {
     fouls: row.fouls,
     fgm: row.fgm,
     fga: row.fga,
+    ftm: row.ftm,
+    fta: row.fta,
+    tpm: row.tpm,
+    tpa: row.tpa,
   }));
 
   let statsError: { message: string } | null = null;
@@ -1337,6 +1418,10 @@ const toBoxscoreRowFromView = (row: Record<string, unknown>): TournamentResultBo
   const playerName = `${names} ${lastnames}`.trim() || `Jugador ${toNumber(row.player_id)}`;
   const fgm = toNumber(row.fgm);
   const fga = toNumber(row.fga);
+  const ftm = toNumber(row.ftm);
+  const fta = toNumber(row.fta);
+  const tpm = toNumber(row.tpm);
+  const tpa = toNumber(row.tpa);
 
   return {
     playerId: toNumber(row.player_id),
@@ -1355,6 +1440,12 @@ const toBoxscoreRowFromView = (row: Record<string, unknown>): TournamentResultBo
     fgm,
     fga,
     fgPct: toNumber(row.fg_pct) || computeFgPct(fgm, fga),
+    ftm,
+    fta,
+    ftPct: toNumber(row.ft_pct) || computePct(ftm, fta),
+    tpm,
+    tpa,
+    tpPct: toNumber(row.tp_pct) || computePct(tpm, tpa),
   };
 };
 
@@ -1365,7 +1456,7 @@ const loadMatchBoxscoreFromView = async (
   const { data, error } = await supabase
     .from("tournament_player_stats_enriched")
     .select(
-      "player_id, names, lastnames, points, rebounds, assists, steals, blocks, turnovers, fouls, fgm, fga, fg_pct, team_side"
+      "player_id, names, lastnames, points, rebounds, assists, steals, blocks, turnovers, fouls, fgm, fga, fg_pct, ftm, fta, ft_pct, tpm, tpa, tp_pct, team_side"
     )
     .eq("tournament_id", tournamentId)
     .eq("match_id", matchId);
@@ -1401,7 +1492,7 @@ const loadMatchBoxscoreFallback = async (
   const { data: fullRows, error: fullRowsError } = await supabase
     .from("player_stats")
     .select(
-      "player_id, points, rebounds, assists, steals, blocks, turnovers, fouls, fgm, fga, player:players(id, names, lastnames)"
+      "player_id, points, rebounds, assists, steals, blocks, turnovers, fouls, fgm, fga, ftm, fta, tpm, tpa, player:players(id, names, lastnames)"
     )
     .eq("match_id", matchId);
 
@@ -1425,6 +1516,10 @@ const loadMatchBoxscoreFallback = async (
       fouls: 0,
       fgm: 0,
       fga: 0,
+      ftm: 0,
+      fta: 0,
+      tpm: 0,
+      tpa: 0,
     })) as Array<Record<string, unknown>>;
   }
 
@@ -1438,6 +1533,10 @@ const loadMatchBoxscoreFallback = async (
     const playerId = toNumber(row.player_id);
     const fgm = toNumber(row.fgm);
     const fga = toNumber(row.fga);
+    const ftm = toNumber(row.ftm);
+    const fta = toNumber(row.fta);
+    const tpm = toNumber(row.tpm);
+    const tpa = toNumber(row.tpa);
 
     return {
       playerId,
@@ -1453,6 +1552,12 @@ const loadMatchBoxscoreFallback = async (
       fgm,
       fga,
       fgPct: computeFgPct(fgm, fga),
+      ftm,
+      fta,
+      ftPct: computePct(ftm, fta),
+      tpm,
+      tpa,
+      tpPct: computePct(tpm, tpa),
     };
   });
 };

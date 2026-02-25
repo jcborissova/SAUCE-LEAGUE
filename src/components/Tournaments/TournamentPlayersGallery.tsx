@@ -17,9 +17,12 @@ type TournamentPlayersGalleryProps = {
   loading?: boolean;
 };
 
+type PlayersViewMode = "gallery" | "list";
+
 type PlayerCardModel = {
   id: number;
   fullName: string;
+  backJerseyName: string;
   photo?: string;
   role: string;
   jersey: string;
@@ -37,6 +40,7 @@ const normalizeText = (value: string) =>
 const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({ teams, loading = false }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedTeamId, setExpandedTeamId] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useState<PlayersViewMode>("gallery");
 
   useEffect(() => {
     if (teams.length === 0) {
@@ -60,6 +64,7 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({ tea
           grouped.set(player.id, {
             id: player.id,
             fullName: fullName || `Jugador ${player.id}`,
+            backJerseyName: player.backjerseyname?.trim() || "Sin alias",
             photo: player.photo,
             role: player.description?.trim() || "Jugador",
             jersey: Number.isFinite(Number(player.jerseynumber)) ? String(player.jerseynumber) : "--",
@@ -106,15 +111,48 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({ tea
       </header>
 
       <div className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3 shadow-[0_1px_0_hsl(var(--border)/0.28)] sm:p-4">
-        <label className="relative block w-full sm:max-w-[360px]">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-subtle))]" />
-          <input
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Buscar jugador"
-            className="input-base pl-9"
-          />
-        </label>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <label className="relative block w-full sm:max-w-[360px]">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-subtle))]" />
+            <input
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Buscar jugador"
+              className="input-base pl-9"
+            />
+          </label>
+
+          <div
+            className="inline-flex w-full rounded-[10px] border bg-[hsl(var(--surface-2)/0.52)] p-1 sm:w-auto"
+            role="group"
+            aria-label="Modo de vista de jugadores"
+          >
+            <button
+              type="button"
+              onClick={() => setViewMode("gallery")}
+              className={`min-h-[34px] flex-1 rounded-[8px] px-3 text-xs font-semibold sm:flex-none ${
+                viewMode === "gallery"
+                  ? "bg-[hsl(var(--surface-1))] text-[hsl(var(--foreground))] shadow-[0_1px_0_hsl(var(--border)/0.32)]"
+                  : "text-[hsl(var(--text-subtle))] hover:bg-[hsl(var(--surface-1)/0.65)]"
+              }`}
+              aria-pressed={viewMode === "gallery"}
+            >
+              Galería
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("list")}
+              className={`min-h-[34px] flex-1 rounded-[8px] px-3 text-xs font-semibold sm:flex-none ${
+                viewMode === "list"
+                  ? "bg-[hsl(var(--surface-1))] text-[hsl(var(--foreground))] shadow-[0_1px_0_hsl(var(--border)/0.32)]"
+                  : "text-[hsl(var(--text-subtle))] hover:bg-[hsl(var(--surface-1)/0.65)]"
+              }`}
+              aria-pressed={viewMode === "list"}
+            >
+              Lista
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="space-y-2.5">
@@ -156,7 +194,7 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({ tea
                   <div id={`team-panel-${team.id}`} className="border-t bg-[hsl(var(--surface-2)/0.52)] px-3 py-3">
                     {visiblePlayers.length === 0 ? (
                       <p className="text-sm text-[hsl(var(--muted-foreground))]">Sin coincidencias para este equipo.</p>
-                    ) : (
+                    ) : viewMode === "gallery" ? (
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                         {visiblePlayers.map((player) => (
                           <article key={player.id} className="overflow-hidden rounded-[10px] border bg-[hsl(var(--surface-1))]">
@@ -179,6 +217,36 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({ tea
                           </article>
                         ))}
                       </div>
+                    ) : (
+                      <ul className="space-y-2">
+                        {visiblePlayers.map((player) => (
+                          <li
+                            key={player.id}
+                            className="flex items-center gap-3 rounded-[10px] border bg-[hsl(var(--surface-1))] px-3 py-2.5"
+                          >
+                            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border bg-[hsl(var(--surface-2))]">
+                              {player.photo ? (
+                                <img src={player.photo} alt={player.fullName} className="h-full w-full object-cover" />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center">
+                                  <UserCircleIcon className="h-6 w-6 text-[hsl(var(--text-subtle))]" />
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-semibold sm:text-base">{player.fullName}</p>
+                              <p className="truncate text-xs text-[hsl(var(--text-subtle))] sm:text-sm">
+                                Espalda: {player.backJerseyName}
+                              </p>
+                            </div>
+
+                            <span className="inline-flex min-w-[52px] items-center justify-center rounded-[8px] border bg-[hsl(var(--surface-2))] px-2 py-1 text-xs font-bold tabular-nums">
+                              #{player.jersey}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
                     )}
                   </div>
                 ) : null}

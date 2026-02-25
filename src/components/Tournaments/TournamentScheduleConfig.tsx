@@ -4,9 +4,41 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 import { toast } from "react-toastify";
 import dayjs from "dayjs";
+import AppSelect from "../ui/AppSelect";
 
 type Props = {
   tournamentId: string;
+};
+
+const WEEKDAY_OPTIONS = [
+  { value: 0, label: "Domingo" },
+  { value: 1, label: "Lunes" },
+  { value: 2, label: "Martes" },
+  { value: 3, label: "Miércoles" },
+  { value: 4, label: "Jueves" },
+  { value: 5, label: "Viernes" },
+  { value: 6, label: "Sábado" },
+];
+
+const sortMatchesBySchedule = (items: any[]) =>
+  [...items].sort((a, b) => {
+    const dateA = a.match_date ?? "9999-12-31";
+    const dateB = b.match_date ?? "9999-12-31";
+    if (dateA !== dateB) return String(dateA).localeCompare(String(dateB));
+
+    const timeA = a.match_time ?? "";
+    const timeB = b.match_time ?? "";
+    if (timeA !== timeB) return String(timeA).localeCompare(String(timeB));
+
+    return Number(a.id ?? 0) - Number(b.id ?? 0);
+  });
+
+const getAlignedMatchdayDate = (baseDate: string, targetWeekday: number) => {
+  const parsedDate = dayjs(baseDate);
+  if (!parsedDate.isValid()) return null;
+
+  const daysUntilGameDay = (targetWeekday - parsedDate.day() + 7) % 7;
+  return parsedDate.add(daysUntilGameDay, "day");
 };
 
 const TournamentScheduleConfig: React.FC<Props> = ({ tournamentId }) => {
@@ -15,7 +47,9 @@ const TournamentScheduleConfig: React.FC<Props> = ({ tournamentId }) => {
   const [teams, setTeams] = useState<any[]>([]);
   const [gamesPerTeam, setGamesPerTeam] = useState<number>(6);
   const [startDate, setStartDate] = useState<string>("");
+  const [gameDay, setGameDay] = useState<number>(0);
   const [generating, setGenerating] = useState(false);
+  const [rescheduling, setRescheduling] = useState(false);
   const [previewMatches, setPreviewMatches] = useState<any[]>([]);
 
   useEffect(() => {
@@ -30,6 +64,10 @@ const TournamentScheduleConfig: React.FC<Props> = ({ tournamentId }) => {
 
       if (tournamentData?.startdate) {
         setStartDate(tournamentData.startdate);
+        const parsedStartDate = dayjs(tournamentData.startdate);
+        if (parsedStartDate.isValid()) {
+          setGameDay(parsedStartDate.day());
+        }
       }
 
       const { data: teamsData } = await supabase
@@ -40,10 +78,13 @@ const TournamentScheduleConfig: React.FC<Props> = ({ tournamentId }) => {
       const { data: matchesData } = await supabase
         .from("matches")
         .select("*")
-        .eq("tournament_id", tournamentId);
+        .eq("tournament_id", tournamentId)
+        .order("match_date", { ascending: true })
+        .order("match_time", { ascending: true })
+        .order("id", { ascending: true });
 
       setTeams(teamsData || []);
-      setMatches(matchesData || []);
+      setMatches(sortMatchesBySchedule(matchesData || []));
       setLoading(false);
     };
 
@@ -90,16 +131,19 @@ const TournamentScheduleConfig: React.FC<Props> = ({ tournamentId }) => {
     teamNames.forEach((t) => (gamesCount[t] = 0));
 
     const scheduledMatches: any[] = [];
-    let currentDate = dayjs(startDate);
-    if (currentDate.day() !== 0) {
-      currentDate = currentDate.day(7);
+    const alignedStartDate = getAlignedMatchdayDate(startDate, gameDay);
+    if (!alignedStartDate) {
+      setGenerating(false);
+      toast.warn("La fecha base no es válida");
+      return;
     }
+    let currentDate = alignedStartDate;
 
     let allPairs = [...firstHalfPairs, ...secondHalfPairs];
     let weekNumber = 0;
 
     while (allPairs.length > 0) {
-      let sundayPairs: [string, string][] = [];
+      let matchdayPairs: [string, string][] = [];
       let usedTeams: Set<string> = new Set();
 
       for (let i = 0; i < allPairs.length; i++) {
@@ -111,35 +155,32 @@ const TournamentScheduleConfig: React.FC<Props> = ({ tournamentId }) => {
           !usedTeams.has(a) &&
           !usedTeams.has(b)
         ) {
-          sundayPairs.push([a, b]);
+          matchdayPairs.push([a, b]);
           usedTeams.add(a);
           usedTeams.add(b);
 
-          if (sundayPairs.length === 2) break;
+          if (matchdayPairs.length === 2) break;
         }
       }
 
-      if (sundayPairs.length === 0) {
-  const remainingPairs = allPairs.filter(
-    ([a, b]) =>
-      gamesCount[a] < gamesPerTeam &&
-      gamesCount[b] < gamesPerTeam
-  );
+      if (matchdayPairs.length === 0) {
+        const remainingPairs = allPairs.filter(
+          ([a, b]) => gamesCount[a] < gamesPerTeam && gamesCount[b] < gamesPerTeam
+        );
 
-  if (remainingPairs.length === 0) {
-    // Ya no quedan pares válidos para emparejar → salir del bucle
-    break;
-  }
+        if (remainingPairs.length === 0) {
+          // Ya no quedan pares válidos para emparejar → salir del bucle
+          break;
+        }
 
-  // No se pudieron armar juegos esta semana, pasar a la próxima
-  currentDate = currentDate.add(1, "week");
-  weekNumber++;
-  continue;
-}
-
+        // No se pudieron armar juegos esta jornada, pasar a la siguiente
+        currentDate = currentDate.add(1, "week");
+        weekNumber++;
+        continue;
+      }
 
       // Asignar partidos
-      sundayPairs.forEach((pair, index) => {
+      matchdayPairs.forEach((pair, index) => {
         let [a, b] = pair;
 
         // Alternar quién empieza
@@ -159,15 +200,15 @@ const TournamentScheduleConfig: React.FC<Props> = ({ tournamentId }) => {
         gamesCount[b]++;
       });
 
-      // Remover los pares ya usados este domingo
-      sundayPairs.forEach((sp) => {
+      // Remover los pares ya usados en esta jornada
+      matchdayPairs.forEach((sp) => {
         const idx = allPairs.findIndex(
           (p) => (p[0] === sp[0] && p[1] === sp[1]) || (p[0] === sp[1] && p[1] === sp[0])
         );
         if (idx !== -1) allPairs.splice(idx, 1);
       });
 
-      // Avanzar al siguiente domingo
+      // Avanzar a la siguiente jornada (misma fecha de la semana siguiente)
       currentDate = currentDate.add(1, "week");
       weekNumber++;
     }
@@ -177,150 +218,255 @@ const TournamentScheduleConfig: React.FC<Props> = ({ tournamentId }) => {
     toast.success("Partidos generados. Revisa y guarda cuando estés listo.");
   };
 
-const handleSave = async () => {
-  if (previewMatches.length === 0) {
-    toast.warn("No hay partidos para guardar");
-    return;
-  }
+  const handleRescheduleSavedMatches = async () => {
+    if (matches.length === 0) {
+      toast.warn("No hay partidos guardados para reprogramar");
+      return;
+    }
 
-  try {
-    // 1. Obtener IDs de los partidos existentes del torneo
-    const { data: matchesToDelete, error: fetchError } = await supabase
-      .from("matches")
-      .select("id")
-      .eq("tournament_id", tournamentId);
+    if (!startDate) {
+      toast.warn("Define una fecha base para reprogramar");
+      return;
+    }
 
-    if (fetchError) throw fetchError;
+    const firstMatchdayDate = getAlignedMatchdayDate(startDate, gameDay);
+    if (!firstMatchdayDate) {
+      toast.warn("La fecha base no es válida");
+      return;
+    }
 
-    const matchIds = matchesToDelete?.map((m) => m.id) || [];
+    setRescheduling(true);
 
-    // 2. Eliminar registros en current_match que referencian esos partidos
-    if (matchIds.length > 0) {
-      const { error: deleteCurrentMatchError } = await supabase
-        .from("current_match")
-        .delete()
-        .in("match_id", matchIds);
+    try {
+      const sortedSavedMatches = sortMatchesBySchedule(matches);
 
-      if (deleteCurrentMatchError) throw deleteCurrentMatchError;
+      const allHaveDate = sortedSavedMatches.every((match) => Boolean(match.match_date));
+      const matchGroups: any[][] = [];
 
-      // 3. Eliminar partidos anteriores del torneo
-      const { error: deleteMatchesError } = await supabase
+      if (allHaveDate) {
+        let currentGroupDate: string | null = null;
+
+        sortedSavedMatches.forEach((match) => {
+          const matchDate = String(match.match_date);
+          if (currentGroupDate !== matchDate) {
+            currentGroupDate = matchDate;
+            matchGroups.push([]);
+          }
+          matchGroups[matchGroups.length - 1].push(match);
+        });
+      } else {
+        for (let i = 0; i < sortedSavedMatches.length; i += 2) {
+          matchGroups.push(sortedSavedMatches.slice(i, i + 2));
+        }
+      }
+
+      const updates = matchGroups.flatMap((group, groupIndex) => {
+        const nextDate = firstMatchdayDate.add(groupIndex, "week").format("YYYY-MM-DD");
+        return group.map((match) => ({
+          id: match.id,
+          match_date: nextDate,
+        }));
+      });
+
+      if (updates.length === 0) {
+        toast.warn("No se encontraron partidos para reprogramar");
+        return;
+      }
+
+      // Guardar la nueva fecha base configurada del torneo
+      const { error: updateTournamentError } = await supabase
+        .from("tournaments")
+        .update({ startdate: startDate })
+        .eq("id", tournamentId);
+
+      if (updateTournamentError) throw updateTournamentError;
+
+      for (const update of updates) {
+        const { error: updateMatchError } = await supabase
+          .from("matches")
+          .update({ match_date: update.match_date })
+          .eq("id", update.id);
+
+        if (updateMatchError) throw updateMatchError;
+      }
+
+      const updatesById = new Map<number, string>(
+        updates.map((update) => [Number(update.id), String(update.match_date)])
+      );
+
+      const rescheduledMatches = sortMatchesBySchedule(
+        matches.map((match) => ({
+          ...match,
+          match_date: updatesById.get(Number(match.id)) ?? match.match_date,
+        }))
+      );
+
+      setMatches(rescheduledMatches);
+
+      toast.success(
+        `Fechas reprogramadas: ${updates.length} partidos en ${matchGroups.length} jornadas (sin cambiar cruces).`
+      );
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Error al reprogramar las fechas.");
+    } finally {
+      setRescheduling(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (previewMatches.length === 0) {
+      toast.warn("No hay partidos para guardar");
+      return;
+    }
+
+    try {
+      // Mantener la fecha base del torneo sincronizada con la configuración usada.
+      if (startDate) {
+        const { error: updateTournamentError } = await supabase
+          .from("tournaments")
+          .update({ startdate: startDate })
+          .eq("id", tournamentId);
+
+        if (updateTournamentError) throw updateTournamentError;
+      }
+
+      // 1. Obtener IDs de los partidos existentes del torneo
+      const { data: matchesToDelete, error: fetchError } = await supabase
         .from("matches")
-        .delete()
-        .in("id", matchIds);
+        .select("id")
+        .eq("tournament_id", tournamentId);
 
-      if (deleteMatchesError) throw deleteMatchesError;
-    }
+      if (fetchError) throw fetchError;
 
-    // 4. Insertar nuevos partidos
-    const { data: insertedMatches, error: insertError } = await supabase
-      .from("matches")
-      .insert(previewMatches)
-      .select(); // Obtener IDs insertados
+      const matchIds = matchesToDelete?.map((m) => m.id) || [];
 
-    if (insertError) throw insertError;
+      // 2. Eliminar registros en current_match que referencian esos partidos
+      if (matchIds.length > 0) {
+        const { error: deleteCurrentMatchError } = await supabase
+          .from("current_match")
+          .delete()
+          .in("match_id", matchIds);
 
-    // 5. (Opcional) asociar current_match a la primera liga disponible.
-    // Esto no debe bloquear el guardado del torneo si no hay ligas creadas.
-    const { data: leagues } = await supabase
-      .from("leagues")
-      .select("id")
-      .limit(1);
+        if (deleteCurrentMatchError) throw deleteCurrentMatchError;
 
-    const leagueId = leagues?.[0]?.id;
+        // 3. Eliminar partidos anteriores del torneo
+        const { error: deleteMatchesError } = await supabase
+          .from("matches")
+          .delete()
+          .in("id", matchIds);
 
-    if (leagueId) {
-      const currentMatchInsert = insertedMatches.map((match) => ({
-        match_id: match.id,
-        league_id: leagueId,
-      }));
-
-      const { error: currentMatchError } = await supabase
-        .from("current_match")
-        .insert(currentMatchInsert);
-
-      if (currentMatchError) {
-        console.warn("No se pudieron crear registros en current_match:", currentMatchError.message);
+        if (deleteMatchesError) throw deleteMatchesError;
       }
-    }
 
-    // 6. Construir participantes del partido desde equipos del torneo (teams + team_players)
-    const { data: tournamentTeams, error: tournamentTeamsError } = await supabase
-      .from("teams")
-      .select("name, team_players(player_id)")
-      .eq("tournament_id", tournamentId);
+      // 4. Insertar nuevos partidos
+      const { data: insertedMatches, error: insertError } = await supabase
+        .from("matches")
+        .insert(previewMatches)
+        .select(); // Obtener IDs insertados
 
-    if (tournamentTeamsError) throw tournamentTeamsError;
+      if (insertError) throw insertError;
 
-    const playersByTeamName = new Map<string, number[]>();
+      // 5. (Opcional) asociar current_match a la primera liga disponible.
+      // Esto no debe bloquear el guardado del torneo si no hay ligas creadas.
+      const { data: leagues } = await supabase
+        .from("leagues")
+        .select("id")
+        .limit(1);
 
-    (tournamentTeams ?? []).forEach((team: any) => {
-      const playerIds = (team.team_players ?? [])
-        .map((tp: any) => Number(tp.player_id))
-        .filter((playerId: number) => Number.isFinite(playerId));
+      const leagueId = leagues?.[0]?.id;
 
-      playersByTeamName.set(team.name, playerIds);
-    });
-
-    const allMatchPlayers: Array<{ match_id: number; player_id: number; team: "A" | "B" }> = [];
-    const uniqueKeys = new Set<string>();
-
-    insertedMatches.forEach((match) => {
-      const teamAPlayers = playersByTeamName.get(match.team_a) ?? [];
-      const teamBPlayers = playersByTeamName.get(match.team_b) ?? [];
-
-      teamAPlayers.forEach((playerId) => {
-        const uniqueKey = `${match.id}-${playerId}`;
-        if (uniqueKeys.has(uniqueKey)) return;
-
-        uniqueKeys.add(uniqueKey);
-        allMatchPlayers.push({
+      if (leagueId) {
+        const currentMatchInsert = insertedMatches.map((match) => ({
           match_id: match.id,
-          player_id: playerId,
-          team: "A",
+          league_id: leagueId,
+        }));
+
+        const { error: currentMatchError } = await supabase
+          .from("current_match")
+          .insert(currentMatchInsert);
+
+        if (currentMatchError) {
+          console.warn("No se pudieron crear registros en current_match:", currentMatchError.message);
+        }
+      }
+
+      // 6. Construir participantes del partido desde equipos del torneo (teams + team_players)
+      const { data: tournamentTeams, error: tournamentTeamsError } = await supabase
+        .from("teams")
+        .select("name, team_players(player_id)")
+        .eq("tournament_id", tournamentId);
+
+      if (tournamentTeamsError) throw tournamentTeamsError;
+
+      const playersByTeamName = new Map<string, number[]>();
+
+      (tournamentTeams ?? []).forEach((team: any) => {
+        const playerIds = (team.team_players ?? [])
+          .map((tp: any) => Number(tp.player_id))
+          .filter((playerId: number) => Number.isFinite(playerId));
+
+        playersByTeamName.set(team.name, playerIds);
+      });
+
+      const allMatchPlayers: Array<{ match_id: number; player_id: number; team: "A" | "B" }> = [];
+      const uniqueKeys = new Set<string>();
+
+      insertedMatches.forEach((match) => {
+        const teamAPlayers = playersByTeamName.get(match.team_a) ?? [];
+        const teamBPlayers = playersByTeamName.get(match.team_b) ?? [];
+
+        teamAPlayers.forEach((playerId) => {
+          const uniqueKey = `${match.id}-${playerId}`;
+          if (uniqueKeys.has(uniqueKey)) return;
+
+          uniqueKeys.add(uniqueKey);
+          allMatchPlayers.push({
+            match_id: match.id,
+            player_id: playerId,
+            team: "A",
+          });
+        });
+
+        teamBPlayers.forEach((playerId) => {
+          const uniqueKey = `${match.id}-${playerId}`;
+          if (uniqueKeys.has(uniqueKey)) return;
+
+          uniqueKeys.add(uniqueKey);
+          allMatchPlayers.push({
+            match_id: match.id,
+            player_id: playerId,
+            team: "B",
+          });
         });
       });
 
-      teamBPlayers.forEach((playerId) => {
-        const uniqueKey = `${match.id}-${playerId}`;
-        if (uniqueKeys.has(uniqueKey)) return;
+      if (allMatchPlayers.length > 0) {
+        const chunkSize = 1000;
 
-        uniqueKeys.add(uniqueKey);
-        allMatchPlayers.push({
-          match_id: match.id,
-          player_id: playerId,
-          team: "B",
-        });
-      });
-    });
+        for (let i = 0; i < allMatchPlayers.length; i += chunkSize) {
+          const chunk = allMatchPlayers.slice(i, i + chunkSize);
+          const { error: insertPlayersError } = await supabase
+            .from("match_players")
+            .insert(chunk);
 
-    if (allMatchPlayers.length > 0) {
-      const chunkSize = 1000;
-
-      for (let i = 0; i < allMatchPlayers.length; i += chunkSize) {
-        const chunk = allMatchPlayers.slice(i, i + chunkSize);
-        const { error: insertPlayersError } = await supabase
-          .from("match_players")
-          .insert(chunk);
-
-        if (insertPlayersError) throw insertPlayersError;
+          if (insertPlayersError) throw insertPlayersError;
+        }
       }
+
+      if (allMatchPlayers.length === 0) {
+        toast.warn("Partidos guardados, pero sin jugadores asignados. Revisa la configuración de equipos.");
+      } else {
+        toast.success("Partidos y jugadores guardados correctamente.");
+      }
+
+      setMatches(sortMatchesBySchedule(insertedMatches));
+      setPreviewMatches([]);
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Error al guardar los partidos.");
     }
-
-    if (allMatchPlayers.length === 0) {
-      toast.warn("Partidos guardados, pero sin jugadores asignados. Revisa la configuración de equipos.");
-    } else {
-      toast.success("Partidos y jugadores guardados correctamente.");
-    }
-
-    setMatches(insertedMatches);
-    setPreviewMatches([]);
-  } catch (error) {
-    console.error(error);
-    toast.error(error instanceof Error ? error.message : "Error al guardar los partidos.");
-  }
-};
-
+  };
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -349,7 +495,7 @@ const handleSave = async () => {
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-[minmax(0,220px)_minmax(0,220px)_auto] sm:items-end">
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,180px)_minmax(0,220px)_minmax(0,220px)_auto] sm:items-end">
           <label className="space-y-1.5">
             <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">Juegos por equipo</span>
             <input
@@ -363,13 +509,45 @@ const handleSave = async () => {
 
           <label className="space-y-1.5">
             <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">Fecha base</span>
-            <input type="text" value={startDate || "Sin fecha"} readOnly className="input-base" />
+            <input
+              type="date"
+              value={startDate || ""}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="input-base"
+            />
           </label>
 
-          <button onClick={generateMatches} disabled={generating} className="btn-primary w-full sm:w-auto">
-            {generating ? "Generando..." : "Generar partidos"}
-          </button>
+          <label className="space-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">Día de juegos</span>
+            <AppSelect
+              value={gameDay}
+              onChange={(e) => setGameDay(Number(e.target.value))}
+              className="input-base"
+            >
+              {WEEKDAY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </AppSelect>
+          </label>
+
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <button
+              onClick={handleRescheduleSavedMatches}
+              disabled={rescheduling || loading || matches.length === 0}
+              className="btn-secondary w-full sm:w-auto"
+            >
+              {rescheduling ? "Reprogramando..." : "Cambiar fechas guardadas"}
+            </button>
+            <button onClick={generateMatches} disabled={generating} className="btn-primary w-full sm:w-auto">
+              {generating ? "Generando..." : "Generar partidos"}
+            </button>
+          </div>
         </div>
+        <p className="text-xs text-[hsl(var(--text-subtle))]">
+          El botón Cambiar fechas guardadas mantiene los enfrentamientos y solo actualiza la fecha de cada jornada.
+        </p>
       </section>
 
       {previewMatches.length > 0 ? (

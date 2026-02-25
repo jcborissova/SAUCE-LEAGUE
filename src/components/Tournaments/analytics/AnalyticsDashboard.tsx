@@ -20,6 +20,7 @@ import type {
   TournamentLeaderRow,
   TournamentPhaseFilter,
 } from "../../../types/tournament-analytics";
+import AppSelect from "../../ui/AppSelect";
 import type { AnalyticsPanelKey } from "./constants";
 import { RACE_METRICS } from "./constants";
 
@@ -221,7 +222,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
               <label className="rounded-xl border bg-[hsl(var(--surface-1))] px-3 py-2.5 text-sm flex items-center justify-between gap-3 min-h-[44px]">
                 <span className="font-semibold text-[hsl(var(--text-subtle))]">Métrica</span>
-                <select
+                <AppSelect
                   value={spotlightMetric}
                   onChange={(event) => onSpotlightMetricChange(event.target.value as RaceMetric)}
                   className="select-base"
@@ -231,19 +232,19 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                       {metric.label}
                     </option>
                   ))}
-                </select>
+                </AppSelect>
               </label>
 
               <label className="rounded-xl border bg-[hsl(var(--surface-1))] px-3 py-2.5 text-sm flex items-center justify-between gap-3 min-h-[44px]">
                 <span className="font-semibold text-[hsl(var(--text-subtle))]">Modo</span>
-                <select
+                <AppSelect
                   value={spotlightMode}
                   onChange={(event) => onSpotlightModeChange(event.target.value as "cumulative" | "perGame")}
                   className="select-base"
                 >
                   <option value="cumulative">Acumulado</option>
                   <option value="perGame">Por juego</option>
-                </select>
+                </AppSelect>
               </label>
             </div>
 

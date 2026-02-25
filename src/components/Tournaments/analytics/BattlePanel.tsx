@@ -16,6 +16,7 @@ import type {
   BattleSummary,
   TournamentPhaseFilter,
 } from "../../../types/tournament-analytics";
+import AppSelect from "../../ui/AppSelect";
 import AnalyticsEmptyState from "./AnalyticsEmptyState";
 import { BATTLE_METRICS, PHASE_OPTIONS } from "./constants";
 
@@ -506,7 +507,7 @@ const BattlePanel: React.FC<BattlePanelProps> = ({
       <div className="app-panel p-3 sm:p-4 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2 sm:gap-3">
         <label className="rounded-xl border bg-[hsl(var(--surface-1))] px-3 py-2.5 text-sm flex items-center justify-between gap-3 min-h-[44px]">
           <span className="font-semibold text-[hsl(var(--text-subtle))]">Fase</span>
-          <select
+          <AppSelect
             value={phase}
             onChange={(event) => onPhaseChange(event.target.value as TournamentPhaseFilter)}
             className="select-base"
@@ -516,7 +517,7 @@ const BattlePanel: React.FC<BattlePanelProps> = ({
                 {option.label}
               </option>
             ))}
-          </select>
+          </AppSelect>
         </label>
 
         <button

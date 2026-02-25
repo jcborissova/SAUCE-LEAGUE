@@ -28,6 +28,7 @@ import FinalsMvpPanel from "./analytics/FinalsMvpPanel";
 import LeadersPanel from "./analytics/LeadersPanel";
 import MvpPanel from "./analytics/MvpPanel";
 import RacesPanel from "./analytics/RacesPanel";
+import AppSelect from "../ui/AppSelect";
 import { ANALYTICS_PANEL_OPTIONS, type AnalyticsPanelKey } from "./analytics/constants";
 
 type BattleResult = { players: BattlePlayerResult[]; summary: BattleSummary };
@@ -74,6 +75,10 @@ const buildQuickLeaders = (
       fouls: number;
       fgm: number;
       fga: number;
+      ftm: number;
+      fta: number;
+      tpm: number;
+      tpa: number;
     };
     perGame: {
       ppg: number;
@@ -85,6 +90,8 @@ const buildQuickLeaders = (
       fpg: number;
     };
     fgPct: number;
+    ftPct: number;
+    tpPct: number;
   }>
 ): DashboardQuickLeadersGroup[] => {
   const metricConfig: Array<{ label: string; metric: TournamentStatMetric }> = [
@@ -561,7 +568,7 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
           <div className="sm:hidden px-1">
             <label className="rounded-xl border bg-[hsl(var(--surface-1))] px-3 py-2.5 text-sm flex items-center justify-between gap-3 min-h-[44px]">
               <span className="font-semibold text-[hsl(var(--text-subtle))]">Módulo</span>
-              <select
+              <AppSelect
                 value={activePanel}
                 onChange={(event) => setActivePanel(event.target.value as AnalyticsPanelKey)}
                 className="select-base"
@@ -571,7 +578,7 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
                     {option.label}
                   </option>
                 ))}
-              </select>
+              </AppSelect>
             </label>
           </div>
 

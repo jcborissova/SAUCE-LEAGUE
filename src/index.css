@@ -257,6 +257,57 @@
     min-height: 110px;
   }
 
+  select.input-base,
+  select.select-base {
+    @apply cursor-pointer pr-10;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image:
+      linear-gradient(45deg, transparent 50%, hsl(var(--text-subtle)) 50%),
+      linear-gradient(135deg, hsl(var(--text-subtle)) 50%, transparent 50%);
+    background-position:
+      calc(100% - 18px) calc(50% - 1px),
+      calc(100% - 12px) calc(50% - 1px);
+    background-size: 6px 6px, 6px 6px;
+    background-repeat: no-repeat;
+  }
+
+  select.input-base:hover:not(:disabled),
+  select.select-base:hover:not(:disabled) {
+    @apply border-[hsl(var(--primary)/0.32)] bg-[hsl(var(--surface-2)/0.72)];
+  }
+
+  select.input-base:focus,
+  select.select-base:focus,
+  select.input-base:focus-visible,
+  select.select-base:focus-visible {
+    background-image:
+      linear-gradient(45deg, transparent 50%, hsl(var(--primary)) 50%),
+      linear-gradient(135deg, hsl(var(--primary)) 50%, transparent 50%);
+  }
+
+  select.input-base:disabled,
+  select.select-base:disabled {
+    @apply cursor-not-allowed opacity-60;
+  }
+
+  select.input-base option,
+  select.select-base option {
+    background: hsl(var(--surface-1));
+    color: hsl(var(--foreground));
+  }
+
+  @media (max-width: 640px) {
+    select.input-base,
+    select.select-base {
+      font-size: 16px;
+      background-position:
+        calc(100% - 17px) calc(50% - 1px),
+        calc(100% - 11px) calc(50% - 1px);
+    }
+  }
+
   .modal-shell {
     @apply fixed inset-0 z-50 flex items-end justify-center bg-black/52 p-0 backdrop-blur-[3px] sm:items-center sm:p-4;
   }

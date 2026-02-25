@@ -410,7 +410,7 @@ const TeamBoxscoreTable = ({ title, rows }: { title: string; rows: TournamentRes
                   </div>
                 </div>
                 <p className="mt-1 text-[11px] text-[hsl(var(--text-subtle))] tabular-nums">
-                  STL {row.steals} · BLK {row.blocks} · TO {row.turnovers} · FLS {row.fouls} · FG {row.fgm}/{row.fga} ({row.fgPct.toFixed(0)}%)
+                  STL {row.steals} · BLK {row.blocks} · TO {row.turnovers} · FLS {row.fouls} · FG {row.fgm}/{row.fga} ({row.fgPct.toFixed(0)}%) · FT {row.ftm}/{row.fta} ({row.ftPct.toFixed(0)}%) · 3PT {row.tpm}/{row.tpa} ({row.tpPct.toFixed(0)}%)
                 </p>
               </div>
             ))}
@@ -418,7 +418,7 @@ const TeamBoxscoreTable = ({ title, rows }: { title: string; rows: TournamentRes
 
           {/* Desktop table layout */}
           <div className="soft-scrollbar hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[740px] text-sm">
+            <table className="w-full min-w-[980px] text-sm">
               <thead className="text-xs uppercase tracking-wide text-[hsl(var(--text-subtle))]">
                 <tr>
                   <th className="px-2 py-2 text-left">Jugador</th>
@@ -431,6 +431,10 @@ const TeamBoxscoreTable = ({ title, rows }: { title: string; rows: TournamentRes
                   <th className="px-2 py-2 text-center">FLS</th>
                   <th className="px-2 py-2 text-center">FGM/FGA</th>
                   <th className="px-2 py-2 text-center">FG%</th>
+                  <th className="px-2 py-2 text-center">FTM/FTA</th>
+                  <th className="px-2 py-2 text-center">FT%</th>
+                  <th className="px-2 py-2 text-center">3PM/3PA</th>
+                  <th className="px-2 py-2 text-center">3P%</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -446,6 +450,10 @@ const TeamBoxscoreTable = ({ title, rows }: { title: string; rows: TournamentRes
                     <td className="px-2 py-2 text-center tabular-nums">{row.fouls}</td>
                     <td className="px-2 py-2 text-center tabular-nums">{row.fgm}/{row.fga}</td>
                     <td className="px-2 py-2 text-center tabular-nums">{row.fgPct.toFixed(1)}%</td>
+                    <td className="px-2 py-2 text-center tabular-nums">{row.ftm}/{row.fta}</td>
+                    <td className="px-2 py-2 text-center tabular-nums">{row.ftPct.toFixed(1)}%</td>
+                    <td className="px-2 py-2 text-center tabular-nums">{row.tpm}/{row.tpa}</td>
+                    <td className="px-2 py-2 text-center tabular-nums">{row.tpPct.toFixed(1)}%</td>
                   </tr>
                 ))}
               </tbody>

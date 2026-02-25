@@ -7,9 +7,13 @@ import type {
 
 export const round2 = (value: number): number => Math.round(value * 100) / 100;
 
+export const computePct = (made: number, attempts: number): number => {
+  if (attempts <= 0) return 0;
+  return round2((made / attempts) * 100);
+};
+
 export const computeFgPct = (fgm: number, fga: number): number => {
-  if (fga <= 0) return 0;
-  return round2((fgm / fga) * 100);
+  return computePct(fgm, fga);
 };
 
 export const computeZScores = (values: number[]): number[] => {

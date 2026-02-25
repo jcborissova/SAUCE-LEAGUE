@@ -21,6 +21,7 @@ import type {
 import SectionCard from "../ui/SectionCard";
 import EmptyState from "../ui/EmptyState";
 import LoadingSpinner from "../LoadingSpinner";
+import AppSelect from "../ui/AppSelect";
 
 type StatsFocus = "points" | "rebounds" | "assists" | "mvp" | "duel";
 type PerGameMetricKey = "ppg" | "rpg" | "apg";
@@ -509,7 +510,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       <div className={`grid gap-2 ${isDuelMode ? "grid-cols-1 sm:max-w-xs" : "grid-cols-1 sm:grid-cols-2"}`}>
         <label className="space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]">Fase</span>
-          <select
+          <AppSelect
             value={phase}
             onChange={(event) => setPhase(event.target.value as TournamentPhaseFilter)}
             className="input-base"
@@ -519,13 +520,13 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                 {option.label}
               </option>
             ))}
-          </select>
+          </AppSelect>
         </label>
 
         {!isDuelMode ? (
           <label className="space-y-1">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]">Métrica</span>
-            <select
+            <AppSelect
               value={focus}
               onChange={(event) => setFocus(event.target.value as Exclude<StatsFocus, "duel">)}
               className="input-base"
@@ -535,7 +536,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                   {option.label}
                 </option>
               ))}
-            </select>
+            </AppSelect>
           </label>
         ) : null}
       </div>
@@ -592,7 +593,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <label className="space-y-1">
                     <span className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Jugador A</span>
-                    <select
+                    <AppSelect
                       value={duelPlayerA}
                       onChange={(event) => setDuelPlayerA(event.target.value ? Number(event.target.value) : "")}
                       className="input-base"
@@ -603,12 +604,12 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                           {player.name} {player.teamName ? `(${player.teamName})` : ""}
                         </option>
                       ))}
-                    </select>
+                    </AppSelect>
                   </label>
 
                   <label className="space-y-1">
                     <span className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Jugador B</span>
-                    <select
+                    <AppSelect
                       value={duelPlayerB}
                       onChange={(event) => setDuelPlayerB(event.target.value ? Number(event.target.value) : "")}
                       className="input-base"
@@ -619,7 +620,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                           {player.name} {player.teamName ? `(${player.teamName})` : ""}
                         </option>
                       ))}
-                    </select>
+                    </AppSelect>
                   </label>
                 </div>
 
