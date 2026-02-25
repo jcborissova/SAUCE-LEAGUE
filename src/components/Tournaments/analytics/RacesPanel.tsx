@@ -13,6 +13,7 @@ import type {
   RaceSeriesPlayer,
   TournamentPhaseFilter,
 } from "../../../types/tournament-analytics";
+import AppSelect from "../../ui/AppSelect";
 import AnalyticsEmptyState from "./AnalyticsEmptyState";
 import { PHASE_OPTIONS, RACE_METRICS } from "./constants";
 
@@ -154,7 +155,7 @@ const RacesPanel: React.FC<RacesPanelProps> = ({
       <div className="app-panel p-3 sm:p-4 grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-3">
         <label className="rounded-xl border bg-[hsl(var(--surface-1))] px-3 py-2.5 text-sm flex items-center justify-between gap-3 min-h-[44px]">
           <span className="font-semibold text-[hsl(var(--text-subtle))]">Métrica</span>
-          <select
+          <AppSelect
             value={metric}
             onChange={(event) => onMetricChange(event.target.value as RaceMetric)}
             className="select-base"
@@ -164,12 +165,12 @@ const RacesPanel: React.FC<RacesPanelProps> = ({
                 {item.label}
               </option>
             ))}
-          </select>
+          </AppSelect>
         </label>
 
         <label className="rounded-xl border bg-[hsl(var(--surface-1))] px-3 py-2.5 text-sm flex items-center justify-between gap-3 min-h-[44px]">
           <span className="font-semibold text-[hsl(var(--text-subtle))]">Fase</span>
-          <select
+          <AppSelect
             value={phase}
             onChange={(event) => onPhaseChange(event.target.value as TournamentPhaseFilter)}
             className="select-base"
@@ -179,19 +180,19 @@ const RacesPanel: React.FC<RacesPanelProps> = ({
                 {option.label}
               </option>
             ))}
-          </select>
+          </AppSelect>
         </label>
 
         <label className="rounded-xl border bg-[hsl(var(--surface-1))] px-3 py-2.5 text-sm flex items-center justify-between gap-3 min-h-[44px]">
           <span className="font-semibold text-[hsl(var(--text-subtle))]">Modo</span>
-          <select
+          <AppSelect
             value={mode}
             onChange={(event) => onModeChange(event.target.value as "cumulative" | "perGame")}
             className="select-base"
           >
             <option value="cumulative">Acumulado</option>
             <option value="perGame">Por juego</option>
-          </select>
+          </AppSelect>
         </label>
       </div>
 

@@ -1,6 +1,7 @@
 import React from "react";
 import { ArrowPathIcon } from "@heroicons/react/24/solid";
 import type { TournamentPhaseFilter } from "../../../types/tournament-analytics";
+import AppSelect from "../../ui/AppSelect";
 import { PHASE_OPTIONS } from "./constants";
 
 type AnalyticsFiltersBarProps = {
@@ -20,7 +21,7 @@ const AnalyticsFiltersBar: React.FC<AnalyticsFiltersBarProps> = ({
     <div className="app-panel p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 sm:gap-3">
       <label className="rounded-xl border bg-[hsl(var(--surface-1))] px-3 py-2.5 text-sm flex items-center justify-between gap-3 min-h-[44px]">
         <span className="font-semibold text-[hsl(var(--text-subtle))]">Fase global</span>
-        <select
+        <AppSelect
           value={phase}
           onChange={(event) => onPhaseChange(event.target.value as TournamentPhaseFilter)}
           className="select-base"
@@ -30,7 +31,7 @@ const AnalyticsFiltersBar: React.FC<AnalyticsFiltersBarProps> = ({
               {option.label}
             </option>
           ))}
-        </select>
+        </AppSelect>
       </label>
 
       <button

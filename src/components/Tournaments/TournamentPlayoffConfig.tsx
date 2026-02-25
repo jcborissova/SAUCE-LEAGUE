@@ -8,6 +8,7 @@ import {
   saveTournamentSettings,
 } from "../../services/tournamentAnalytics";
 import type { TournamentSettings } from "../../types/tournament-analytics";
+import AppSelect from "../ui/AppSelect";
 
 type Props = {
   tournamentId: string;
@@ -195,7 +196,7 @@ const TournamentPlayoffConfig: React.FC<Props> = ({ tournamentId }) => {
 
           <label className="border bg-[hsl(var(--surface-2))] px-3 py-2 text-sm">
             <span className="font-medium">Tipo de temporada</span>
-            <select
+            <AppSelect
               value={editor.seasonType}
               onChange={(event) =>
                 setEditor((prev) => ({
@@ -207,7 +208,7 @@ const TournamentPlayoffConfig: React.FC<Props> = ({ tournamentId }) => {
             >
               <option value="regular_plus_playoffs">Regular + Playoffs</option>
               <option value="regular_only">Solo Regular</option>
-            </select>
+            </AppSelect>
           </label>
 
           <label className="border bg-[hsl(var(--surface-2))] px-3 py-2 text-sm">

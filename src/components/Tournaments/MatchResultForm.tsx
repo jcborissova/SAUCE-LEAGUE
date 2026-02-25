@@ -4,6 +4,7 @@ import { TrophyIcon, XMarkIcon, ArrowPathIcon } from "@heroicons/react/24/solid"
 import { supabase } from "../../lib/supabase";
 import { saveMatchStats } from "../../services/tournamentAnalytics";
 import type { MatchPlayerStatsInput } from "../../types/tournament-analytics";
+import AppSelect from "../ui/AppSelect";
 
 const STAT_FIELDS: Array<{ key: keyof Omit<MatchPlayerStatsInput, "playerId">; label: string }> = [
   { key: "points", label: "Pts" },
@@ -15,6 +16,10 @@ const STAT_FIELDS: Array<{ key: keyof Omit<MatchPlayerStatsInput, "playerId">; l
   { key: "fouls", label: "Fls" },
   { key: "fgm", label: "FGM" },
   { key: "fga", label: "FGA" },
+  { key: "tpm", label: "3PM" },
+  { key: "tpa", label: "3PA" },
+  { key: "ftm", label: "FTM" },
+  { key: "fta", label: "FTA" },
 ];
 
 type PlayerRow = {
@@ -41,6 +46,10 @@ const emptyLine = (): Omit<MatchPlayerStatsInput, "playerId"> => ({
   fouls: 0,
   fgm: 0,
   fga: 0,
+  tpm: 0,
+  tpa: 0,
+  ftm: 0,
+  fta: 0,
 });
 
 const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
@@ -92,7 +101,7 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
 
       const { data: existingStats, error: statsError } = await supabase
         .from("player_stats")
-        .select("player_id, points, rebounds, assists, steals, blocks, turnovers, fouls, fgm, fga")
+        .select("player_id, points, rebounds, assists, steals, blocks, turnovers, fouls, fgm, fga, ftm, fta, tpm, tpa")
         .eq("match_id", matchId);
 
       let existingRows: Array<Record<string, number>> = [];
@@ -113,6 +122,10 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
           fouls: 0,
           fgm: 0,
           fga: 0,
+          ftm: 0,
+          fta: 0,
+          tpm: 0,
+          tpa: 0,
         }));
       }
 
@@ -132,6 +145,10 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
           fouls: Number(existing?.fouls ?? 0),
           fgm: Number(existing?.fgm ?? 0),
           fga: Number(existing?.fga ?? 0),
+          ftm: Number(existing?.ftm ?? 0),
+          fta: Number(existing?.fta ?? 0),
+          tpm: Number(existing?.tpm ?? 0),
+          tpa: Number(existing?.tpa ?? 0),
         };
         initialPlayed[player.playerId] = hasPersistedRows ? Boolean(existing) : true;
       });
@@ -195,6 +212,22 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
         setErrorMessage(`FGM no puede ser mayor que FGA para ${line.playerId}.`);
         return;
       }
+      if (line.ftm > line.fta) {
+        setErrorMessage(`FTM no puede ser mayor que FTA para ${line.playerId}.`);
+        return;
+      }
+      if (line.tpm > line.tpa) {
+        setErrorMessage(`3PM no puede ser mayor que 3PA para ${line.playerId}.`);
+        return;
+      }
+      if (line.tpa > line.fga) {
+        setErrorMessage(`3PA no puede ser mayor que FGA para ${line.playerId}.`);
+        return;
+      }
+      if (line.tpm > line.fgm) {
+        setErrorMessage(`3PM no puede ser mayor que FGM para ${line.playerId}.`);
+        return;
+      }
     }
 
     setSaving(true);
@@ -242,11 +275,11 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
 
               <label className="block border bg-[hsl(var(--surface-1))] px-3 py-2 text-sm">
                 <span className="mb-1 block font-medium">Equipo ganador</span>
-                <select value={winnerTeam} onChange={(event) => setWinnerTeam(event.target.value)} className="input-base">
+                <AppSelect value={winnerTeam} onChange={(event) => setWinnerTeam(event.target.value)} className="input-base">
                   <option value="">Seleccionar</option>
                   <option value={teams.A}>{teams.A}</option>
                   <option value={teams.B}>{teams.B}</option>
-                </select>
+                </AppSelect>
               </label>
 
               <p className="text-xs text-[hsl(var(--muted-foreground))]">
@@ -295,7 +328,7 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
                   </div>
 
                   <div className="hidden overflow-x-auto border md:block">
-                    <table className="w-full min-w-[920px] text-sm">
+                    <table className="w-full min-w-[1240px] text-sm">
                       <thead>
                         <tr className="bg-[hsl(var(--muted))]">
                           <th className="px-2 py-2 text-left">Jugador</th>

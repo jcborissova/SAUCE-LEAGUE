@@ -35,6 +35,10 @@ export type PlayerStatsLine = {
     fouls: number;
     fgm: number;
     fga: number;
+    ftm: number;
+    fta: number;
+    tpm: number;
+    tpa: number;
   };
   perGame: {
     ppg: number;
@@ -46,6 +50,8 @@ export type PlayerStatsLine = {
     fpg: number;
   };
   fgPct: number;
+  ftPct: number;
+  tpPct: number;
 };
 
 export type TournamentLeaderRow = PlayerStatsLine & {
@@ -163,6 +169,10 @@ export type MatchPlayerStatsInput = {
   fouls: number;
   fgm: number;
   fga: number;
+  ftm: number;
+  fta: number;
+  tpm: number;
+  tpa: number;
 };
 
 export type TournamentResultMatchOverview = {
@@ -192,6 +202,12 @@ export type TournamentResultBoxscoreRow = {
   fgm: number;
   fga: number;
   fgPct: number;
+  ftm: number;
+  fta: number;
+  ftPct: number;
+  tpm: number;
+  tpa: number;
+  tpPct: number;
 };
 
 export type TournamentResultSummary = {
@@ -223,6 +239,12 @@ export type TournamentAnalyticsPlayerGame = {
   fgm: number;
   fga: number;
   fgPct: number;
+  ftm: number;
+  fta: number;
+  ftPct: number;
+  tpm: number;
+  tpa: number;
+  tpPct: number;
 };
 
 export type TournamentAnalyticsSnapshot = {
