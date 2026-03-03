@@ -15,6 +15,7 @@ import type {
   BattlePlayerResult,
   BattleSummary,
   MvpBreakdownRow,
+  PlayerStatsLine,
   RaceSeriesPlayer,
   TournamentAnalyticsKpi,
   TournamentLeaderRow,
@@ -58,42 +59,7 @@ const readHslVar = (name: string, fallback: string) => {
   return raw ? `hsl(${raw})` : fallback;
 };
 
-const buildQuickLeaders = (
-  rows: Array<{
-    playerId: number;
-    name: string;
-    photo?: string | null;
-    teamName: string | null;
-    gamesPlayed: number;
-    totals: {
-      points: number;
-      rebounds: number;
-      assists: number;
-      steals: number;
-      blocks: number;
-      turnovers: number;
-      fouls: number;
-      fgm: number;
-      fga: number;
-      ftm: number;
-      fta: number;
-      tpm: number;
-      tpa: number;
-    };
-    perGame: {
-      ppg: number;
-      rpg: number;
-      apg: number;
-      spg: number;
-      bpg: number;
-      topg: number;
-      fpg: number;
-    };
-    fgPct: number;
-    ftPct: number;
-    tpPct: number;
-  }>
-): DashboardQuickLeadersGroup[] => {
+const buildQuickLeaders = (rows: PlayerStatsLine[]): DashboardQuickLeadersGroup[] => {
   const metricConfig: Array<{ label: string; metric: TournamentStatMetric }> = [
     { label: "Puntos", metric: "points" },
     { label: "Asistencias", metric: "assists" },

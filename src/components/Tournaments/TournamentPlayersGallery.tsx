@@ -37,6 +37,15 @@ const normalizeText = (value: string) =>
     .toLowerCase()
     .trim();
 
+const toSafeText = (value: unknown): string => {
+  if (typeof value === "string") return value.trim();
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+};
+
+const compareByText = (a: unknown, b: unknown): number =>
+  toSafeText(a).localeCompare(toSafeText(b), "es", { sensitivity: "base" });
+
 const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({ teams, loading = false }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedTeamId, setExpandedTeamId] = useState<number | null>(null);
@@ -58,24 +67,26 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({ tea
 
     teams.forEach((team) => {
       team.players.forEach((player) => {
-        const fullName = `${player.names} ${player.lastnames}`.replace(/\s+/g, " ").trim();
+        const fullName = `${toSafeText(player.names)} ${toSafeText(player.lastnames)}`
+          .replace(/\s+/g, " ")
+          .trim();
 
         if (!grouped.has(player.id)) {
           grouped.set(player.id, {
             id: player.id,
             fullName: fullName || `Jugador ${player.id}`,
-            backJerseyName: player.backjerseyname?.trim() || "Sin alias",
-            photo: player.photo,
-            role: player.description?.trim() || "Jugador",
+            backJerseyName: toSafeText(player.backjerseyname) || "Sin alias",
+            photo: toSafeText(player.photo) || undefined,
+            role: toSafeText(player.description) || "Jugador",
             jersey: Number.isFinite(Number(player.jerseynumber)) ? String(player.jerseynumber) : "--",
             teamId: team.id,
-            teamName: team.name,
+            teamName: toSafeText(team.name) || "Equipo sin nombre",
           });
         }
       });
     });
 
-    return Array.from(grouped.values()).sort((a, b) => a.fullName.localeCompare(b.fullName, "es"));
+    return Array.from(grouped.values()).sort((a, b) => compareByText(a.fullName, b.fullName));
   }, [teams]);
 
   const playersByTeam = useMemo(() => {
@@ -158,7 +169,7 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({ tea
       <div className="space-y-2.5">
         {teams
           .slice()
-          .sort((a, b) => a.name.localeCompare(b.name, "es"))
+          .sort((a, b) => compareByText(a.name, b.name))
           .map((team) => {
             const allPlayers = playersByTeam.get(team.id) ?? [];
             const visiblePlayers = allPlayers.filter((player) =>

@@ -1,6 +1,7 @@
 import { supabase } from "../lib/supabase";
 import { getTournamentAnalyticsSnapshot } from "./tournamentAnalytics";
 import type { PlayerStatsLine } from "../types/tournament-analytics";
+import { computeValuation, computeValuationPerGame } from "../utils/tournament-stats";
 
 export type TournamentOption = {
   id: string;
@@ -57,6 +58,8 @@ const listTournamentsMap = async () => {
 
 const sortPlayerLines = (rows: PlayerStatsLine[]) =>
   [...rows].sort((a, b) => {
+    if (b.valuation !== a.valuation) return b.valuation - a.valuation;
+    if (b.valuationPerGame !== a.valuationPerGame) return b.valuationPerGame - a.valuationPerGame;
     if (b.totals.points !== a.totals.points) return b.totals.points - a.totals.points;
     if (b.perGame.ppg !== a.perGame.ppg) return b.perGame.ppg - a.perGame.ppg;
     return a.name.localeCompare(b.name, "es");
@@ -80,6 +83,20 @@ const toMergedLine = (row: Record<string, unknown>): PlayerStatsLine => {
     tpm: toNumber(row.tpm),
     tpa: toNumber(row.tpa),
   };
+  const valuation = computeValuation({
+    points: totals.points,
+    rebounds: totals.rebounds,
+    assists: totals.assists,
+    steals: totals.steals,
+    blocks: totals.blocks,
+    turnovers: totals.turnovers,
+    fouls: totals.fouls,
+    fgm: totals.fgm,
+    fga: totals.fga,
+    ftm: totals.ftm,
+    fta: totals.fta,
+    tpm: totals.tpm,
+  });
 
   return {
     playerId,
@@ -100,6 +117,8 @@ const toMergedLine = (row: Record<string, unknown>): PlayerStatsLine => {
     fgPct: computeFgPct(totals.fgm, totals.fga),
     ftPct: computePct(totals.ftm, totals.fta),
     tpPct: computePct(totals.tpm, totals.tpa),
+    valuation,
+    valuationPerGame: computeValuationPerGame(valuation, gamesPlayed),
   };
 };
 

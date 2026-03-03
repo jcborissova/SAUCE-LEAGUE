@@ -1,6 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useMemo, useState } from "react";
-import { supabase } from "../../lib/supabase";
 import { toast } from "react-toastify";
 import type { Player } from "../../types/player";
 import {
@@ -11,6 +9,11 @@ import {
   ArrowPathIcon,
   UserGroupIcon,
 } from "@heroicons/react/24/solid";
+import {
+  fetchTournamentPlayers,
+  fetchTournamentTeamAssignments,
+  saveTournamentTeamAssignments,
+} from "../../services/tournamentTeams";
 
 type Team = {
   id: number;
@@ -33,31 +36,17 @@ const TournamentTeamsConfig: React.FC<Props> = ({ tournamentId, setGlobalLoading
     const fetchData = async () => {
       setGlobalLoading(true);
       try {
-        const { data: playersData, error: playersError } = await supabase.from("players").select("*").order("id");
-        if (playersError) {
-          toast.error("Error al cargar jugadores");
-        } else {
-          setPlayers(playersData || []);
-        }
+        const [playersData, teamsData] = await Promise.all([
+          fetchTournamentPlayers(),
+          fetchTournamentTeamAssignments(tournamentId),
+        ]);
 
-        const { data: teamsData, error: teamsError } = await supabase
-          .from("teams")
-          .select("id, name, team_players(player_id)")
-          .eq("tournament_id", tournamentId);
-
-        if (teamsError) {
-          toast.error("Error al cargar equipos");
-        } else {
-          const formatted = (teamsData || []).map((team) => ({
-            id: team.id,
-            name: team.name,
-            playerIds: team.team_players ? team.team_players.map((tp: any) => tp.player_id) : [],
-          }));
-          setTeams(formatted);
-          setActiveTeamIndex(formatted.length > 0 ? 0 : null);
-        }
+        setPlayers(playersData);
+        setTeams(teamsData);
+        setActiveTeamIndex(teamsData.length > 0 ? 0 : null);
       } catch (err) {
         console.error(err);
+        toast.error(err instanceof Error ? err.message : "No se pudieron cargar los datos del torneo.");
       } finally {
         setGlobalLoading(false);
       }
@@ -121,36 +110,12 @@ const TournamentTeamsConfig: React.FC<Props> = ({ tournamentId, setGlobalLoading
 
     try {
       setSaving(true);
-
-      const { data: existingTeams } = await supabase.from("teams").select("id").eq("tournament_id", tournamentId);
-      if (existingTeams && existingTeams.length > 0) {
-        const existingIds = existingTeams.map((team) => team.id);
-        await supabase.from("team_players").delete().in("team_id", existingIds);
-        await supabase.from("teams").delete().in("id", existingIds);
-      }
-
-      for (const team of teams) {
-        const { data: createdTeam, error: teamError } = await supabase
-          .from("teams")
-          .insert({ name: team.name, tournament_id: tournamentId })
-          .select()
-          .single();
-
-        if (teamError) throw teamError;
-
-        for (const playerId of team.playerIds) {
-          const { error: playerError } = await supabase
-            .from("team_players")
-            .insert({ team_id: createdTeam.id, player_id: playerId });
-
-          if (playerError) throw playerError;
-        }
-      }
+      await saveTournamentTeamAssignments(tournamentId, teams);
 
       toast.success("Equipos guardados");
     } catch (error) {
       console.error(error);
-      toast.error("Error al guardar equipos");
+      toast.error(error instanceof Error ? error.message : "Error al guardar equipos");
     } finally {
       setSaving(false);
     }
