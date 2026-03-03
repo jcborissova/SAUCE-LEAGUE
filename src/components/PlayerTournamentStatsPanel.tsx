@@ -28,11 +28,11 @@ const formatTournamentDate = (value: string | null) => {
 const metricCardClassName =
   "rounded-[10px] border bg-[hsl(var(--surface-1))] px-2.5 py-2 shadow-[0_1px_0_hsl(var(--border)/0.24)]";
 
-const formatSigned = (value: number, digits = 1) => {
-  const fixed = value.toFixed(digits);
-  if (value > 0) return `+${fixed}`;
-  return fixed;
-};
+const computePraPerGame = (item: PlayerTournamentStatSummary) =>
+  item.line.perGame.ppg + item.line.perGame.rpg + item.line.perGame.apg - item.line.perGame.topg;
+
+const computePraTotal = (item: PlayerTournamentStatSummary) =>
+  item.line.totals.points + item.line.totals.rebounds + item.line.totals.assists - item.line.totals.turnovers;
 
 const PlayerTournamentStatsPanel: React.FC<Props> = ({
   playerId,
@@ -154,8 +154,8 @@ const PlayerTournamentStatsPanel: React.FC<Props> = ({
                   <p className="text-sm font-bold tabular-nums">{item.line.fgPct.toFixed(1)}%</p>
                 </div>
                 <div className={metricCardClassName}>
-                  <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">+/- PJ</p>
-                  <p className="text-sm font-bold tabular-nums">{formatSigned(item.line.perGame.plusMinus, 1)}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">PRA PJ</p>
+                  <p className="text-sm font-bold tabular-nums">{computePraPerGame(item).toFixed(1)}</p>
                 </div>
                 <div className={metricCardClassName}>
                   <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Val/PJ</p>
@@ -181,8 +181,8 @@ const PlayerTournamentStatsPanel: React.FC<Props> = ({
                   <p className="text-sm font-semibold tabular-nums">{item.line.totals.blocks}</p>
                 </div>
                 <div className={metricCardClassName}>
-                  <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">+/- Total</p>
-                  <p className="text-sm font-semibold tabular-nums">{formatSigned(item.line.totals.plusMinus, 0)}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">PRA Total</p>
+                  <p className="text-sm font-semibold tabular-nums">{computePraTotal(item).toFixed(0)}</p>
                 </div>
                 <div className={metricCardClassName}>
                   <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Tov</p>

@@ -32,13 +32,17 @@ const NAV_ITEMS: NavItem[] = [
 
 const Layout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { role } = useRole();
+  const { role, isReady } = useRole();
   const { theme, setTheme, systemTheme } = useTheme();
   const location = useLocation();
 
   const currentTheme = (theme === "system" ? systemTheme : theme) ?? "light";
   const isTournamentImmersive = location.pathname.startsWith("/tournaments/view/");
-  const visibleNavItems = useMemo(() => NAV_ITEMS.filter((item) => !item.protected || role !== "visor"), [role]);
+  const canSeeProtectedSections = isReady && role === "admin";
+  const visibleNavItems = useMemo(
+    () => NAV_ITEMS.filter((item) => !item.protected || canSeeProtectedSections),
+    [canSeeProtectedSections]
+  );
 
   const activeSectionLabel = useMemo(() => {
     if (isTournamentImmersive) return "Torneo";
@@ -91,7 +95,7 @@ const Layout: React.FC = () => {
 
           <div className="ml-auto flex items-center gap-2">
             <span className="hidden rounded-[6px] border border-[hsl(var(--border)/0.85)] bg-[hsl(var(--surface-1))] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))] sm:inline-flex">
-              {role === "admin" ? "Admin" : "Visor"}
+              {!isReady ? "..." : role === "admin" ? "Admin" : "Visor"}
             </span>
             <button
               onClick={toggleTheme}
