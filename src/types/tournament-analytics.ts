@@ -52,6 +52,8 @@ export type PlayerStatsLine = {
   fgPct: number;
   ftPct: number;
   tpPct: number;
+  valuation: number;
+  valuationPerGame: number;
 };
 
 export type TournamentLeaderRow = PlayerStatsLine & {

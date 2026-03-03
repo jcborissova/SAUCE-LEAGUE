@@ -1,10 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useMemo, useState } from "react";
-import { supabase } from "../../lib/supabase";
 import type { Player } from "../../types/player";
 import { ArrowPathIcon } from "@heroicons/react/24/solid";
 import { ArrowDownTrayIcon, ArrowLeftIcon, ArrowTopRightOnSquareIcon, DocumentTextIcon } from "@heroicons/react/24/outline";
 import { Link, useParams } from "react-router-dom";
+import { toast } from "react-toastify";
 
 import TournamentScheduleView from "./TournamentScheduleView";
 import TournamentStandings from "./TournamentStandings";
@@ -18,6 +17,8 @@ import EmptyState from "../ui/EmptyState";
 import ModalShell from "../ui/ModalShell";
 import { TOURNAMENT_RULES_PDF_URL, TOURNAMENT_RULES_TITLE } from "../../constants/tournamentRules";
 import { getTournamentSettings } from "../../services/tournamentAnalytics";
+import { fetchTournamentTeamsRoster } from "../../services/tournamentTeams";
+import { supabase } from "../../lib/supabase";
 
 type Team = {
   id: number;
@@ -49,62 +50,79 @@ const TournamentViewPage: React.FC = () => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
   const [teamsLoaded, setTeamsLoaded] = useState(false);
+  const [teamsError, setTeamsError] = useState<string | null>(null);
+  const [teamsReloadToken, setTeamsReloadToken] = useState(0);
   const [rulesPdfUrl, setRulesPdfUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!tournamentId) return;
+    let cancelled = false;
 
     const loadTournament = async () => {
       setTournamentLoading(true);
 
-      const { data, error } = await supabase.from("tournaments").select("name").eq("id", tournamentId).single();
-      if (!error && data?.name) setTournamentName(data.name);
-      else setTournamentName("Sauce League");
+      try {
+        const { data, error } = await supabase
+          .from("tournaments")
+          .select("name")
+          .eq("id", tournamentId)
+          .maybeSingle();
 
-      setTournamentLoading(false);
+        if (cancelled) return;
+        if (!error && data?.name) setTournamentName(data.name);
+        else setTournamentName("Sauce League");
+      } finally {
+        if (!cancelled) setTournamentLoading(false);
+      }
     };
 
     loadTournament();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tournamentId]);
+
+  useEffect(() => {
+    setTeams([]);
+    setTeamsLoaded(false);
+    setTeamsLoading(false);
+    setTeamsError(null);
+    setTeamsReloadToken(0);
   }, [tournamentId]);
 
   useEffect(() => {
     if (!tournamentId || activeTab !== "players" || teamsLoaded) return;
+    let cancelled = false;
 
     const fetchTeamsAndPlayers = async () => {
       setTeamsLoading(true);
+      setTeamsError(null);
       try {
-        const { data: playersData, error: playersError } = await supabase.from("players").select("*");
-        if (playersError) throw playersError;
+        const roster = await fetchTournamentTeamsRoster(tournamentId);
+        if (cancelled) return;
 
-        const { data: teamsData, error: teamsError } = await supabase
-          .from("teams")
-          .select("id, name, team_players(player_id)")
-          .eq("tournament_id", tournamentId);
-
-        if (teamsError) throw teamsError;
-
-        const formattedTeams = (teamsData || []).map((team) => {
-          const playerIds = team.team_players ? team.team_players.map((tp: any) => tp.player_id) : [];
-          const teamPlayers = playersData?.filter((player) => playerIds.includes(player.id)) || [];
-
-          return {
-            id: team.id,
-            name: team.name,
-            players: teamPlayers,
-          };
-        });
-
-        setTeams(formattedTeams);
+        setTeams(roster);
         setTeamsLoaded(true);
       } catch (error) {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : "No se pudieron cargar equipos y jugadores.";
         console.error("Error al cargar jugadores del torneo", error);
+        toast.error(message);
+        setTeams([]);
+        setTeamsLoaded(false);
+        setTeamsError(message);
       } finally {
-        setTeamsLoading(false);
+        if (!cancelled) setTeamsLoading(false);
       }
     };
 
     fetchTeamsAndPlayers();
-  }, [activeTab, teamsLoaded, tournamentId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, teamsLoaded, tournamentId, teamsReloadToken]);
 
   useEffect(() => {
     if (!tournamentId) return;
@@ -248,6 +266,25 @@ const TournamentViewPage: React.FC = () => {
               <div className="flex justify-center py-24">
                 <ArrowPathIcon className="h-10 w-10 animate-spin text-[hsl(var(--primary))]" />
               </div>
+            ) : teamsError ? (
+              <EmptyState
+                title="No se pudieron cargar los equipos"
+                description={teamsError}
+                action={
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => {
+                      setTeams([]);
+                      setTeamsLoaded(false);
+                      setTeamsError(null);
+                      setTeamsReloadToken((value) => value + 1);
+                    }}
+                  >
+                    Reintentar
+                  </button>
+                }
+              />
             ) : (
               <TournamentPlayersGallery teams={teams} loading={teamsLoading} />
             )}

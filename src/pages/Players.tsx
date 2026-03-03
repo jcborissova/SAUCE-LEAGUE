@@ -535,10 +535,16 @@ const Players: React.FC = () => {
                 </div>
               </div>
 
-              <div className="rounded-[10px] border bg-[hsl(var(--surface-2)/0.45)] p-3 text-xs text-[hsl(var(--muted-foreground))]">
-                Incluye estadísticas simples completas: PTS, REB, AST, STL, BLK, TOV, PF, FG, TL (FT) y triples
-                (3PT). En partidos viejos, TL/3PT pueden verse en 0 si no se registraron en esa planilla.
-              </div>
+	              <div className="rounded-[10px] border bg-[hsl(var(--surface-2)/0.45)] p-3 text-xs text-[hsl(var(--muted-foreground))]">
+	                Incluye estadísticas simples completas: PTS, REB, AST, STL, BLK, TOV, PF, FG, TL (FT) y triples
+	                (3PT). En partidos viejos, TL/3PT pueden verse en 0 si no se registraron en esa planilla. La
+	                valoración se calcula como:
+	                {" "}
+	                <span className="font-semibold text-[hsl(var(--foreground))]">
+	                  (PTS+REB+AST+STL+BLK+FGM+FTM+3PM) - ((FGA-FGM)+(FTA-FTM)+TOV+PF)
+	                </span>
+	                .
+	              </div>
 
               {tournamentStatsLoading ? (
                 <div className="flex items-center justify-center gap-2 rounded-[10px] border bg-[hsl(var(--surface-2)/0.45)] p-5 text-sm text-[hsl(var(--muted-foreground))]">
@@ -584,18 +590,26 @@ const Players: React.FC = () => {
                           </div>
 
                           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                            <div className="rounded-[8px] border bg-[hsl(var(--surface-2)/0.6)] px-2 py-1.5">
-                              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Pts</p>
-                              <p className="text-sm font-bold tabular-nums">{line.totals.points}</p>
-                            </div>
-                            <div className="rounded-[8px] border bg-[hsl(var(--surface-2)/0.6)] px-2 py-1.5">
-                              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">PPP</p>
-                              <p className="text-sm font-bold tabular-nums">{line.perGame.ppg.toFixed(1)}</p>
-                            </div>
-                            <div className="rounded-[8px] border bg-[hsl(var(--surface-2)/0.6)] px-2 py-1.5">
-                              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">FG%</p>
-                              <p className="text-sm font-bold tabular-nums">{line.fgPct.toFixed(1)}%</p>
-                            </div>
+	                            <div className="rounded-[8px] border bg-[hsl(var(--surface-2)/0.6)] px-2 py-1.5">
+	                              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Pts</p>
+	                              <p className="text-sm font-bold tabular-nums">{line.totals.points}</p>
+	                            </div>
+	                            <div className="rounded-[8px] border bg-[hsl(var(--surface-2)/0.6)] px-2 py-1.5">
+	                              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Val</p>
+	                              <p className="text-sm font-bold tabular-nums">{line.valuation.toFixed(1)}</p>
+	                            </div>
+	                            <div className="rounded-[8px] border bg-[hsl(var(--surface-2)/0.6)] px-2 py-1.5">
+	                              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">PPP</p>
+	                              <p className="text-sm font-bold tabular-nums">{line.perGame.ppg.toFixed(1)}</p>
+	                            </div>
+	                            <div className="rounded-[8px] border bg-[hsl(var(--surface-2)/0.6)] px-2 py-1.5">
+	                              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Val/PJ</p>
+	                              <p className="text-sm font-bold tabular-nums">{line.valuationPerGame.toFixed(1)}</p>
+	                            </div>
+	                            <div className="rounded-[8px] border bg-[hsl(var(--surface-2)/0.6)] px-2 py-1.5">
+	                              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">FG%</p>
+	                              <p className="text-sm font-bold tabular-nums">{line.fgPct.toFixed(1)}%</p>
+	                            </div>
                             <div className="rounded-[8px] border bg-[hsl(var(--surface-2)/0.6)] px-2 py-1.5">
                               <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Reb</p>
                               <p className="text-sm font-semibold tabular-nums">{line.totals.rebounds}</p>
@@ -659,11 +673,13 @@ const Players: React.FC = () => {
                           <TableHead className="w-[64px]">#</TableHead>
                           <TableHead>Jugador</TableHead>
                           <TableHead>Equipo</TableHead>
-                          <TableHead className="text-right">PJ</TableHead>
-                          <TableHead className="text-right">Pts</TableHead>
-                          <TableHead className="text-right">PPP</TableHead>
-                          <TableHead className="text-right">Reb</TableHead>
-                          <TableHead className="text-right">Ast</TableHead>
+	                          <TableHead className="text-right">PJ</TableHead>
+	                          <TableHead className="text-right">Pts</TableHead>
+	                          <TableHead className="text-right">Val</TableHead>
+	                          <TableHead className="text-right">PPP</TableHead>
+	                          <TableHead className="text-right">Val/PJ</TableHead>
+	                          <TableHead className="text-right">Reb</TableHead>
+	                          <TableHead className="text-right">Ast</TableHead>
                           <TableHead className="text-right">Stl</TableHead>
                           <TableHead className="text-right">Blk</TableHead>
                           <TableHead className="text-right">Tov</TableHead>
@@ -688,11 +704,13 @@ const Players: React.FC = () => {
                               <TableCell className="font-semibold tabular-nums">{index + 1}</TableCell>
                               <TableCell className="font-semibold">{line.name}</TableCell>
                               <TableCell className="text-[hsl(var(--muted-foreground))]">{line.teamName ?? "--"}</TableCell>
-                              <TableCell className="text-right tabular-nums">{line.gamesPlayed}</TableCell>
-                              <TableCell className="text-right tabular-nums font-semibold">{line.totals.points}</TableCell>
-                              <TableCell className="text-right tabular-nums">{line.perGame.ppg.toFixed(1)}</TableCell>
-                              <TableCell className="text-right tabular-nums">{line.totals.rebounds}</TableCell>
-                              <TableCell className="text-right tabular-nums">{line.totals.assists}</TableCell>
+	                              <TableCell className="text-right tabular-nums">{line.gamesPlayed}</TableCell>
+	                              <TableCell className="text-right tabular-nums font-semibold">{line.totals.points}</TableCell>
+	                              <TableCell className="text-right tabular-nums font-semibold">{line.valuation.toFixed(1)}</TableCell>
+	                              <TableCell className="text-right tabular-nums">{line.perGame.ppg.toFixed(1)}</TableCell>
+	                              <TableCell className="text-right tabular-nums">{line.valuationPerGame.toFixed(1)}</TableCell>
+	                              <TableCell className="text-right tabular-nums">{line.totals.rebounds}</TableCell>
+	                              <TableCell className="text-right tabular-nums">{line.totals.assists}</TableCell>
                               <TableCell className="text-right tabular-nums">{line.totals.steals}</TableCell>
                               <TableCell className="text-right tabular-nums">{line.totals.blocks}</TableCell>
                               <TableCell className="text-right tabular-nums">{line.totals.turnovers}</TableCell>

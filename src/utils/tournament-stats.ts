@@ -16,6 +16,45 @@ export const computeFgPct = (fgm: number, fga: number): number => {
   return computePct(fgm, fga);
 };
 
+export const computeValuation = (stats: {
+  points: number;
+  rebounds: number;
+  assists: number;
+  steals: number;
+  blocks: number;
+  turnovers: number;
+  fouls: number;
+  fgm: number;
+  fga: number;
+  ftm: number;
+  fta: number;
+  tpm: number;
+}): number => {
+  // Valoracion = positivos - negativos.
+  // Positivos: PTS, REB, AST, STL, BLK, FGM, FTM, 3PM.
+  // Negativos: (FGA-FGM), (FTA-FTM), TOV y PF.
+  const positive =
+    stats.points +
+    stats.rebounds +
+    stats.assists +
+    stats.steals +
+    stats.blocks +
+    stats.fgm +
+    stats.ftm +
+    stats.tpm;
+
+  const missedFieldGoals = Math.max(0, stats.fga - stats.fgm);
+  const missedFreeThrows = Math.max(0, stats.fta - stats.ftm);
+  const negative = missedFieldGoals + missedFreeThrows + stats.turnovers + stats.fouls;
+
+  return round2(positive - negative);
+};
+
+export const computeValuationPerGame = (valuation: number, gamesPlayed: number): number => {
+  if (gamesPlayed <= 0) return 0;
+  return round2(valuation / gamesPlayed);
+};
+
 export const computeZScores = (values: number[]): number[] => {
   if (values.length === 0) return [];
   const mean = values.reduce((sum, value) => sum + value, 0) / values.length;

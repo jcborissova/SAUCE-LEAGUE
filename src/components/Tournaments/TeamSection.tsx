@@ -8,8 +8,8 @@ type Props = {
   players: Player[];
 };
 
-const getInitials = (value: string) =>
-  value
+const getInitials = (value: unknown) =>
+  String(value ?? "")
     .split(" ")
     .filter(Boolean)
     .slice(0, 2)

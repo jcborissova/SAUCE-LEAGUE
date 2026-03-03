@@ -26,6 +26,8 @@ import {
   computePct,
   computeFgPct,
   computeMvpScores,
+  computeValuation,
+  computeValuationPerGame,
   round2,
 } from "../utils/tournament-stats";
 
@@ -107,6 +109,31 @@ const toNumber = (value: unknown): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const getLineValuation = (
+  totals: PlayerStatsLine["totals"],
+  gamesPlayed: number
+): Pick<PlayerStatsLine, "valuation" | "valuationPerGame"> => {
+  const valuation = computeValuation({
+    points: totals.points,
+    rebounds: totals.rebounds,
+    assists: totals.assists,
+    steals: totals.steals,
+    blocks: totals.blocks,
+    turnovers: totals.turnovers,
+    fouls: totals.fouls,
+    fgm: totals.fgm,
+    fga: totals.fga,
+    ftm: totals.ftm,
+    fta: totals.fta,
+    tpm: totals.tpm,
+  });
+
+  return {
+    valuation,
+    valuationPerGame: computeValuationPerGame(valuation, gamesPlayed),
+  };
+};
+
 const fullName = (names: string | null | undefined, lastnames: string | null | undefined): string =>
   [names, lastnames].filter(Boolean).join(" ").trim();
 
@@ -181,6 +208,7 @@ const buildPlayerLines = (
 
   return Array.from(grouped.values()).map((entry) => {
     const gamesPlayed = entry.games.size;
+    const valuation = getLineValuation(entry.totals, gamesPlayed);
 
     return {
       playerId: entry.playerId,
@@ -201,6 +229,7 @@ const buildPlayerLines = (
       fgPct: computeFgPct(entry.totals.fgm, entry.totals.fga),
       ftPct: computePct(entry.totals.ftm, entry.totals.fta),
       tpPct: computePct(entry.totals.tpm, entry.totals.tpa),
+      ...valuation,
     };
   });
 };
@@ -431,6 +460,22 @@ const loadPlayerTotalsFromAnalyticsView = async (
       const names = row.names ? String(row.names) : null;
       const lastnames = row.lastnames ? String(row.lastnames) : null;
       const playerName = fullName(names, lastnames) || `Jugador ${toNumber(row.player_id)}`;
+      const totals: PlayerStatsLine["totals"] = {
+        points: toNumber(row.points),
+        rebounds: toNumber(row.rebounds),
+        assists: toNumber(row.assists),
+        steals: toNumber(row.steals),
+        blocks: toNumber(row.blocks),
+        turnovers: toNumber(row.turnovers),
+        fouls: toNumber(row.fouls),
+        fgm: toNumber(row.fgm),
+        fga: toNumber(row.fga),
+        ftm: toNumber(row.ftm),
+        fta: toNumber(row.fta),
+        tpm: toNumber(row.tpm),
+        tpa: toNumber(row.tpa),
+      };
+      const valuation = getLineValuation(totals, gamesPlayed);
 
       return {
         playerId: toNumber(row.player_id),
@@ -438,21 +483,7 @@ const loadPlayerTotalsFromAnalyticsView = async (
         photo: row.photo ? String(row.photo) : null,
         teamName: row.team_name ? String(row.team_name) : null,
         gamesPlayed,
-        totals: {
-          points: toNumber(row.points),
-          rebounds: toNumber(row.rebounds),
-          assists: toNumber(row.assists),
-          steals: toNumber(row.steals),
-          blocks: toNumber(row.blocks),
-          turnovers: toNumber(row.turnovers),
-          fouls: toNumber(row.fouls),
-          fgm: toNumber(row.fgm),
-          fga: toNumber(row.fga),
-          ftm: toNumber(row.ftm),
-          fta: toNumber(row.fta),
-          tpm: toNumber(row.tpm),
-          tpa: toNumber(row.tpa),
-        },
+        totals,
         perGame: {
           ppg: toNumber(row.ppg),
           rpg: toNumber(row.rpg),
@@ -465,6 +496,7 @@ const loadPlayerTotalsFromAnalyticsView = async (
         fgPct: toNumber(row.fg_pct),
         ftPct: toNumber(row.ft_pct) || computePct(toNumber(row.ftm), toNumber(row.fta)),
         tpPct: toNumber(row.tp_pct) || computePct(toNumber(row.tpm), toNumber(row.tpa)),
+        ...valuation,
       };
     });
   }
@@ -525,6 +557,8 @@ const loadPlayerTotalsFromAnalyticsView = async (
         fgPct: 0,
         ftPct: 0,
         tpPct: 0,
+        valuation: 0,
+        valuationPerGame: 0,
       } as PlayerStatsLine);
 
     current.name = current.name || fallbackName;
@@ -548,21 +582,26 @@ const loadPlayerTotalsFromAnalyticsView = async (
     merged.set(playerId, current);
   });
 
-  return Array.from(merged.values()).map((entry) => ({
-    ...entry,
-    perGame: {
-      ppg: entry.gamesPlayed > 0 ? round2(entry.totals.points / entry.gamesPlayed) : 0,
-      rpg: entry.gamesPlayed > 0 ? round2(entry.totals.rebounds / entry.gamesPlayed) : 0,
-      apg: entry.gamesPlayed > 0 ? round2(entry.totals.assists / entry.gamesPlayed) : 0,
-      spg: entry.gamesPlayed > 0 ? round2(entry.totals.steals / entry.gamesPlayed) : 0,
-      bpg: entry.gamesPlayed > 0 ? round2(entry.totals.blocks / entry.gamesPlayed) : 0,
-      topg: entry.gamesPlayed > 0 ? round2(entry.totals.turnovers / entry.gamesPlayed) : 0,
-      fpg: entry.gamesPlayed > 0 ? round2(entry.totals.fouls / entry.gamesPlayed) : 0,
-    },
-    fgPct: computeFgPct(entry.totals.fgm, entry.totals.fga),
-    ftPct: computePct(entry.totals.ftm, entry.totals.fta),
-    tpPct: computePct(entry.totals.tpm, entry.totals.tpa),
-  }));
+  return Array.from(merged.values()).map((entry) => {
+    const valuation = getLineValuation(entry.totals, entry.gamesPlayed);
+
+    return {
+      ...entry,
+      perGame: {
+        ppg: entry.gamesPlayed > 0 ? round2(entry.totals.points / entry.gamesPlayed) : 0,
+        rpg: entry.gamesPlayed > 0 ? round2(entry.totals.rebounds / entry.gamesPlayed) : 0,
+        apg: entry.gamesPlayed > 0 ? round2(entry.totals.assists / entry.gamesPlayed) : 0,
+        spg: entry.gamesPlayed > 0 ? round2(entry.totals.steals / entry.gamesPlayed) : 0,
+        bpg: entry.gamesPlayed > 0 ? round2(entry.totals.blocks / entry.gamesPlayed) : 0,
+        topg: entry.gamesPlayed > 0 ? round2(entry.totals.turnovers / entry.gamesPlayed) : 0,
+        fpg: entry.gamesPlayed > 0 ? round2(entry.totals.fouls / entry.gamesPlayed) : 0,
+      },
+      fgPct: computeFgPct(entry.totals.fgm, entry.totals.fga),
+      ftPct: computePct(entry.totals.ftm, entry.totals.fta),
+      tpPct: computePct(entry.totals.tpm, entry.totals.tpa),
+      ...valuation,
+    };
+  });
 };
 
 const loadTeamFactorFromView = async (
@@ -970,7 +1009,7 @@ export const getTournamentSettings = async (tournamentId: string): Promise<Tourn
     .from("tournament_settings")
     .select("tournament_id, season_type, playoff_format")
     .eq("tournament_id", tournamentId)
-    .single();
+    .maybeSingle();
 
   if (error || !data) {
     return {
@@ -1281,7 +1320,7 @@ export const listTournamentPlayers = async (
       name: line.name,
       teamName: line.teamName,
     }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" }));
 };
 
 const toMatchOverview = (row: Record<string, unknown>): TournamentResultMatchOverview => ({

@@ -126,6 +126,7 @@ const PlayerTournamentStatsPanel: React.FC<Props> = ({
                 <div className="flex flex-wrap gap-1.5">
                   <Badge variant="primary">{item.line.gamesPlayed} PJ</Badge>
                   <Badge variant="success">{item.line.totals.points} pts</Badge>
+                  <Badge>{`Val ${item.line.valuation.toFixed(1)}`}</Badge>
                 </div>
               </div>
 
@@ -145,6 +146,10 @@ const PlayerTournamentStatsPanel: React.FC<Props> = ({
                 <div className={metricCardClassName}>
                   <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">FG%</p>
                   <p className="text-sm font-bold tabular-nums">{item.line.fgPct.toFixed(1)}%</p>
+                </div>
+                <div className={metricCardClassName}>
+                  <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Val/PJ</p>
+                  <p className="text-sm font-bold tabular-nums">{item.line.valuationPerGame.toFixed(1)}</p>
                 </div>
               </div>
 

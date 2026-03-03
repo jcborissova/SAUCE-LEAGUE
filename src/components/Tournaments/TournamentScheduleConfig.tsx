@@ -5,6 +5,7 @@ import { supabase } from "../../lib/supabase";
 import { toast } from "react-toastify";
 import dayjs from "dayjs";
 import AppSelect from "../ui/AppSelect";
+import { fetchTournamentTeamAssignments } from "../../services/tournamentTeams";
 
 type Props = {
   tournamentId: string;
@@ -392,21 +393,11 @@ const TournamentScheduleConfig: React.FC<Props> = ({ tournamentId }) => {
       }
 
       // 6. Construir participantes del partido desde equipos del torneo (teams + team_players)
-      const { data: tournamentTeams, error: tournamentTeamsError } = await supabase
-        .from("teams")
-        .select("name, team_players(player_id)")
-        .eq("tournament_id", tournamentId);
-
-      if (tournamentTeamsError) throw tournamentTeamsError;
-
       const playersByTeamName = new Map<string, number[]>();
+      const tournamentTeams = await fetchTournamentTeamAssignments(tournamentId);
 
-      (tournamentTeams ?? []).forEach((team: any) => {
-        const playerIds = (team.team_players ?? [])
-          .map((tp: any) => Number(tp.player_id))
-          .filter((playerId: number) => Number.isFinite(playerId));
-
-        playersByTeamName.set(team.name, playerIds);
+      tournamentTeams.forEach((team) => {
+        playersByTeamName.set(team.name, team.playerIds);
       });
 
       const allMatchPlayers: Array<{ match_id: number; player_id: number; team: "A" | "B" }> = [];
