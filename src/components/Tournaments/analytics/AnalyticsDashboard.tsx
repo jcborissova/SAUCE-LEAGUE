@@ -51,6 +51,7 @@ type AnalyticsDashboardProps = {
   onSpotlightMetricChange: (metric: RaceMetric) => void;
   onSpotlightModeChange: (mode: "cumulative" | "perGame") => void;
   onOpenPanel: (panel: AnalyticsPanelKey) => void;
+  onPlayerSelect?: (playerId: number, phase: TournamentPhaseFilter) => void;
 };
 
 type SpotlightTooltipPayload = {
@@ -66,6 +67,20 @@ const phaseLabel = (phase: TournamentPhaseFilter) => {
   return "Todos";
 };
 
+const formatQuickLeaderValue = (groupMetric: string, value: number) => {
+  if (groupMetric === "FG%") return `${value.toFixed(2)}%`;
+  if (groupMetric === "PRA") return value.toFixed(1);
+  return value.toLocaleString("es-ES");
+};
+
+const initialsFromName = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "JG";
+
 const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   loading,
   kpis,
@@ -78,6 +93,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   onSpotlightMetricChange,
   onSpotlightModeChange,
   onOpenPanel,
+  onPlayerSelect,
 }) => {
   const rankedSpotlight = [...spotlightSeries]
     .map((player) => {
@@ -100,7 +116,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
     })
     .sort((a, b) => b.latest - a.latest);
 
-  const visibleSpotlight = rankedSpotlight.slice(0, 5).map((entry) => entry.player);
+  const visibleSpotlight = rankedSpotlight.slice(0, 10).map((entry) => entry.player);
   const maxGames = Math.max(...visibleSpotlight.map((item) => item.points.length), 0);
 
   const chartData = Array.from({ length: maxGames }, (_, index) => {
@@ -166,7 +182,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
         <div className="app-card p-6 text-center text-sm text-[hsl(var(--text-subtle))]">Cargando dashboard...</div>
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
             {kpis.map((kpi) => (
               <article key={kpi.id} className="app-card px-3 py-2.5">
                 <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">{kpi.label}</p>
@@ -190,15 +206,36 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   <h4 className="text-sm font-semibold">{group.metric}</h4>
                   <div className="space-y-1.5">
                     {group.rows.map((row, index) => (
-                      <div key={`${group.metric}-${row.playerId}`} className="flex items-center justify-between gap-2 text-sm">
-                        <p className="truncate">
+                      <button
+                        key={`${group.metric}-${row.playerId}`}
+                        type="button"
+                        onClick={() => onPlayerSelect?.(row.playerId, spotlightPhase)}
+                        className={`w-full rounded-lg px-1 py-1 text-left flex items-center justify-between gap-2 text-sm transition ${
+                          onPlayerSelect
+                            ? "hover:bg-[hsl(var(--surface-2)/0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))]"
+                            : ""
+                        }`}
+                        disabled={!onPlayerSelect}
+                      >
+                        <p className="truncate inline-flex items-center gap-2">
+                          {row.photo ? (
+                            <img
+                              src={row.photo}
+                              alt={row.name}
+                              className="h-6 w-6 rounded-full object-cover border border-[hsl(var(--border)/0.82)]"
+                            />
+                          ) : (
+                            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-2))] text-[10px]">
+                              {initialsFromName(row.name)}
+                            </span>
+                          )}
                           <span className="text-[hsl(var(--text-subtle))] mr-1">#{index + 1}</span>
                           {row.name}
                         </p>
                         <p className="font-semibold text-[hsl(var(--primary))] tabular-nums shrink-0">
-                          {group.metric === "FG%" ? `${row.value.toFixed(2)}%` : row.value}
+                          {formatQuickLeaderValue(group.metric, row.value)}
                         </p>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </article>
@@ -255,10 +292,17 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             ) : (
               <div className="space-y-3">
                 <div className="flex flex-wrap gap-2">
-                  {rankedSpotlight.slice(0, 5).map((entry, index) => (
-                    <span
+                  {rankedSpotlight.slice(0, 10).map((entry, index) => (
+                    <button
                       key={`spotlight-chip-${entry.player.playerId}`}
-                      className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs bg-[hsl(var(--surface-2))]"
+                      type="button"
+                      onClick={() => onPlayerSelect?.(entry.player.playerId, spotlightPhase)}
+                      className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs bg-[hsl(var(--surface-2))] transition ${
+                        onPlayerSelect
+                          ? "hover:bg-[hsl(var(--surface-2)/0.7)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))]"
+                          : ""
+                      }`}
+                      disabled={!onPlayerSelect}
                     >
                       <span
                         className="h-2.5 w-2.5 rounded-full"
@@ -266,7 +310,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                       />
                       <span className="truncate max-w-[120px]">{entry.player.name}</span>
                       <span className="font-semibold tabular-nums">{entry.latest.toFixed(2)}</span>
-                    </span>
+                    </button>
                   ))}
                 </div>
 

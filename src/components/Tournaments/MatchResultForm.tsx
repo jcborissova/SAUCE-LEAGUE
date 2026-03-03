@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TrophyIcon, XMarkIcon, ArrowPathIcon } from "@heroicons/react/24/solid";
 import { supabase } from "../../lib/supabase";
-import { saveMatchStats } from "../../services/tournamentAnalytics";
+import { saveMatchStats, syncMatchParticipantsFromCurrentTeams } from "../../services/tournamentAnalytics";
 import type { MatchPlayerStatsInput } from "../../types/tournament-analytics";
 import AppSelect from "../ui/AppSelect";
 
@@ -36,7 +36,46 @@ type Props = {
   onSaved?: () => void;
 };
 
-const emptyLine = (): Omit<MatchPlayerStatsInput, "playerId"> => ({
+type StatsLine = Omit<MatchPlayerStatsInput, "playerId">;
+type SupabaseQueryError = { code?: string; message: string } | null;
+type SupabaseQueryResult<T> = { data: T | null; error: SupabaseQueryError };
+type MatchResultDraft = {
+  version: number;
+  matchId: number;
+  winnerTeam: string;
+  teams: { A: string; B: string };
+  players: PlayerRow[];
+  stats: Record<string, StatsLine>;
+  playedByPlayer: Record<string, boolean>;
+  updatedAt: string;
+};
+
+const DRAFT_VERSION = 1;
+const DRAFT_STORAGE_PREFIX = "sauce:match-result-draft";
+const PLAYER_QUERY_CHUNK = 200;
+const QUERY_MAX_ATTEMPTS = 3;
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const retryDelay = (attempt: number) => {
+  const base = Math.min(900, 180 * 2 ** (attempt - 1));
+  const jitter = Math.floor(Math.random() * 90);
+  return base + jitter;
+};
+
+const toStringSafe = (value: unknown): string => {
+  if (typeof value === "string") return value.trim();
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+};
+
+const toNonNegativeInt = (value: unknown): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.floor(parsed));
+};
+
+const emptyLine = (): StatsLine => ({
   points: 0,
   rebounds: 0,
   assists: 0,
@@ -52,69 +91,444 @@ const emptyLine = (): Omit<MatchPlayerStatsInput, "playerId"> => ({
   fta: 0,
 });
 
+const sanitizeStatsLine = (line: unknown): StatsLine => {
+  const source = typeof line === "object" && line !== null ? (line as Partial<StatsLine>) : {};
+
+  return {
+    points: toNonNegativeInt(source.points),
+    rebounds: toNonNegativeInt(source.rebounds),
+    assists: toNonNegativeInt(source.assists),
+    steals: toNonNegativeInt(source.steals),
+    blocks: toNonNegativeInt(source.blocks),
+    turnovers: toNonNegativeInt(source.turnovers),
+    fouls: toNonNegativeInt(source.fouls),
+    fgm: toNonNegativeInt(source.fgm),
+    fga: toNonNegativeInt(source.fga),
+    tpm: toNonNegativeInt(source.tpm),
+    tpa: toNonNegativeInt(source.tpa),
+    ftm: toNonNegativeInt(source.ftm),
+    fta: toNonNegativeInt(source.fta),
+  };
+};
+
+const normalizeDraftPlayer = (value: unknown): PlayerRow | null => {
+  if (typeof value !== "object" || value === null) return null;
+
+  const player = value as Partial<PlayerRow>;
+  const playerId = Number(player.playerId);
+  if (!Number.isFinite(playerId) || playerId <= 0) return null;
+
+  const side = player.teamSide === "A" || player.teamSide === "B" ? player.teamSide : null;
+  if (!side) return null;
+
+  return {
+    playerId,
+    teamSide: side,
+    teamName: toStringSafe(player.teamName),
+    names: toStringSafe(player.names),
+    lastnames: toStringSafe(player.lastnames),
+  };
+};
+
+const isRetryableSupabaseError = (error: SupabaseQueryError): boolean => {
+  if (!error) return false;
+
+  const code = String(error.code ?? "");
+  const message = String(error.message ?? "").toLowerCase();
+  return (
+    code === "57014" ||
+    message.includes("statement timeout") ||
+    message.includes("canceling statement due to statement timeout") ||
+    message.includes("timeout")
+  );
+};
+
+const isRetryableRuntimeError = (error: unknown): boolean => {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return true;
+  }
+
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  return message.includes("failed to fetch") || message.includes("network") || message.includes("timeout");
+};
+
+const chunkArray = <T,>(items: T[], size: number): T[][] => {
+  if (size <= 0 || items.length === 0) return [items];
+  const chunks: T[][] = [];
+
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+
+  return chunks;
+};
+
+const runQueryWithRetry = async <T,>(
+  queryFactory: () => PromiseLike<SupabaseQueryResult<T>>,
+  maxAttempts = QUERY_MAX_ATTEMPTS
+): Promise<SupabaseQueryResult<T>> => {
+  let lastResult: SupabaseQueryResult<T> | null = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const result = await queryFactory();
+      lastResult = result;
+
+      if (!result.error) {
+        return result;
+      }
+
+      const shouldRetry = attempt < maxAttempts && isRetryableSupabaseError(result.error);
+      if (!shouldRetry) {
+        return result;
+      }
+
+      await wait(retryDelay(attempt));
+    } catch (error) {
+      const shouldRetry = attempt < maxAttempts && isRetryableRuntimeError(error);
+      if (!shouldRetry) {
+        throw error;
+      }
+
+      await wait(retryDelay(attempt));
+    }
+  }
+
+  return (
+    lastResult ?? {
+      data: null,
+      error: { message: "No se pudo completar la consulta." },
+    }
+  );
+};
+
+const draftStorageKey = (matchId: number) => `${DRAFT_STORAGE_PREFIX}:v${DRAFT_VERSION}:${matchId}`;
+
+const readMatchResultDraft = (matchId: number): MatchResultDraft | null => {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(draftStorageKey(matchId));
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<MatchResultDraft>;
+    if (!parsed || typeof parsed !== "object") return null;
+    if (Number(parsed.version) !== DRAFT_VERSION) return null;
+    if (Number(parsed.matchId) !== matchId) return null;
+
+    const players = Array.isArray(parsed.players)
+      ? parsed.players.map((player) => normalizeDraftPlayer(player)).filter((player): player is PlayerRow => Boolean(player))
+      : [];
+
+    const rawStats = typeof parsed.stats === "object" && parsed.stats !== null ? parsed.stats : {};
+    const stats: Record<string, StatsLine> = {};
+    Object.entries(rawStats).forEach(([playerId, line]) => {
+      stats[String(playerId)] = sanitizeStatsLine(line);
+    });
+
+    const rawPlayed =
+      typeof parsed.playedByPlayer === "object" && parsed.playedByPlayer !== null ? parsed.playedByPlayer : {};
+    const playedByPlayer: Record<string, boolean> = {};
+    Object.entries(rawPlayed).forEach(([playerId, played]) => {
+      playedByPlayer[String(playerId)] = Boolean(played);
+    });
+
+    return {
+      version: DRAFT_VERSION,
+      matchId,
+      winnerTeam: toStringSafe(parsed.winnerTeam),
+      teams: {
+        A: toStringSafe(parsed.teams?.A),
+        B: toStringSafe(parsed.teams?.B),
+      },
+      players,
+      stats,
+      playedByPlayer,
+      updatedAt: toStringSafe(parsed.updatedAt),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const writeMatchResultDraft = (matchId: number, draft: MatchResultDraft) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(draftStorageKey(matchId), JSON.stringify(draft));
+  } catch {
+    // Ignora errores de cuota o almacenamiento restringido.
+  }
+};
+
+const clearMatchResultDraft = (matchId: number) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.removeItem(draftStorageKey(matchId));
+  } catch {
+    // Ignora errores de almacenamiento restringido.
+  }
+};
+
+const formatDraftTime = (value: string | null): string => {
+  if (!value) return "";
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "hace un momento";
+  }
+
+  return parsed.toLocaleTimeString("es-DO", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+};
+
 const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
   const [players, setPlayers] = useState<PlayerRow[]>([]);
   const [teams, setTeams] = useState<{ A: string; B: string }>({ A: "", B: "" });
   const [winnerTeam, setWinnerTeam] = useState("");
-  const [stats, setStats] = useState<Record<number, Omit<MatchPlayerStatsInput, "playerId">>>({});
+  const [stats, setStats] = useState<Record<number, StatsLine>>({});
   const [playedByPlayer, setPlayedByPlayer] = useState<Record<number, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [draftReady, setDraftReady] = useState(false);
 
-  const loadData = async () => {
+  const loadRequestRef = useRef(0);
+
+  const persistDraft = useCallback(() => {
+    if (!draftReady || players.length === 0) return;
+
+    const statsSnapshot: Record<string, StatsLine> = {};
+    const playedSnapshot: Record<string, boolean> = {};
+
+    players.forEach((player) => {
+      const key = String(player.playerId);
+      statsSnapshot[key] = sanitizeStatsLine(stats[player.playerId] ?? emptyLine());
+      playedSnapshot[key] = Boolean(playedByPlayer[player.playerId]);
+    });
+
+    const nowIso = new Date().toISOString();
+    const payload: MatchResultDraft = {
+      version: DRAFT_VERSION,
+      matchId,
+      winnerTeam: toStringSafe(winnerTeam),
+      teams: {
+        A: toStringSafe(teams.A),
+        B: toStringSafe(teams.B),
+      },
+      players: players.map((player) => ({
+        playerId: player.playerId,
+        teamSide: player.teamSide,
+        teamName: toStringSafe(player.teamName),
+        names: toStringSafe(player.names),
+        lastnames: toStringSafe(player.lastnames),
+      })),
+      stats: statsSnapshot,
+      playedByPlayer: playedSnapshot,
+      updatedAt: nowIso,
+    };
+
+    writeMatchResultDraft(matchId, payload);
+    setDraftSavedAt(nowIso);
+  }, [draftReady, matchId, playedByPlayer, players, stats, teams.A, teams.B, winnerTeam]);
+
+  const loadData = useCallback(async () => {
+    const requestId = loadRequestRef.current + 1;
+    loadRequestRef.current = requestId;
+
     setLoading(true);
     setErrorMessage(null);
+    setInfoMessage(null);
+    setDraftReady(false);
+
+    const localDraft = readMatchResultDraft(matchId);
 
     try {
-      const { data: match, error: matchError } = await supabase
-        .from("matches")
-        .select("id, team_a, team_b, winner_team")
-        .eq("id", matchId)
-        .single();
+      const matchResult = await runQueryWithRetry<{
+        id: number;
+        tournament_id: string | null;
+        team_a: string | null;
+        team_b: string | null;
+        winner_team: string | null;
+      }>(() =>
+        supabase
+          .from("matches")
+          .select("id, tournament_id, team_a, team_b, winner_team")
+          .eq("id", matchId)
+          .single()
+      );
 
-      if (matchError || !match) throw new Error(matchError?.message ?? "No se encontró el partido.");
+      if (matchResult.error || !matchResult.data) {
+        throw new Error(matchResult.error?.message ?? "No se encontró el partido.");
+      }
 
-      setTeams({ A: match.team_a ?? "Equipo A", B: match.team_b ?? "Equipo B" });
-      setWinnerTeam(match.winner_team ?? "");
+      const match = matchResult.data;
 
-      const { data: participants, error: participantsError } = await supabase
-        .from("match_players")
-        .select("player_id, team, player:players(id, names, lastnames)")
-        .eq("match_id", matchId)
-        .order("team", { ascending: true });
+      const resolvedTeams = {
+        A: toStringSafe(match.team_a) || "Equipo A",
+        B: toStringSafe(match.team_b) || "Equipo B",
+      };
 
-      if (participantsError) throw new Error(participantsError.message);
+      const tournamentId = toStringSafe(match.tournament_id);
+      const syncPromise = tournamentId
+        ? syncMatchParticipantsFromCurrentTeams({
+            matchId,
+            tournamentId,
+            teamA: match.team_a ?? null,
+            teamB: match.team_b ?? null,
+          }).catch((error) => {
+            console.warn("No se pudo sincronizar match_players al cargar resultados.", error);
+          })
+        : Promise.resolve();
 
-      const rawParticipants = (participants ?? []) as any[];
-      const parsedParticipants = rawParticipants
-        .filter((item) => item.player_id && (item.team === "A" || item.team === "B"))
-        .map((item) => ({
-          playerId: item.player_id,
-          teamSide: item.team as "A" | "B",
-          teamName: item.team === "A" ? match.team_a : match.team_b,
-          names: Array.isArray(item.player) ? item.player[0]?.names ?? "" : item.player?.names ?? "",
-          lastnames: Array.isArray(item.player) ? item.player[0]?.lastnames ?? "" : item.player?.lastnames ?? "",
+      const fetchParticipants = async (): Promise<Array<{ player_id: number; team: "A" | "B" | null }>> => {
+        const participantsResult = await runQueryWithRetry<Array<{ player_id: number; team: "A" | "B" | null }>>(() =>
+          supabase
+            .from("match_players")
+            .select("player_id, team")
+            .eq("match_id", matchId)
+            .order("team", { ascending: true })
+        );
+
+        if (participantsResult.error) {
+          throw new Error(participantsResult.error.message);
+        }
+
+        return (participantsResult.data ?? []) as Array<{ player_id: number; team: "A" | "B" | null }>;
+      };
+
+      let participantRows: Array<{ player_id: number; team: "A" | "B" | null }> = [];
+
+      try {
+        participantRows = await fetchParticipants();
+      } catch (error) {
+        console.warn("Fallo inicial cargando match_players, se intentará sincronizar y reintentar.", error);
+      }
+
+      if (participantRows.length === 0) {
+        await syncPromise;
+
+        try {
+          participantRows = await fetchParticipants();
+        } catch (error) {
+          console.warn("No se pudo recargar match_players luego de sincronizar.", error);
+        }
+      } else {
+        await syncPromise;
+      }
+
+      const draftPlayers = localDraft?.players ?? [];
+      let parsedParticipants: PlayerRow[] = participantRows
+        .filter((row) => row.team === "A" || row.team === "B")
+        .map((row) => ({
+          playerId: Number(row.player_id),
+          teamSide: row.team as "A" | "B",
+          teamName: row.team === "A" ? resolvedTeams.A : resolvedTeams.B,
+          names: "",
+          lastnames: "",
+        }))
+        .filter((row) => Number.isFinite(row.playerId) && row.playerId > 0);
+
+      if (parsedParticipants.length === 0 && draftPlayers.length > 0) {
+        parsedParticipants = draftPlayers.map((player) => ({
+          playerId: player.playerId,
+          teamSide: player.teamSide,
+          teamName: player.teamSide === "A" ? resolvedTeams.A : resolvedTeams.B,
+          names: player.names,
+          lastnames: player.lastnames,
         }));
+      }
 
-      if (parsedParticipants.length === 0) throw new Error("Este partido no tiene participantes en match_players.");
+      if (parsedParticipants.length === 0) {
+        throw new Error("Este partido no tiene participantes asignados en match_players.");
+      }
 
-      const { data: existingStats, error: statsError } = await supabase
-        .from("player_stats")
-        .select("player_id, points, rebounds, assists, steals, blocks, turnovers, fouls, fgm, fga, ftm, fta, tpm, tpa")
-        .eq("match_id", matchId);
+      const playerNamesById = new Map<number, { names: string; lastnames: string }>();
+
+      draftPlayers.forEach((player) => {
+        playerNamesById.set(player.playerId, {
+          names: toStringSafe(player.names),
+          lastnames: toStringSafe(player.lastnames),
+        });
+      });
+
+      const participantIds = Array.from(new Set(parsedParticipants.map((player) => player.playerId)));
+
+      for (const idChunk of chunkArray(participantIds, PLAYER_QUERY_CHUNK)) {
+        const playersResult = await runQueryWithRetry<Array<{ id: number; names: string | null; lastnames: string | null }>>(() =>
+          supabase
+            .from("players")
+            .select("id, names, lastnames")
+            .in("id", idChunk)
+        );
+
+        if (playersResult.error) {
+          console.warn("No se pudo cargar un bloque de jugadores para el resultado.", playersResult.error.message);
+          continue;
+        }
+
+        (playersResult.data ?? []).forEach((row) => {
+          const playerId = Number(row.id);
+          if (!Number.isFinite(playerId) || playerId <= 0) return;
+
+          playerNamesById.set(playerId, {
+            names: toStringSafe(row.names),
+            lastnames: toStringSafe(row.lastnames),
+          });
+        });
+      }
+
+      parsedParticipants = parsedParticipants.map((player) => {
+        const info = playerNamesById.get(player.playerId);
+
+        const names = info?.names ?? toStringSafe(player.names);
+        const lastnames = info?.lastnames ?? toStringSafe(player.lastnames);
+
+        if (names || lastnames) {
+          return {
+            ...player,
+            names,
+            lastnames,
+          };
+        }
+
+        return {
+          ...player,
+          names: "Jugador",
+          lastnames: String(player.playerId),
+        };
+      });
 
       let existingRows: Array<Record<string, number>> = [];
 
-      if (!statsError) {
-        existingRows = (existingStats ?? []) as Array<Record<string, number>>;
-      } else {
-        const { data: legacyStats } = await supabase
+      const fullStatsResult = await runQueryWithRetry<Array<Record<string, number>>>(() =>
+        supabase
           .from("player_stats")
-          .select("player_id, points, rebounds, assists")
-          .eq("match_id", matchId);
+          .select("player_id, points, rebounds, assists, steals, blocks, turnovers, fouls, fgm, fga, ftm, fta, tpm, tpa")
+          .eq("match_id", matchId)
+      );
 
-        existingRows = (legacyStats ?? []).map((row) => ({
+      if (!fullStatsResult.error) {
+        existingRows = (fullStatsResult.data ?? []) as Array<Record<string, number>>;
+      } else {
+        const legacyStatsResult = await runQueryWithRetry<Array<Record<string, number>>>(() =>
+          supabase
+            .from("player_stats")
+            .select("player_id, points, rebounds, assists")
+            .eq("match_id", matchId)
+        );
+
+        if (legacyStatsResult.error) {
+          throw new Error(legacyStatsResult.error.message);
+        }
+
+        existingRows = (legacyStatsResult.data ?? []).map((row) => ({
           ...row,
           steals: 0,
           blocks: 0,
@@ -126,46 +540,141 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
           fta: 0,
           tpm: 0,
           tpa: 0,
-        }));
+        })) as Array<Record<string, number>>;
       }
 
-      const initialStats: Record<number, Omit<MatchPlayerStatsInput, "playerId">> = {};
+      const existingByPlayerId = new Map<number, Record<string, number>>();
+      existingRows.forEach((row) => {
+        const playerId = Number(row.player_id);
+        if (Number.isFinite(playerId) && playerId > 0) {
+          existingByPlayerId.set(playerId, row);
+        }
+      });
+
+      const initialStats: Record<number, StatsLine> = {};
       const initialPlayed: Record<number, boolean> = {};
       const hasPersistedRows = existingRows.length > 0;
 
       parsedParticipants.forEach((player) => {
-        const existing = existingRows.find((row) => Number(row.player_id) === player.playerId);
+        const existing = existingByPlayerId.get(player.playerId);
+
         initialStats[player.playerId] = {
-          points: Number(existing?.points ?? 0),
-          rebounds: Number(existing?.rebounds ?? 0),
-          assists: Number(existing?.assists ?? 0),
-          steals: Number(existing?.steals ?? 0),
-          blocks: Number(existing?.blocks ?? 0),
-          turnovers: Number(existing?.turnovers ?? 0),
-          fouls: Number(existing?.fouls ?? 0),
-          fgm: Number(existing?.fgm ?? 0),
-          fga: Number(existing?.fga ?? 0),
-          ftm: Number(existing?.ftm ?? 0),
-          fta: Number(existing?.fta ?? 0),
-          tpm: Number(existing?.tpm ?? 0),
-          tpa: Number(existing?.tpa ?? 0),
+          points: toNonNegativeInt(existing?.points),
+          rebounds: toNonNegativeInt(existing?.rebounds),
+          assists: toNonNegativeInt(existing?.assists),
+          steals: toNonNegativeInt(existing?.steals),
+          blocks: toNonNegativeInt(existing?.blocks),
+          turnovers: toNonNegativeInt(existing?.turnovers),
+          fouls: toNonNegativeInt(existing?.fouls),
+          fgm: toNonNegativeInt(existing?.fgm),
+          fga: toNonNegativeInt(existing?.fga),
+          ftm: toNonNegativeInt(existing?.ftm),
+          fta: toNonNegativeInt(existing?.fta),
+          tpm: toNonNegativeInt(existing?.tpm),
+          tpa: toNonNegativeInt(existing?.tpa),
         };
+
         initialPlayed[player.playerId] = hasPersistedRows ? Boolean(existing) : true;
       });
 
+      const mergedStats: Record<number, StatsLine> = { ...initialStats };
+      const mergedPlayed: Record<number, boolean> = { ...initialPlayed };
+      let mergedWinner = toStringSafe(match.winner_team);
+
+      if (localDraft) {
+        parsedParticipants.forEach((player) => {
+          const key = String(player.playerId);
+          const draftLine = localDraft.stats[key];
+          if (draftLine) {
+            mergedStats[player.playerId] = sanitizeStatsLine(draftLine);
+          }
+
+          const draftPlayed = localDraft.playedByPlayer[key];
+          if (typeof draftPlayed === "boolean") {
+            mergedPlayed[player.playerId] = draftPlayed;
+          }
+        });
+
+        const draftWinner = toStringSafe(localDraft.winnerTeam);
+        if (draftWinner && (draftWinner === resolvedTeams.A || draftWinner === resolvedTeams.B)) {
+          mergedWinner = draftWinner;
+        }
+      }
+
+      if (loadRequestRef.current !== requestId) return;
+
+      setTeams(resolvedTeams);
+      setWinnerTeam(mergedWinner);
       setPlayers(parsedParticipants);
-      setStats(initialStats);
-      setPlayedByPlayer(initialPlayed);
+      setStats(mergedStats);
+      setPlayedByPlayer(mergedPlayed);
+      setDraftSavedAt(localDraft?.updatedAt ?? null);
+      setDraftReady(true);
+
+      if (localDraft && localDraft.players.length > 0) {
+        if (participantRows.length === 0) {
+          setInfoMessage("No hubo respuesta estable del servidor para participantes; se usó tu draft local.");
+        } else {
+          setInfoMessage("Borrador local restaurado automáticamente.");
+        }
+      }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "No se pudo cargar el partido.");
+      if (loadRequestRef.current !== requestId) return;
+
+      if (localDraft && localDraft.players.length > 0) {
+        const fallbackTeams = {
+          A: toStringSafe(localDraft.teams.A) || "Equipo A",
+          B: toStringSafe(localDraft.teams.B) || "Equipo B",
+        };
+
+        const fallbackStats: Record<number, StatsLine> = {};
+        const fallbackPlayed: Record<number, boolean> = {};
+
+        localDraft.players.forEach((player) => {
+          fallbackStats[player.playerId] = sanitizeStatsLine(localDraft.stats[String(player.playerId)] ?? emptyLine());
+          fallbackPlayed[player.playerId] = Boolean(localDraft.playedByPlayer[String(player.playerId)]);
+        });
+
+        const fallbackWinner = toStringSafe(localDraft.winnerTeam);
+
+        setTeams(fallbackTeams);
+        setPlayers(localDraft.players);
+        setStats(fallbackStats);
+        setPlayedByPlayer(fallbackPlayed);
+        setWinnerTeam(
+          fallbackWinner && (fallbackWinner === fallbackTeams.A || fallbackWinner === fallbackTeams.B)
+            ? fallbackWinner
+            : ""
+        );
+        setDraftSavedAt(localDraft.updatedAt || null);
+        setDraftReady(true);
+        setInfoMessage("No se pudo cargar el partido desde servidor. Se abrió el draft local para que no pierdas avances.");
+        setErrorMessage(null);
+      } else {
+        setErrorMessage(error instanceof Error ? error.message : "No se pudo cargar el partido.");
+      }
     } finally {
-      setLoading(false);
+      if (loadRequestRef.current === requestId) {
+        setLoading(false);
+      }
     }
-  };
+  }, [matchId]);
 
   useEffect(() => {
     loadData();
-  }, [matchId]);
+  }, [loadData]);
+
+  useEffect(() => {
+    if (!draftReady || loading || players.length === 0) return;
+
+    const timeoutId = window.setTimeout(() => {
+      persistDraft();
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [draftReady, loading, persistDraft, playedByPlayer, players, stats, winnerTeam]);
 
   const groupedTeams = useMemo(
     () => ({
@@ -175,7 +684,29 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
     [players]
   );
 
-  const setValue = (playerId: number, key: keyof Omit<MatchPlayerStatsInput, "playerId">, value: string) => {
+  const pointsTotals = useMemo(() => {
+    let teamA = 0;
+    let teamB = 0;
+
+    players.forEach((player) => {
+      if (!playedByPlayer[player.playerId]) return;
+
+      const points = toNonNegativeInt(stats[player.playerId]?.points ?? 0);
+      if (player.teamSide === "A") {
+        teamA += points;
+      } else {
+        teamB += points;
+      }
+    });
+
+    return {
+      teamA,
+      teamB,
+      total: teamA + teamB,
+    };
+  }, [playedByPlayer, players, stats]);
+
+  const setValue = (playerId: number, key: keyof StatsLine, value: string) => {
     const parsed = Math.max(0, Number(value || 0));
 
     setStats((prev) => ({
@@ -192,6 +723,11 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
       ...prev,
       [playerId]: checked,
     }));
+  };
+
+  const handleClose = () => {
+    persistDraft();
+    onClose();
   };
 
   const handleSubmit = async () => {
@@ -235,6 +771,8 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
 
     try {
       await saveMatchStats({ matchId, winnerTeam, playerStats: lines });
+      clearMatchResultDraft(matchId);
+      setDraftSavedAt(null);
       onSaved?.();
       onClose();
     } catch (error) {
@@ -243,6 +781,14 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
       setSaving(false);
     }
   };
+
+  const draftStatusText = useMemo(() => {
+    if (!draftSavedAt) {
+      return "Draft local automático activo.";
+    }
+
+    return `Draft guardado a las ${formatDraftTime(draftSavedAt)}.`;
+  }, [draftSavedAt]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-[1px] sm:items-center sm:p-4">
@@ -255,7 +801,7 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
             </h2>
             <p className="text-xs text-[hsl(var(--muted-foreground))] sm:text-sm">Carga stats por jugador y define el ganador.</p>
           </div>
-          <button type="button" className="inline-flex h-9 w-9 items-center justify-center border" onClick={onClose} aria-label="Cerrar">
+          <button type="button" className="inline-flex h-9 w-9 items-center justify-center border" onClick={handleClose} aria-label="Cerrar">
             <XMarkIcon className="h-5 w-5" />
           </button>
         </div>
@@ -273,6 +819,12 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
                 </div>
               ) : null}
 
+              {infoMessage ? (
+                <div className="border border-[hsl(var(--primary)/0.3)] bg-[hsl(var(--primary)/0.08)] px-3 py-2 text-xs text-[hsl(var(--foreground))]">
+                  {infoMessage}
+                </div>
+              ) : null}
+
               <label className="block border bg-[hsl(var(--surface-1))] px-3 py-2 text-sm">
                 <span className="mb-1 block font-medium">Equipo ganador</span>
                 <AppSelect value={winnerTeam} onChange={(event) => setWinnerTeam(event.target.value)} className="input-base">
@@ -285,6 +837,23 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
               <p className="text-xs text-[hsl(var(--muted-foreground))]">
                 Marca si el jugador participó. Solo los jugadores marcados como "Jugó" cuentan para promedios (PPP/RPP/APP) y totales.
               </p>
+
+              <p className="text-xs text-[hsl(var(--muted-foreground))]">{draftStatusText}</p>
+
+              <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+                <div className="border bg-[hsl(var(--surface-1))] px-3 py-2">
+                  <p className="text-[hsl(var(--muted-foreground))]">{teams.A || "Equipo A"}</p>
+                  <p className="text-sm font-semibold">{pointsTotals.teamA} pts</p>
+                </div>
+                <div className="border bg-[hsl(var(--surface-1))] px-3 py-2">
+                  <p className="text-[hsl(var(--muted-foreground))]">{teams.B || "Equipo B"}</p>
+                  <p className="text-sm font-semibold">{pointsTotals.teamB} pts</p>
+                </div>
+                <div className="border bg-[hsl(var(--surface-1))] px-3 py-2">
+                  <p className="text-[hsl(var(--muted-foreground))]">Total partido</p>
+                  <p className="text-sm font-semibold">{pointsTotals.total} pts</p>
+                </div>
+              </div>
 
               {(["A", "B"] as const).map((side) => (
                 <section key={side} className="space-y-3 border bg-[hsl(var(--surface-1))] p-3 sm:p-4">
@@ -379,7 +948,7 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
         </div>
 
         <div className="flex justify-end gap-2 border-t px-4 py-3 sm:px-6">
-          <button type="button" onClick={onClose} className="btn-secondary">
+          <button type="button" onClick={handleClose} className="btn-secondary">
             Cancelar
           </button>
           <button type="button" disabled={saving || loading} onClick={handleSubmit} className="btn-primary disabled:opacity-60">

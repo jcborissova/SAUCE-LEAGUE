@@ -1,7 +1,10 @@
 import { supabase } from "../lib/supabase";
 import { getTournamentAnalyticsSnapshot } from "./tournamentAnalytics";
 import type { PlayerStatsLine } from "../types/tournament-analytics";
-import { computeValuation, computeValuationPerGame } from "../utils/tournament-stats";
+import {
+  computeValuation,
+  computeValuationPerGame,
+} from "../utils/tournament-stats";
 
 export type TournamentOption = {
   id: string;
@@ -56,6 +59,136 @@ const listTournamentsMap = async () => {
   return { options, byId };
 };
 
+const loadPlayerPlusMinusByTournament = async (
+  playerId: number
+): Promise<Map<string, { total: number; perGame: number }>> => {
+  // +/- estilo NBA/ACB: diferencial del equipo contra el rival durante el juego.
+  // En este producto se aproxima usando participacion registrada (team_side + player_stats).
+  const { data: playerGameRows, error: playerGameError } = await supabase
+    .from("tournament_player_stats_enriched")
+    .select("tournament_id, match_id, team_side")
+    .eq("player_id", playerId);
+
+  if (playerGameError || !playerGameRows || playerGameRows.length === 0) {
+    return new Map();
+  }
+
+  const uniqueMatchIds = Array.from(
+    new Set(
+      (playerGameRows as Array<{ match_id: number }>).map((row) => toNumber(row.match_id))
+    )
+  ).filter((id) => id > 0);
+
+  if (uniqueMatchIds.length === 0) {
+    return new Map();
+  }
+
+  const { data: matchRows, error: matchError } = await supabase
+    .from("tournament_player_stats_enriched")
+    .select("match_id, player_id, team_side, points")
+    .in("match_id", uniqueMatchIds);
+
+  if (matchError || !matchRows) {
+    return new Map();
+  }
+
+  type MatchParticipant = {
+    matchId: number;
+    playerId: number;
+    teamSide: "A" | "B";
+    points: number;
+  };
+
+  const participants: MatchParticipant[] = (
+    matchRows as Array<{
+      match_id: number;
+      player_id: number;
+      team_side: "A" | "B" | "U" | null;
+      points: number;
+    }>
+  )
+    .filter((row): row is Omit<MatchParticipant, "matchId" | "playerId" | "points"> & {
+      match_id: number;
+      player_id: number;
+      points: number;
+      team_side: "A" | "B";
+    } => row.team_side === "A" || row.team_side === "B")
+    .map((row) => ({
+      matchId: toNumber(row.match_id),
+      playerId: toNumber(row.player_id),
+      teamSide: row.team_side,
+      points: toNumber(row.points),
+    }))
+    .filter((row) => row.matchId > 0 && row.playerId > 0);
+
+  const byMatch = new Map<number, MatchParticipant[]>();
+  participants.forEach((entry) => {
+    const rows = byMatch.get(entry.matchId) ?? [];
+    rows.push(entry);
+    byMatch.set(entry.matchId, rows);
+  });
+
+  const plusMinusByMatchPlayer = new Map<string, number>();
+  byMatch.forEach((matchRowsGroup) => {
+    const bySide = new Map<"A" | "B", MatchParticipant[]>();
+    matchRowsGroup.forEach((entry) => {
+      const rows = bySide.get(entry.teamSide) ?? [];
+      rows.push(entry);
+      bySide.set(entry.teamSide, rows);
+    });
+
+    if (bySide.size < 2) return;
+
+    const pointsA = (bySide.get("A") ?? []).reduce((sum, row) => sum + row.points, 0);
+    const pointsB = (bySide.get("B") ?? []).reduce((sum, row) => sum + row.points, 0);
+    const marginA = Number((pointsA - pointsB).toFixed(2));
+    const marginB = Number((pointsB - pointsA).toFixed(2));
+
+    (bySide.get("A") ?? []).forEach((entry) => {
+      plusMinusByMatchPlayer.set(`${entry.matchId}-${entry.playerId}`, marginA);
+    });
+    (bySide.get("B") ?? []).forEach((entry) => {
+      plusMinusByMatchPlayer.set(`${entry.matchId}-${entry.playerId}`, marginB);
+    });
+  });
+
+  const byTournament = new Map<string, { total: number; games: Set<number> }>();
+
+  (
+    playerGameRows as Array<{
+      tournament_id: string;
+      match_id: number;
+      team_side: "A" | "B" | "U" | null;
+    }>
+  ).forEach((row) => {
+    const tournamentId = String(row.tournament_id ?? "");
+    const matchId = toNumber(row.match_id);
+    if (!tournamentId || matchId <= 0) return;
+    if (row.team_side !== "A" && row.team_side !== "B") return;
+
+    const diff = plusMinusByMatchPlayer.get(`${matchId}-${playerId}`) ?? 0;
+    const current = byTournament.get(tournamentId) ?? { total: 0, games: new Set<number>() };
+
+    if (!current.games.has(matchId)) {
+      current.total += diff;
+      current.games.add(matchId);
+    }
+
+    byTournament.set(tournamentId, current);
+  });
+
+  const result = new Map<string, { total: number; perGame: number }>();
+  byTournament.forEach((value, tournamentId) => {
+    const gamesPlayed = value.games.size;
+    result.set(tournamentId, {
+      total: Number(value.total.toFixed(2)),
+      perGame: gamesPlayed > 0 ? Number((value.total / gamesPlayed).toFixed(2)) : 0,
+    });
+  });
+
+  return result;
+};
+
 const sortPlayerLines = (rows: PlayerStatsLine[]) =>
   [...rows].sort((a, b) => {
     if (b.valuation !== a.valuation) return b.valuation - a.valuation;
@@ -68,12 +201,15 @@ const sortPlayerLines = (rows: PlayerStatsLine[]) =>
 const toMergedLine = (row: Record<string, unknown>): PlayerStatsLine => {
   const playerId = toNumber(row.player_id);
   const gamesPlayed = Math.max(0, toNumber(row.games_played));
+  const plusMinusTotal = toNumber(row.plus_minus);
+  const plusMinusPerGame = toNumber(row.plus_minus_pg);
   const totals = {
     points: toNumber(row.points),
     rebounds: toNumber(row.rebounds),
     assists: toNumber(row.assists),
     steals: toNumber(row.steals),
     blocks: toNumber(row.blocks),
+    plusMinus: plusMinusTotal,
     turnovers: toNumber(row.turnovers),
     fouls: toNumber(row.fouls),
     fgm: toNumber(row.fgm),
@@ -111,6 +247,10 @@ const toMergedLine = (row: Record<string, unknown>): PlayerStatsLine => {
       apg: gamesPlayed > 0 ? Number((totals.assists / gamesPlayed).toFixed(2)) : 0,
       spg: gamesPlayed > 0 ? Number((totals.steals / gamesPlayed).toFixed(2)) : 0,
       bpg: gamesPlayed > 0 ? Number((totals.blocks / gamesPlayed).toFixed(2)) : 0,
+      plusMinus:
+        gamesPlayed > 0
+          ? plusMinusPerGame || Number((plusMinusTotal / gamesPlayed).toFixed(2))
+          : 0,
       topg: gamesPlayed > 0 ? Number((totals.turnovers / gamesPlayed).toFixed(2)) : 0,
       fpg: gamesPlayed > 0 ? Number((totals.fouls / gamesPlayed).toFixed(2)) : 0,
     },
@@ -133,6 +273,7 @@ const loadPlayerTournamentRowsFromAnalyticsView = async (playerId: number): Prom
   if (error || !data) return null;
 
   const { byId } = await listTournamentsMap();
+  const plusMinusByTournament = await loadPlayerPlusMinusByTournament(playerId);
 
   const grouped = new Map<string, Record<string, unknown>>();
 
@@ -161,6 +302,8 @@ const loadPlayerTournamentRowsFromAnalyticsView = async (playerId: number): Prom
       fta: 0,
       tpm: 0,
       tpa: 0,
+      plus_minus: 0,
+      plus_minus_pg: 0,
     };
 
     current.games_played = toNumber(current.games_played) + toNumber(row.games_played);
@@ -187,6 +330,12 @@ const loadPlayerTournamentRowsFromAnalyticsView = async (playerId: number): Prom
   const rows = Array.from(grouped.values()).map((row) => {
     const tournamentId = String(row.tournament_id ?? "");
     const tournament = byId.get(tournamentId);
+    const plusMinus = plusMinusByTournament.get(tournamentId);
+
+    if (plusMinus) {
+      row.plus_minus = plusMinus.total;
+      row.plus_minus_pg = plusMinus.perGame;
+    }
 
     return {
       tournamentId,

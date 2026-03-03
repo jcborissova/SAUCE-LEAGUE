@@ -3,36 +3,107 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import MatchResultForm from "./MatchResultForm";
 import { TrophyIcon, PencilSquareIcon } from "@heroicons/react/24/solid";
 import { supabase } from "../../lib/supabase";
+import { getTournamentResultsOverview } from "../../services/tournamentAnalytics";
+import type { TournamentResultMatchOverview } from "../../types/tournament-analytics";
 
 type Props = {
   tournamentId: string;
 };
 
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isStatementTimeoutError = (message: string): boolean =>
+  message.toLowerCase().includes("statement timeout");
+
+const scheduleSortValue = (date: string | null, time: string | null): number => {
+  if (!date) return Number.MAX_SAFE_INTEGER;
+  const parsed = new Date(`${date}T${time ? String(time).slice(0, 8) : "00:00:00"}`).getTime();
+  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+};
+
+type MatchConfigRow = {
+  matchId: number;
+  matchDate: string | null;
+  matchTime: string | null;
+  teamA: string;
+  teamB: string;
+  winnerTeam: string | null;
+  teamAPoints: number;
+  teamBPoints: number;
+  hasStats: boolean;
+};
+
 const TournamentResultsConfig: React.FC<Props> = ({ tournamentId }) => {
-  const [matches, setMatches] = useState<any[]>([]);
+  const [matches, setMatches] = useState<MatchConfigRow[]>([]);
   const [selectedMatch, setSelectedMatch] = useState<number | null>(null);
 
   const fetchMatches = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("matches")
-      .select("*")
-      .eq("tournament_id", tournamentId)
-      .order("match_date", { ascending: true })
-      .order("match_time", { ascending: true });
+    const maxAttempts = 3;
+    let lastError: string | null = null;
 
-    if (error) {
-      console.error("Error al cargar partidos:", error);
-      return;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const [{ data: scheduleRows, error: scheduleError }, scoreRows] = await Promise.all([
+          supabase
+            .from("matches")
+            .select("id, match_date, match_time, team_a, team_b, winner_team")
+            .eq("tournament_id", tournamentId)
+            .order("match_date", { ascending: true })
+            .order("match_time", { ascending: true }),
+          getTournamentResultsOverview(tournamentId).catch(() => null),
+        ]);
+
+        if (scheduleError) {
+          throw new Error(scheduleError.message);
+        }
+
+        const scoreById = new Map<number, TournamentResultMatchOverview>(
+          (scoreRows ?? []).map((row) => [row.matchId, row])
+        );
+
+        const rows: MatchConfigRow[] = (scheduleRows ?? []).map((match) => {
+          const score = scoreById.get(match.id);
+          return {
+            matchId: Number(match.id),
+            matchDate: match.match_date ? String(match.match_date) : null,
+            matchTime: match.match_time ? String(match.match_time) : null,
+            teamA: String(match.team_a ?? ""),
+            teamB: String(match.team_b ?? ""),
+            winnerTeam: match.winner_team ? String(match.winner_team) : null,
+            teamAPoints: score?.teamAPoints ?? 0,
+            teamBPoints: score?.teamBPoints ?? 0,
+            hasStats: score?.hasStats ?? false,
+          };
+        });
+
+        setMatches(
+          [...rows].sort(
+            (a, b) => scheduleSortValue(a.matchDate, a.matchTime) - scheduleSortValue(b.matchDate, b.matchTime)
+          )
+        );
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : "No se pudieron cargar los resultados.";
+      }
+
+      const shouldRetry = attempt < maxAttempts && isStatementTimeoutError(lastError);
+      if (!shouldRetry) {
+        break;
+      }
+
+      await wait(180 * 2 ** (attempt - 1));
     }
 
-    setMatches(data || []);
+    console.error("Error al cargar partidos:", lastError);
+    setMatches([]);
   }, [tournamentId]);
 
   useEffect(() => {
     fetchMatches();
   }, [fetchMatches]);
 
-  const formatDate = (dateStr: string) => {
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return "Fecha por definir";
     const date = new Date(`${dateStr}T00:00:00`);
     return date.toLocaleDateString("es-DO", {
       weekday: "short",
@@ -43,7 +114,11 @@ const TournamentResultsConfig: React.FC<Props> = ({ tournamentId }) => {
   };
 
   const resolvedMatches = useMemo(() => matches ?? [], [matches]);
-  const completedMatches = useMemo(() => resolvedMatches.filter((match) => Boolean(match.winner_team)).length, [resolvedMatches]);
+  const completedMatches = useMemo(() => resolvedMatches.filter((match) => Boolean(match.winnerTeam)).length, [resolvedMatches]);
+  const totalPoints = useMemo(
+    () => resolvedMatches.reduce((acc, match) => acc + match.teamAPoints + match.teamBPoints, 0),
+    [resolvedMatches]
+  );
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -62,6 +137,10 @@ const TournamentResultsConfig: React.FC<Props> = ({ tournamentId }) => {
             <p className="text-[11px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Completados</p>
             <p className="text-sm font-semibold">{completedMatches}</p>
           </div>
+          <div className="border bg-[hsl(var(--surface-2))] px-3 py-2">
+            <p className="text-[11px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Puntos acumulados</p>
+            <p className="text-sm font-semibold">{totalPoints}</p>
+          </div>
         </div>
       </section>
 
@@ -72,10 +151,10 @@ const TournamentResultsConfig: React.FC<Props> = ({ tournamentId }) => {
       ) : (
         <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {resolvedMatches.map((match) => (
-            <article key={match.id} className="app-card p-4 transition-colors hover:bg-[hsl(var(--surface-2)/0.5)]">
+            <article key={match.matchId} className="app-card p-4 transition-colors hover:bg-[hsl(var(--surface-2)/0.5)]">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="text-xs text-[hsl(var(--muted-foreground))]">{formatDate(match.match_date)}</span>
-                {match.winner_team ? (
+                <span className="text-xs text-[hsl(var(--muted-foreground))]">{formatDate(match.matchDate)}</span>
+                {match.winnerTeam ? (
                   <span className="inline-flex items-center gap-1 text-xs font-semibold text-[hsl(var(--warning))]">
                     <TrophyIcon className="h-4 w-4" />
                     Listo
@@ -84,19 +163,31 @@ const TournamentResultsConfig: React.FC<Props> = ({ tournamentId }) => {
               </div>
 
               <h4 className="text-sm font-semibold">
-                {match.team_a} <span className="text-[hsl(var(--muted-foreground))]">vs</span> {match.team_b}
+                {match.teamA} <span className="text-[hsl(var(--muted-foreground))]">vs</span> {match.teamB}
               </h4>
               <p className="mb-3 mt-1 text-xs text-[hsl(var(--muted-foreground))]">
-                {match.match_time ? String(match.match_time).slice(0, 5) : "--:--"}
+                {match.matchTime ? String(match.matchTime).slice(0, 5) : "--:--"}
               </p>
 
-              {match.winner_team ? (
-                <p className="mb-3 text-xs font-semibold text-[hsl(var(--success))]">Ganador: {match.winner_team}</p>
+              {match.hasStats ? (
+                <p className="mb-1 text-xs font-semibold text-[hsl(var(--primary))]">
+                  Marcador: {match.teamAPoints} - {match.teamBPoints}
+                </p>
               ) : null}
 
-              <button onClick={() => setSelectedMatch(match.id)} className="btn-primary w-full">
+              {match.hasStats ? (
+                <p className="mb-3 text-xs text-[hsl(var(--muted-foreground))]">
+                  Total del partido: {match.teamAPoints + match.teamBPoints} pts
+                </p>
+              ) : null}
+
+              {match.winnerTeam ? (
+                <p className="mb-3 text-xs font-semibold text-[hsl(var(--success))]">Ganador: {match.winnerTeam}</p>
+              ) : null}
+
+              <button onClick={() => setSelectedMatch(match.matchId)} className="btn-primary w-full">
                 <PencilSquareIcon className="h-4 w-4" />
-                {match.winner_team ? "Editar resultado" : "Cargar resultado"}
+                {match.winnerTeam ? "Editar resultado" : "Cargar resultado"}
               </button>
             </article>
           ))}

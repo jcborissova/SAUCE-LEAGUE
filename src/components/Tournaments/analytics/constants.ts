@@ -31,6 +31,8 @@ export const LEADER_CATEGORIES: Array<{ value: TournamentStatMetric; label: stri
   { value: "rebounds", label: "Rebotes" },
   { value: "steals", label: "Robos" },
   { value: "blocks", label: "Bloqueos" },
+  { value: "defensive_impact", label: "Líder defensivo (D-Impact)" },
+  { value: "pra", label: "PRA (Puntos+Rebotes+Asistencias-Pérdidas)" },
   { value: "fg_pct", label: "FG%" },
   { value: "turnovers", label: "Pérdidas (menos es mejor)" },
   { value: "fouls", label: "Faltas (menos es mejor)" },
@@ -51,6 +53,7 @@ export const BATTLE_METRICS: Array<{ value: BattleMetric; label: string }> = [
   { value: "apg", label: "APG" },
   { value: "spg", label: "SPG" },
   { value: "bpg", label: "BPG" },
+  { value: "pra", label: "PRA" },
   { value: "fg_pct", label: "FG%" },
   { value: "topg", label: "TOPG" },
 ];

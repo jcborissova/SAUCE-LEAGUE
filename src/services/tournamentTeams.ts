@@ -20,6 +20,9 @@ type TournamentTeamInput = {
 
 const PLAYER_DIRECTORY_COLUMNS = "id, names, lastnames, backjerseyname, jerseynumber";
 const PLAYER_IN_QUERY_CHUNK = 200;
+const PLAYER_PAGE_SIZE = 400;
+const PLAYERS_CACHE_TTL_MS = 90_000;
+const PLAYERS_CACHE_STORAGE_KEY = "sauce:tournamentPlayers:v1";
 
 const toNumber = (value: unknown): number => {
   const parsed = Number(value);
@@ -58,6 +61,97 @@ const isMissingTournamentColumnError = (message: string): boolean => {
   return normalized.includes("tournament_id") && normalized.includes("team_players");
 };
 
+type QueryError = { message: string } | null;
+type QueryResult<T> = { data: T | null; error: QueryError };
+
+let playersMemoryCache: { fetchedAt: number; players: Player[] } | null = null;
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const runSelectWithRetry = async <T>(
+  queryFactory: () => PromiseLike<QueryResult<T>>,
+  retries = 1
+): Promise<QueryResult<T>> => {
+  let last: QueryResult<T> | null = null;
+  const maxAttempts = retries + 1;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const result = await queryFactory();
+    last = result;
+
+    if (!result.error) {
+      return result;
+    }
+
+    const message = result.error.message.toLowerCase();
+    const shouldRetry =
+      attempt < maxAttempts &&
+      (message.includes("statement timeout") ||
+        message.includes("canceling statement due to statement timeout") ||
+        message.includes("timeout"));
+
+    if (!shouldRetry) {
+      return result;
+    }
+
+    await wait(120 * attempt);
+  }
+
+  return (
+    last ?? {
+      data: null,
+      error: { message: "No se pudo completar la consulta." },
+    }
+  );
+};
+
+const readPlayersLocalCache = (maxAgeMs = PLAYERS_CACHE_TTL_MS): Player[] | null => {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(PLAYERS_CACHE_STORAGE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as {
+      fetchedAt?: number;
+      players?: Array<Record<string, unknown>>;
+    };
+
+    if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.players)) {
+      return null;
+    }
+
+    const fetchedAt = Number(parsed.fetchedAt ?? 0);
+    if (!Number.isFinite(fetchedAt) || Date.now() - fetchedAt > maxAgeMs) {
+      return null;
+    }
+
+    const players = parsed.players
+      .map((row) => normalizePlayer(row))
+      .filter((player) => player.id > 0);
+
+    return players.length > 0 ? players : null;
+  } catch {
+    return null;
+  }
+};
+
+const writePlayersLocalCache = (players: Player[]) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(
+      PLAYERS_CACHE_STORAGE_KEY,
+      JSON.stringify({
+        fetchedAt: Date.now(),
+        players,
+      })
+    );
+  } catch {
+    // Ignora errores de quota o storage restringido.
+  }
+};
+
 const chunkArray = <T>(items: T[], size: number): T[][] => {
   if (size <= 0) return [items];
   const chunks: T[][] = [];
@@ -68,19 +162,65 @@ const chunkArray = <T>(items: T[], size: number): T[][] => {
 };
 
 export const fetchTournamentPlayers = async (): Promise<Player[]> => {
-  const { data, error } = await supabase
-    .from("players")
-    .select(PLAYER_DIRECTORY_COLUMNS)
-    .eq("is_guest", false)
-    .order("id", { ascending: true });
-
-  if (error) {
-    throw new Error(error.message);
+  if (playersMemoryCache && Date.now() - playersMemoryCache.fetchedAt <= PLAYERS_CACHE_TTL_MS) {
+    return playersMemoryCache.players;
   }
 
-  return (data ?? [])
-    .map((row) => normalizePlayer(row as Record<string, unknown>))
+  const localCached = readPlayersLocalCache();
+  if (localCached) {
+    playersMemoryCache = { fetchedAt: Date.now(), players: localCached };
+    return localCached;
+  }
+
+  const allRows: Array<Record<string, unknown>> = [];
+  let from = 0;
+
+  while (true) {
+    const to = from + PLAYER_PAGE_SIZE - 1;
+    const { data, error } = await runSelectWithRetry<Record<string, unknown>[]>(() =>
+      supabase
+        .from("players")
+        .select(PLAYER_DIRECTORY_COLUMNS)
+        .eq("is_guest", false)
+        .order("id", { ascending: true })
+        .range(from, to)
+    );
+
+    if (error) {
+      if (allRows.length > 0) {
+        break;
+      }
+
+      const staleCached = readPlayersLocalCache(Number.POSITIVE_INFINITY);
+      if (staleCached) {
+        playersMemoryCache = { fetchedAt: Date.now(), players: staleCached };
+        return staleCached;
+      }
+
+      throw new Error(error.message);
+    }
+
+    const chunk = (data ?? []) as Array<Record<string, unknown>>;
+    if (chunk.length === 0) {
+      break;
+    }
+
+    allRows.push(...chunk);
+
+    if (chunk.length < PLAYER_PAGE_SIZE) {
+      break;
+    }
+
+    from += PLAYER_PAGE_SIZE;
+  }
+
+  const players = allRows
+    .map((row) => normalizePlayer(row))
     .filter((player) => player.id > 0);
+
+  playersMemoryCache = { fetchedAt: Date.now(), players };
+  writePlayersLocalCache(players);
+  return players;
 };
 
 const fetchPlayersByIds = async (
@@ -93,26 +233,28 @@ const fetchPlayersByIds = async (
   const playersMap = new Map<number, Player>();
 
   for (const idChunk of chunkArray(uniqueIds, PLAYER_IN_QUERY_CHUNK)) {
-    const result = options?.withPhoto
-      ? await supabase
-          .from("players")
-          .select("id, names, lastnames, backjerseyname, jerseynumber, description, photo")
-          .eq("is_guest", false)
-          .in("id", idChunk)
-          .order("id", { ascending: true })
-      : await supabase
-          .from("players")
-          .select("id, names, lastnames, backjerseyname, jerseynumber")
-          .eq("is_guest", false)
-          .in("id", idChunk)
-          .order("id", { ascending: true });
+    const { data, error } = await runSelectWithRetry<Record<string, unknown>[]>(() =>
+      options?.withPhoto
+        ? supabase
+            .from("players")
+            .select("id, names, lastnames, backjerseyname, jerseynumber, description, photo")
+            .eq("is_guest", false)
+            .in("id", idChunk)
+            .order("id", { ascending: true })
+        : supabase
+            .from("players")
+            .select("id, names, lastnames, backjerseyname, jerseynumber")
+            .eq("is_guest", false)
+            .in("id", idChunk)
+            .order("id", { ascending: true })
+    );
 
-    if (result.error) {
-      throw new Error(result.error.message);
+    if (error) {
+      throw new Error(error.message);
     }
 
-    (result.data ?? []).forEach((row) => {
-      const normalized = normalizePlayer(row as Record<string, unknown>);
+    (data ?? []).forEach((row) => {
+      const normalized = normalizePlayer(row);
       if (normalized.id > 0) {
         playersMap.set(normalized.id, normalized);
       }

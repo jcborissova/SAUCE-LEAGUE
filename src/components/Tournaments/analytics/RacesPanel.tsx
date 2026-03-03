@@ -38,6 +38,7 @@ type RacesPanelProps = {
   onMetricChange: (value: RaceMetric) => void;
   onPhaseChange: (value: TournamentPhaseFilter) => void;
   onModeChange: (value: "cumulative" | "perGame") => void;
+  onPlayerSelect?: (playerId: number, phase: TournamentPhaseFilter) => void;
 };
 
 type LineTooltipPayload = {
@@ -64,6 +65,7 @@ const RacesPanel: React.FC<RacesPanelProps> = ({
   onMetricChange,
   onPhaseChange,
   onModeChange,
+  onPlayerSelect,
 }) => {
   const rankedRaces = useMemo(() => {
     return races
@@ -84,9 +86,9 @@ const RacesPanel: React.FC<RacesPanelProps> = ({
   }, [races, mode]);
 
   const visibleRaces = useMemo(() => {
-    const limit = isMobile ? 4 : 6;
+    const limit = 10;
     return rankedRaces.slice(0, limit).map((entry) => entry.player);
-  }, [rankedRaces, isMobile]);
+  }, [rankedRaces]);
 
   const chartData = useMemo(() => {
     const maxGames = Math.max(...visibleRaces.map((item) => item.points.length), 0);
@@ -230,10 +232,17 @@ const RacesPanel: React.FC<RacesPanelProps> = ({
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {rankedRaces.slice(0, isMobile ? 4 : 6).map((entry, index) => (
-                <span
+              {rankedRaces.slice(0, 10).map((entry, index) => (
+                <button
                   key={`race-chip-${entry.player.playerId}`}
-                  className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs bg-[hsl(var(--surface-2))]"
+                  type="button"
+                  onClick={() => onPlayerSelect?.(entry.player.playerId, phase)}
+                  className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs bg-[hsl(var(--surface-2))] transition ${
+                    onPlayerSelect
+                      ? "hover:bg-[hsl(var(--surface-2)/0.7)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))]"
+                      : ""
+                  }`}
+                  disabled={!onPlayerSelect}
                 >
                   <span
                     className="h-2.5 w-2.5 rounded-full"
@@ -241,7 +250,7 @@ const RacesPanel: React.FC<RacesPanelProps> = ({
                   />
                   <span className="truncate max-w-[120px]">{entry.player.name}</span>
                   <span className="font-semibold tabular-nums">{entry.latest.toFixed(2)}</span>
-                </span>
+                </button>
               ))}
             </div>
 

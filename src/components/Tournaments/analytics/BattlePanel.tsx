@@ -23,6 +23,7 @@ import { BATTLE_METRICS, PHASE_OPTIONS } from "./constants";
 type BattlePlayerOption = {
   playerId: number;
   name: string;
+  photo: string | null;
   teamName: string | null;
 };
 
@@ -85,6 +86,14 @@ const phaseLabel = (phase: TournamentPhaseFilter) => {
   return "Todos";
 };
 
+const initialsFromName = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "JG";
+
 const METRIC_META: Record<BattleMetric, MetricMeta> = {
   ppg: {
     label: "PPG",
@@ -113,6 +122,12 @@ const METRIC_META: Record<BattleMetric, MetricMeta> = {
   bpg: {
     label: "BPG",
     hint: "Bloqueos por juego",
+    higherIsBetter: true,
+    format: (value) => value.toFixed(1),
+  },
+  pra: {
+    label: "PRA",
+    hint: "Puntos + rebotes + asistencias - pérdidas por juego",
     higherIsBetter: true,
     format: (value) => value.toFixed(1),
   },
@@ -559,10 +574,21 @@ const BattlePanel: React.FC<BattlePanelProps> = ({
                 {selectedPlayerCards.map((player) => (
                   <div
                     key={`selected-${player.playerId}`}
-                    className="rounded-full border bg-[hsl(var(--surface-1))] px-3 py-1.5 text-xs font-semibold"
+                    className="inline-flex items-center gap-2 rounded-full border bg-[hsl(var(--surface-1))] px-2.5 py-1.5 text-xs font-semibold"
                     title={player.teamName ?? undefined}
                   >
-                    {player.name}
+                    {player.photo ? (
+                      <img
+                        src={player.photo}
+                        alt={player.name}
+                        className="h-6 w-6 rounded-full object-cover border border-[hsl(var(--border)/0.8)]"
+                      />
+                    ) : (
+                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[hsl(var(--border)/0.8)] bg-[hsl(var(--surface-2))] text-[10px]">
+                        {initialsFromName(player.name)}
+                      </span>
+                    )}
+                    <span>{player.name}</span>
                     <span className="text-[hsl(var(--text-subtle))]">
                       {player.teamName ? ` • ${player.teamName}` : ""}
                     </span>
@@ -582,14 +608,27 @@ const BattlePanel: React.FC<BattlePanelProps> = ({
                     type="button"
                     onClick={() => togglePlayer(player.playerId)}
                     disabled={disabled}
-                    className={`min-h-[44px] rounded-full border px-3 py-2 text-sm transition max-w-full truncate ${
+                    className={`min-h-[44px] rounded-full border px-2.5 py-1.5 text-sm transition max-w-full ${
                       selected
                         ? "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] border-[hsl(var(--primary))]"
                         : "bg-[hsl(var(--surface-1))] hover:bg-[hsl(var(--muted))]"
                     } ${disabled ? "opacity-50" : ""}`}
                     title={`${player.name} ${player.teamName ? `(${player.teamName})` : ""}`}
                   >
-                    <span className="truncate inline-block max-w-[180px] align-bottom">{player.name}</span>
+                    <span className="inline-flex items-center gap-2">
+                      {player.photo ? (
+                        <img
+                          src={player.photo}
+                          alt={player.name}
+                          className="h-7 w-7 rounded-full object-cover border border-[hsl(var(--border)/0.8)]"
+                        />
+                      ) : (
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[hsl(var(--border)/0.8)] bg-[hsl(var(--surface-2))] text-[10px]">
+                          {initialsFromName(player.name)}
+                        </span>
+                      )}
+                      <span className="truncate inline-block max-w-[160px] align-bottom">{player.name}</span>
+                    </span>
                   </button>
                 );
               })}
@@ -664,6 +703,17 @@ const BattlePanel: React.FC<BattlePanelProps> = ({
                       className="inline-block h-2.5 w-2.5 rounded-full"
                       style={{ backgroundColor: style?.color ?? chartTheme.axis }}
                     />
+                    {player.photo ? (
+                      <img
+                        src={player.photo}
+                        alt={player.name}
+                        className="h-5 w-5 rounded-full object-cover border border-[hsl(var(--border)/0.82)]"
+                      />
+                    ) : (
+                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] text-[9px]">
+                        {initialsFromName(player.name)}
+                      </span>
+                    )}
                     <span className="truncate max-w-[120px]">{player.name}</span>
                   </span>
                 );
@@ -693,6 +743,17 @@ const BattlePanel: React.FC<BattlePanelProps> = ({
                   >
                     <p className="text-xs text-[hsl(var(--text-subtle))]">#{index + 1}</p>
                     <p className="font-semibold truncate inline-flex items-center gap-2">
+                      {player.photo ? (
+                        <img
+                          src={player.photo}
+                          alt={player.name}
+                          className="h-7 w-7 rounded-full object-cover border border-[hsl(var(--border)/0.82)]"
+                        />
+                      ) : (
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] text-[10px]">
+                          {initialsFromName(player.name)}
+                        </span>
+                      )}
                       <span
                         className="inline-block h-2.5 w-2.5 rounded-full"
                         style={{ backgroundColor: accentColor }}
@@ -754,7 +815,20 @@ const BattlePanel: React.FC<BattlePanelProps> = ({
                   <div className="grid grid-cols-2 gap-2">
                     {duelPlayers.map((player) => (
                       <div key={`duel-score-${player.playerId}`} className="rounded-xl border bg-[hsl(var(--surface-2))] p-3">
-                        <p className="text-xs text-[hsl(var(--text-subtle))] truncate">{player.name}</p>
+                        <p className="text-xs text-[hsl(var(--text-subtle))] truncate inline-flex items-center gap-2">
+                          {player.photo ? (
+                            <img
+                              src={player.photo}
+                              alt={player.name}
+                              className="h-6 w-6 rounded-full object-cover border border-[hsl(var(--border)/0.82)]"
+                            />
+                          ) : (
+                            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] text-[10px]">
+                              {initialsFromName(player.name)}
+                            </span>
+                          )}
+                          {player.name}
+                        </p>
                         <p className="text-lg font-black tabular-nums">
                           {result.summary.categoryWins[player.playerId] ?? 0}
                         </p>

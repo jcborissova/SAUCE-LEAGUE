@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   getAnalyticsDashboardKpis,
   getBattleData,
@@ -28,6 +28,9 @@ import BattlePanel from "./analytics/BattlePanel";
 import FinalsMvpPanel from "./analytics/FinalsMvpPanel";
 import LeadersPanel from "./analytics/LeadersPanel";
 import MvpPanel from "./analytics/MvpPanel";
+import PlayerAnalyticsModal, {
+  type PlayerAnalyticsDetail,
+} from "./analytics/PlayerAnalyticsModal";
 import RacesPanel from "./analytics/RacesPanel";
 import AppSelect from "../ui/AppSelect";
 import { ANALYTICS_PANEL_OPTIONS, type AnalyticsPanelKey } from "./analytics/constants";
@@ -37,6 +40,7 @@ type BattleResult = { players: BattlePlayerResult[]; summary: BattleSummary };
 type BattlePlayerOption = {
   playerId: number;
   name: string;
+  photo: string | null;
   teamName: string | null;
 };
 
@@ -60,24 +64,33 @@ const readHslVar = (name: string, fallback: string) => {
 };
 
 const buildQuickLeaders = (rows: PlayerStatsLine[]): DashboardQuickLeadersGroup[] => {
-  const metricConfig: Array<{ label: string; metric: TournamentStatMetric }> = [
+  const metricConfig: Array<{
+    label: string;
+    metric: "points" | "assists" | "rebounds" | "steals" | "blocks" | "pra";
+  }> = [
     { label: "Puntos", metric: "points" },
     { label: "Asistencias", metric: "assists" },
     { label: "Rebotes", metric: "rebounds" },
+    { label: "Robos", metric: "steals" },
+    { label: "Tapones", metric: "blocks" },
+    { label: "PRA", metric: "pra" },
   ];
 
   return metricConfig.map((config) => {
     const values = rows
       .map((line) => ({
         ...line,
-        value: config.metric === "fg_pct" ? line.fgPct : line.totals[config.metric],
+        value:
+          config.metric === "pra"
+            ? round2(line.perGame.ppg + line.perGame.rpg + line.perGame.apg - line.perGame.topg)
+            : line.totals[config.metric],
         metric: config.metric,
       }))
       .sort((a, b) => {
         if (b.value !== a.value) return b.value - a.value;
         return b.gamesPlayed - a.gamesPlayed;
       })
-      .slice(0, 3);
+      .slice(0, 10);
 
     return {
       metric: config.label,
@@ -85,6 +98,8 @@ const buildQuickLeaders = (rows: PlayerStatsLine[]): DashboardQuickLeadersGroup[
     };
   });
 };
+
+const round2 = (value: number) => Math.round(value * 100) / 100;
 
 const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolean }> = ({
   tournamentId,
@@ -113,6 +128,7 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
     "apg",
     "spg",
     "bpg",
+    "pra",
     "fg_pct",
     "topg",
   ]);
@@ -135,10 +151,21 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
   const [mvpRows, setMvpRows] = useState<MvpBreakdownRow[]>([]);
   const [finalsMvpRows, setFinalsMvpRows] = useState<MvpBreakdownRow[]>([]);
   const [battleResult, setBattleResult] = useState<BattleResult | null>(null);
+  const [playerDetailOpen, setPlayerDetailOpen] = useState(false);
+  const [playerDetailLoading, setPlayerDetailLoading] = useState(false);
+  const [playerDetailError, setPlayerDetailError] = useState<string | null>(null);
+  const [playerDetail, setPlayerDetail] = useState<PlayerAnalyticsDetail | null>(null);
+  const [lastSelectedPlayer, setLastSelectedPlayer] = useState<{
+    playerId: number;
+    phase: TournamentPhaseFilter;
+  } | null>(null);
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia("(max-width: 639px)").matches;
   });
+
+  const playerDetailCacheRef = useRef(new Map<string, PlayerAnalyticsDetail>());
+  const playerDetailRequestRef = useRef(0);
 
   const [chartTheme, setChartTheme] = useState<ChartTheme>(() => ({
     axis: "hsl(215 20% 65%)",
@@ -207,10 +234,39 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
   }, []);
 
   useEffect(() => {
+    playerDetailCacheRef.current.clear();
+    setPlayerDetail(null);
+    setPlayerDetailError(null);
+    setPlayerDetailOpen(false);
+    setLastSelectedPlayer(null);
+  }, [tournamentId]);
+
+  useEffect(() => {
     setLeadersPhase(globalPhase);
     setRacePhase(globalPhase);
     setBattlePhase(globalPhase);
   }, [globalPhase]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadKpis = async () => {
+      try {
+        const kpis = await getAnalyticsDashboardKpis(tournamentId);
+        if (!cancelled) {
+          setDashboardKpis(kpis);
+        }
+      } catch {
+        if (!cancelled) {
+          setDashboardKpis([]);
+        }
+      }
+    };
+
+    loadKpis();
+    return () => {
+      cancelled = true;
+    };
+  }, [tournamentId, refreshTick]);
 
   useEffect(() => {
     if (activePanel !== "dashboard") return;
@@ -221,20 +277,18 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
       setErrorMessage(null);
 
       try {
-        const [kpis, snapshot, spotlight] = await Promise.all([
-          getAnalyticsDashboardKpis(tournamentId),
+        const [snapshot, spotlight] = await Promise.all([
           getTournamentAnalyticsSnapshot(tournamentId, globalPhase),
           getRaceSeries({
             tournamentId,
             phase: globalPhase,
             metric: dashboardRaceMetric,
-            topN: isMobile ? 3 : 4,
+            topN: 10,
           }),
         ]);
 
         if (cancelled) return;
 
-        setDashboardKpis(kpis);
         setDashboardQuickLeaders(buildQuickLeaders(snapshot.playerLines));
         setDashboardRaceSeries(spotlight);
       } catch (error) {
@@ -274,7 +328,7 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
           tournamentId,
           phase: leadersPhase,
           metric: leadersMetric,
-          limit: 30,
+          limit: 1000,
         });
 
         if (!cancelled) {
@@ -311,7 +365,7 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
           tournamentId,
           phase: racePhase,
           metric: raceMetric,
-          topN: 5,
+          topN: 10,
         });
 
         if (!cancelled) {
@@ -464,6 +518,7 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
 
   const handleRefresh = () => {
     clearTournamentAnalyticsCache(tournamentId);
+    playerDetailCacheRef.current.clear();
     setRefreshTick((value) => value + 1);
   };
 
@@ -490,6 +545,92 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
     } finally {
       setBattleLoading(false);
     }
+  };
+
+  const openPlayerDetail = async (
+    playerId: number,
+    phase: TournamentPhaseFilter,
+    options?: { forceRefresh?: boolean }
+  ) => {
+    const requestId = playerDetailRequestRef.current + 1;
+    playerDetailRequestRef.current = requestId;
+
+    setLastSelectedPlayer({ playerId, phase });
+    setPlayerDetailOpen(true);
+    setPlayerDetailError(null);
+    setPlayerDetailLoading(true);
+
+    const cacheKey = `${tournamentId}:${phase}:${playerId}`;
+    const useCache = !options?.forceRefresh;
+
+    if (useCache) {
+      const cached = playerDetailCacheRef.current.get(cacheKey);
+      if (cached) {
+        setPlayerDetail(cached);
+        setPlayerDetailLoading(false);
+        return;
+      }
+    }
+
+    try {
+      const snapshot = await getTournamentAnalyticsSnapshot(tournamentId, phase, {
+        forceRefresh: Boolean(options?.forceRefresh),
+      });
+      const line = snapshot.playerLines.find((item) => item.playerId === playerId);
+      if (!line) {
+        throw new Error("No se encontró data analítica para este jugador en la fase seleccionada.");
+      }
+
+      const games = snapshot.playerGames
+        .filter((item) => item.playerId === playerId)
+        .map((item) => ({
+          ...item,
+          pra: round2(item.points + item.rebounds + item.assists - item.turnovers),
+        }));
+
+      let mvpRow: MvpBreakdownRow | null = null;
+      if (phase !== "all") {
+        try {
+          const mvpRows = await getMvpRace({
+            tournamentId,
+            phase,
+            eligibilityRate: 0.3,
+          });
+          mvpRow = mvpRows.find((row) => row.playerId === playerId) ?? null;
+        } catch {
+          mvpRow = null;
+        }
+      }
+
+      const nextDetail: PlayerAnalyticsDetail = {
+        phase,
+        line,
+        games,
+        mvpRow,
+      };
+
+      playerDetailCacheRef.current.set(cacheKey, nextDetail);
+
+      if (playerDetailRequestRef.current !== requestId) return;
+      setPlayerDetail(nextDetail);
+    } catch (error) {
+      if (playerDetailRequestRef.current !== requestId) return;
+      setPlayerDetail(null);
+      setPlayerDetailError(
+        error instanceof Error ? error.message : "No se pudo cargar el detalle del jugador."
+      );
+    } finally {
+      if (playerDetailRequestRef.current === requestId) {
+        setPlayerDetailLoading(false);
+      }
+    }
+  };
+
+  const handleRetryPlayerDetail = () => {
+    if (!lastSelectedPlayer) return;
+    void openPlayerDetail(lastSelectedPlayer.playerId, lastSelectedPlayer.phase, {
+      forceRefresh: true,
+    });
   };
 
   const activePanelLoading = useMemo(() => {
@@ -591,6 +732,9 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
           onSpotlightMetricChange={setDashboardRaceMetric}
           onSpotlightModeChange={setDashboardRaceMode}
           onOpenPanel={setActivePanel}
+          onPlayerSelect={(playerId, phase) => {
+            void openPlayerDetail(playerId, phase);
+          }}
         />
       ) : null}
 
@@ -602,6 +746,9 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
           loading={leadersLoading}
           onMetricChange={setLeadersMetric}
           onPhaseChange={setLeadersPhase}
+          onPlayerSelect={(playerId, phase) => {
+            void openPlayerDetail(playerId, phase);
+          }}
         />
       ) : null}
 
@@ -617,6 +764,9 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
           onMetricChange={setRaceMetric}
           onPhaseChange={setRacePhase}
           onModeChange={setRaceMode}
+          onPlayerSelect={(playerId, phase) => {
+            void openPlayerDetail(playerId, phase);
+          }}
         />
       ) : null}
 
@@ -625,7 +775,11 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
           rows={mvpRows}
           loading={mvpLoading}
           title="MVP de Temporada"
-          subtitle="Ranking oficial de MVP en fase regular con elegibilidad mínima por participación."
+          subtitle="Ranking oficial con fórmula inteligente: producción, impacto, eficiencia, disponibilidad y récord del equipo."
+          phase="regular"
+          onPlayerSelect={(playerId, phase) => {
+            void openPlayerDetail(playerId, phase);
+          }}
         />
       ) : null}
 
@@ -633,6 +787,9 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
         <FinalsMvpPanel
           rows={finalsMvpRows}
           loading={finalsMvpLoading}
+          onPlayerSelect={(playerId, phase) => {
+            void openPlayerDetail(playerId, phase);
+          }}
         />
       ) : null}
 
@@ -652,6 +809,15 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
           onCompare={handleCompareBattle}
         />
       ) : null}
+
+      <PlayerAnalyticsModal
+        isOpen={playerDetailOpen}
+        loading={playerDetailLoading}
+        errorMessage={playerDetailError}
+        detail={playerDetail}
+        onClose={() => setPlayerDetailOpen(false)}
+        onRetry={handleRetryPlayerDetail}
+      />
     </section>
   );
 };
