@@ -25,6 +25,7 @@ import type {
   TournamentResultSummary,
 } from "../types/tournament-analytics";
 import { TOURNAMENT_RULES_PDF_URL } from "../constants/tournamentRules";
+import { abbreviateLeaderboardName, getPlayerInitials } from "../utils/player-display";
 
 type TeamStandingSummary = {
   teamId: number;
@@ -261,14 +262,6 @@ const sortStandings = (rows: TeamStandingSummary[]) => {
     return a.name.localeCompare(b.name);
   });
 };
-
-const initialsFromName = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("") || "JG";
 
 const buildTournamentInsight = ({
   tournamentId,
@@ -579,11 +572,13 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
                         />
                       ) : (
                         <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-2))] text-[10px] font-semibold">
-                          {initialsFromName(player.name)}
+                          {getPlayerInitials(player.name)}
                         </span>
                       )}
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">#{index + 1} {player.name}</p>
+                        <p className="truncate text-sm font-semibold" title={player.name}>
+                          #{index + 1} {abbreviateLeaderboardName(player.name, 18)}
+                        </p>
                         <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
                           {player.teamName ?? "Sin equipo"}
                         </p>
@@ -681,11 +676,13 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
                         />
                       ) : (
                         <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-2))] text-[10px] font-semibold">
-                          {initialsFromName(player.name)}
+                          {getPlayerInitials(player.name)}
                         </span>
                       )}
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">#{index + 1} {player.name}</p>
+                        <p className="truncate text-sm font-semibold" title={player.name}>
+                          #{index + 1} {abbreviateLeaderboardName(player.name, 18)}
+                        </p>
                         <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
                           {player.teamName ?? "Sin equipo"} · {player.gamesPlayed} PJ
                         </p>

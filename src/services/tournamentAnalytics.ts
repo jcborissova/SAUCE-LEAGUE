@@ -139,7 +139,7 @@ type QueryResult<T> = { data: T | null; error: QueryError };
 
 const ANALYTICS_QUERY_RETRIES = 1;
 const REVISION_CACHE_TTL_MS = 12000;
-const ANALYTICS_PLAYER_GAME_PAGE_SIZE = 1000;
+const ANALYTICS_PLAYER_GAME_PAGE_SIZE = 600;
 const ANALYTICS_PLAYER_TOTALS_PAGE_SIZE = 600;
 const TOURNAMENT_PLAYER_IDS_CHUNK = 250;
 const TOURNAMENT_PLAYER_LIST_CACHE_TTL_MS = 20_000;
@@ -186,6 +186,9 @@ const runSelectWithRetry = async <T>(
     }
   );
 };
+
+const toSelectPromise = <T,>(query: unknown): PromiseLike<QueryResult<T>> =>
+  query as PromiseLike<QueryResult<T>>;
 
 const getLineValuation = (
   totals: PlayerStatsLine["totals"],
@@ -692,6 +695,16 @@ const analyticsSnapshotCache = new Map<
 
 const analyticsSnapshotInflight = new Map<TournamentAnalyticsCacheKey, Promise<TournamentAnalyticsSnapshot>>();
 
+const analyticsPlayerLinesCache = new Map<
+  TournamentAnalyticsCacheKey,
+  {
+    revisionKey: string;
+    playerLines: PlayerStatsLine[];
+  }
+>();
+
+const analyticsPlayerLinesInflight = new Map<TournamentAnalyticsCacheKey, Promise<PlayerStatsLine[]>>();
+
 const analyticsRevisionCache = new Map<
   string,
   {
@@ -757,16 +770,15 @@ const loadStatsRowsFromAnalyticsView = async (
       .from("tournament_analytics_player_game")
       .select(selectColumns)
       .eq("tournament_id", tournamentId)
-      .order("match_date", { ascending: true })
-      .order("match_time", { ascending: true })
-      .order("match_id", { ascending: true })
       .range(from, to);
 
     if (phaseFilter !== "all") {
       query = query.eq("phase", phaseFilter);
     }
 
-    const { data, error } = await runSelectWithRetry<Record<string, unknown>[]>(() => query);
+    const { data, error } = await runSelectWithRetry<Record<string, unknown>[]>(() =>
+      toSelectPromise<Record<string, unknown>[]>(query)
+    );
     if (error || !data) {
       return null;
     }
@@ -815,6 +827,74 @@ const loadStatsRowsFromAnalyticsView = async (
   }));
 };
 
+const mapAnalyticsPlayerGameRow = (
+  row: Record<string, unknown>,
+  tournamentId: string
+): TournamentAnalyticsPlayerGame => {
+  const playerId = toNumber(row.player_id);
+  const names = row.names ? String(row.names) : null;
+  const lastnames = row.lastnames ? String(row.lastnames) : null;
+
+  return {
+    tournamentId: String(row.tournament_id ?? tournamentId),
+    matchId: toNumber(row.match_id),
+    matchDate: row.match_date ? String(row.match_date) : null,
+    matchTime: row.match_time ? String(row.match_time) : null,
+    gameOrder: toNumber(row.game_order),
+    playerId,
+    playerName: fullName(names, lastnames) || `Jugador ${playerId}`,
+    teamName: row.team_name ? String(row.team_name) : null,
+    phase: toAnalyticsPhase(row.phase),
+    points: toNumber(row.points),
+    rebounds: toNumber(row.rebounds),
+    assists: toNumber(row.assists),
+    steals: toNumber(row.steals),
+    blocks: toNumber(row.blocks),
+    turnovers: toNumber(row.turnovers),
+    fouls: toNumber(row.fouls),
+    fgm: toNumber(row.fgm),
+    fga: toNumber(row.fga),
+    fgPct: computeFgPct(toNumber(row.fgm), toNumber(row.fga)),
+    ftm: toNumber(row.ftm),
+    fta: toNumber(row.fta),
+    ftPct: computePct(toNumber(row.ftm), toNumber(row.fta)),
+    tpm: toNumber(row.tpm),
+    tpa: toNumber(row.tpa),
+    tpPct: computePct(toNumber(row.tpm), toNumber(row.tpa)),
+  };
+};
+
+const loadPlayerGamesFromAnalyticsView = async (
+  tournamentId: string,
+  phaseFilter: TournamentPhaseFilter,
+  playerId: number
+): Promise<TournamentAnalyticsPlayerGame[] | null> => {
+  let query = supabase
+    .from("tournament_analytics_player_game")
+    .select(
+      "tournament_id, match_id, match_date, match_time, game_order, player_id, names, lastnames, team_name, phase, points, rebounds, assists, steals, blocks, turnovers, fouls, fgm, fga, ftm, fta, tpm, tpa"
+    )
+    .eq("tournament_id", tournamentId)
+    .eq("player_id", playerId)
+    .order("game_order", { ascending: true })
+    .order("match_date", { ascending: true })
+    .order("match_time", { ascending: true })
+    .order("match_id", { ascending: true });
+
+  if (phaseFilter !== "all") {
+    query = query.eq("phase", phaseFilter);
+  }
+
+  const { data, error } = await runSelectWithRetry<Record<string, unknown>[]>(() =>
+    toSelectPromise<Record<string, unknown>[]>(query)
+  );
+  if (error || !data) return null;
+
+  return (data as Record<string, unknown>[]).map((row) =>
+    mapAnalyticsPlayerGameRow(row, tournamentId)
+  );
+};
+
 const loadPlayerTotalsFromAnalyticsView = async (
   tournamentId: string,
   phaseFilter: TournamentPhaseFilter
@@ -836,7 +916,9 @@ const loadPlayerTotalsFromAnalyticsView = async (
       query = query.eq("phase", phaseFilter);
     }
 
-    const { data, error } = await runSelectWithRetry<Record<string, unknown>[]>(() => query);
+    const { data, error } = await runSelectWithRetry<Record<string, unknown>[]>(() =>
+      toSelectPromise<Record<string, unknown>[]>(query)
+    );
     if (error || !data) return null;
 
     const chunk = data as Record<string, unknown>[];
@@ -1115,6 +1197,8 @@ export const clearTournamentAnalyticsCache = (tournamentId?: string) => {
   if (!tournamentId) {
     analyticsSnapshotCache.clear();
     analyticsSnapshotInflight.clear();
+    analyticsPlayerLinesCache.clear();
+    analyticsPlayerLinesInflight.clear();
     analyticsRevisionCache.clear();
     tournamentPlayersListCache.clear();
     return;
@@ -1129,6 +1213,18 @@ export const clearTournamentAnalyticsCache = (tournamentId?: string) => {
   for (const key of analyticsSnapshotInflight.keys()) {
     if (key.startsWith(`${tournamentId}:`)) {
       analyticsSnapshotInflight.delete(key);
+    }
+  }
+
+  for (const key of analyticsPlayerLinesCache.keys()) {
+    if (key.startsWith(`${tournamentId}:`)) {
+      analyticsPlayerLinesCache.delete(key);
+    }
+  }
+
+  for (const key of analyticsPlayerLinesInflight.keys()) {
+    if (key.startsWith(`${tournamentId}:`)) {
+      analyticsPlayerLinesInflight.delete(key);
     }
   }
 
@@ -1325,6 +1421,177 @@ const buildMvpRowsFromSnapshot = (
     .sort((a, b) => b.finalScore - a.finalScore);
 };
 
+const buildMvpRowsFromPlayerLines = (
+  playerLines: PlayerStatsLine[],
+  teamFactorMap: Map<string, number>,
+  eligibilityRate = 0.3
+): MvpBreakdownRow[] => {
+  const teamGamesMap = new Map<string, number>();
+  const teamValuationMap = new Map<string, number>();
+
+  playerLines.forEach((line) => {
+    if (!line.teamName) return;
+    const currentTeamGames = teamGamesMap.get(line.teamName) ?? 0;
+    teamGamesMap.set(line.teamName, Math.max(currentTeamGames, line.gamesPlayed));
+
+    const currentTeamVal = teamValuationMap.get(line.teamName) ?? 0;
+    teamValuationMap.set(line.teamName, currentTeamVal + Math.max(0, line.valuationPerGame));
+  });
+
+  const scoredInput = playerLines.map((line) => {
+    const teamGames = line.teamName ? teamGamesMap.get(line.teamName) ?? 0 : 0;
+    const minGames = Math.max(1, Math.ceil(teamGames * eligibilityRate));
+    const teamFactor = line.teamName ? teamFactorMap.get(line.teamName) ?? 0 : 0;
+    const availabilityRate = teamGames > 0 ? Math.min(1, line.gamesPlayed / teamGames) : 0;
+    const tsPct = computeTrueShootingPct(line.totals.points, line.totals.fga, line.totals.fta);
+    const teamValuation = line.teamName ? teamValuationMap.get(line.teamName) ?? 0 : 0;
+    const pieShare =
+      teamValuation > 0 ? round2(Math.max(0, line.valuationPerGame) / teamValuation) : 0;
+
+    return {
+      line,
+      eligible: line.gamesPlayed >= minGames,
+      minGames,
+      teamFactor,
+      availabilityRate,
+      tsPct,
+      pieShare,
+    };
+  });
+
+  const eligibleInput = scoredInput.filter((entry) => entry.eligible);
+  if (eligibleInput.length === 0) return [];
+
+  const scored = computeMvpScores(
+    eligibleInput.map((entry) => ({
+      playerId: entry.line.playerId,
+      ppg: entry.line.perGame.ppg,
+      rpg: entry.line.perGame.rpg,
+      apg: entry.line.perGame.apg,
+      spg: entry.line.perGame.spg,
+      bpg: entry.line.perGame.bpg,
+      topg: entry.line.perGame.topg,
+      fpg: entry.line.perGame.fpg,
+      tsPct: entry.tsPct,
+      fgPct: entry.line.fgPct,
+      tpPct: entry.line.tpPct,
+      pieShare: entry.pieShare,
+      praPerGame: round2(
+        entry.line.perGame.ppg + entry.line.perGame.rpg + entry.line.perGame.apg - entry.line.perGame.topg
+      ),
+      valuationPerGame: entry.line.valuationPerGame,
+      teamFactor: entry.teamFactor,
+      availabilityRate: entry.availabilityRate,
+    }))
+  );
+
+  return eligibleInput
+    .map((entry) => {
+      const details = scored[entry.line.playerId];
+      if (!details) return null;
+      return {
+        ...entry.line,
+        eligible: entry.eligible,
+        eligibilityThreshold: entry.minGames,
+        teamFactor: details.teamFactor,
+        availabilityRate: entry.availabilityRate,
+        tsPct: entry.tsPct,
+        pieShare: entry.pieShare,
+        z: details.z,
+        componentScore: details.componentScore,
+        finalScore: details.finalScore,
+      };
+    })
+    .filter((row): row is MvpBreakdownRow => Boolean(row))
+    .sort((a, b) => b.finalScore - a.finalScore);
+};
+
+const loadAnalyticsSummary = async (
+  tournamentId: string,
+  phase: Exclude<TournamentPhaseFilter, "all">
+): Promise<{ gamesAnalyzed: number; playersAnalyzed: number } | null> => {
+  const { data, error } = await runSelectWithRetry<
+    Array<{ games_analyzed: number; players_analyzed: number }>
+  >(() =>
+    supabase
+      .from("tournament_analytics_summary")
+      .select("games_analyzed, players_analyzed")
+      .eq("tournament_id", tournamentId)
+      .eq("phase", phase)
+      .limit(1)
+  );
+
+  if (error || !data || data.length === 0) return null;
+  const row = data[0];
+  return {
+    gamesAnalyzed: toNumber(row.games_analyzed),
+    playersAnalyzed: toNumber(row.players_analyzed),
+  };
+};
+
+const loadTeamFactorMapForPhase = async (
+  tournamentId: string,
+  phaseFilter: TournamentPhaseFilter
+): Promise<Map<string, number>> => {
+  const phaseForTeamFactor: TournamentPhaseFilter =
+    phaseFilter === "all" ? "regular" : phaseFilter;
+
+  let teamFactors = await loadTeamFactorFromView(tournamentId, phaseForTeamFactor);
+  if (teamFactors) return teamFactors;
+
+  if (phaseForTeamFactor === "regular") {
+    teamFactors = await getTeamWinPct(tournamentId);
+  } else {
+    teamFactors = new Map<string, number>();
+  }
+
+  return teamFactors;
+};
+
+const getTournamentPlayerLines = async (
+  tournamentId: string,
+  phaseFilter: TournamentPhaseFilter
+): Promise<PlayerStatsLine[]> => {
+  const cacheKey = `${tournamentId}:${phaseFilter}` as TournamentAnalyticsCacheKey;
+  const inflight = analyticsPlayerLinesInflight.get(cacheKey);
+  if (inflight) return inflight;
+
+  const loader = (async (): Promise<PlayerStatsLine[]> => {
+    const revisionKey = await getAnalyticsRevisionKey(tournamentId);
+    const cached = analyticsPlayerLinesCache.get(cacheKey);
+    if (cached && cached.revisionKey === revisionKey) {
+      return cached.playerLines;
+    }
+
+    let playerLines = await loadPlayerTotalsFromAnalyticsView(tournamentId, phaseFilter);
+    if (!playerLines) {
+      let statsRows = await loadStatsRowsFromAnalyticsView(tournamentId, phaseFilter);
+      if (!statsRows) {
+        const fallbackRows = await loadStatsRows(tournamentId);
+        statsRows =
+          phaseFilter === "all"
+            ? fallbackRows
+            : fallbackRows.filter((row) => inPhase(row.phase, phaseFilter));
+      }
+      playerLines = statsRows.length > 0 ? buildPlayerLines(statsRows, "all") : [];
+    }
+
+    analyticsPlayerLinesCache.set(cacheKey, {
+      revisionKey,
+      playerLines,
+    });
+
+    return playerLines;
+  })();
+
+  analyticsPlayerLinesInflight.set(cacheKey, loader);
+  try {
+    return await loader;
+  } finally {
+    analyticsPlayerLinesInflight.delete(cacheKey);
+  }
+};
+
 export const getLeaders = async (params: {
   tournamentId: string;
   phase?: TournamentPhaseFilter;
@@ -1335,9 +1602,9 @@ export const getLeaders = async (params: {
   const metric = params.metric ?? "points";
   const limit = params.limit ?? 20;
 
-  const snapshot = await getTournamentAnalyticsSnapshot(params.tournamentId, phase);
+  const playerLines = await getTournamentPlayerLines(params.tournamentId, phase);
 
-  return snapshot.playerLines
+  return playerLines
     .map((line) => {
       const value =
         metric === "fg_pct"
@@ -1376,9 +1643,9 @@ export const getRaceSeries = async (params: {
 }): Promise<RaceSeriesPlayer[]> => {
   const phase = params.phase ?? "regular";
   const topN = params.topN ?? 10;
-  const snapshot = await getTournamentAnalyticsSnapshot(params.tournamentId, phase);
+  const playerLines = await getTournamentPlayerLines(params.tournamentId, phase);
 
-  const topPlayers = [...snapshot.playerLines]
+  const topPlayers = [...playerLines]
     .sort(
       (a, b) =>
         toNumber(b.totals[params.metric as keyof PlayerStatsLine["totals"]]) -
@@ -1386,33 +1653,106 @@ export const getRaceSeries = async (params: {
     )
     .slice(0, topN);
 
+  if (topPlayers.length === 0) {
+    return [];
+  }
+
   const topSet = new Set(topPlayers.map((player) => player.playerId));
   const grouped = new Map<number, RaceSeriesPoint[]>();
 
-  [...snapshot.playerGames]
+  const selectColumns = `player_id, match_id, match_date, match_time, game_order, ${params.metric}`;
+  const allRows: Record<string, unknown>[] = [];
+  let from = 0;
+
+  while (true) {
+    const to = from + ANALYTICS_PLAYER_GAME_PAGE_SIZE - 1;
+    let query = supabase
+      .from("tournament_analytics_player_game")
+      .select(selectColumns)
+      .eq("tournament_id", params.tournamentId)
+      .in("player_id", Array.from(topSet))
+      .range(from, to);
+
+    if (phase !== "all") {
+      query = query.eq("phase", phase);
+    }
+
+    const { data, error } = await runSelectWithRetry<Record<string, unknown>[]>(() =>
+      toSelectPromise<Record<string, unknown>[]>(query)
+    );
+    if (error || !data) {
+      const snapshot = await getTournamentAnalyticsSnapshot(params.tournamentId, phase);
+      [...snapshot.playerGames]
+        .filter((row) => topSet.has(row.playerId))
+        .sort((a, b) => {
+          if (a.playerId !== b.playerId) return a.playerId - b.playerId;
+          if (a.gameOrder !== b.gameOrder) return a.gameOrder - b.gameOrder;
+          const dateA = a.matchDate ?? "";
+          const dateB = b.matchDate ?? "";
+          if (dateA !== dateB) return dateA.localeCompare(dateB);
+          const timeA = a.matchTime ?? "";
+          const timeB = b.matchTime ?? "";
+          if (timeA !== timeB) return timeA.localeCompare(timeB);
+          return a.matchId - b.matchId;
+        })
+        .forEach((row) => {
+          const metricValue = toNumber(row[params.metric]);
+          const current = grouped.get(row.playerId) ?? [];
+          const previousCumulative = current.length > 0 ? current[current.length - 1].cumulative : 0;
+
+          current.push({
+            matchId: row.matchId,
+            gameIndex: current.length + 1,
+            date: row.matchDate ?? "",
+            value: metricValue,
+            cumulative: round2(previousCumulative + metricValue),
+          });
+
+          grouped.set(row.playerId, current);
+        });
+
+      return topPlayers.map((player) => ({
+        playerId: player.playerId,
+        name: player.name,
+        teamName: player.teamName,
+        points: grouped.get(player.playerId) ?? [],
+      }));
+    }
+
+    const chunk = data as Record<string, unknown>[];
+    if (chunk.length === 0) break;
+    allRows.push(...chunk);
+    if (chunk.length < ANALYTICS_PLAYER_GAME_PAGE_SIZE) break;
+    from += ANALYTICS_PLAYER_GAME_PAGE_SIZE;
+  }
+
+  allRows
+    .map((row) => ({
+      playerId: toNumber(row.player_id),
+      matchId: toNumber(row.match_id),
+      matchDate: row.match_date ? String(row.match_date) : "",
+      matchTime: row.match_time ? String(row.match_time) : "",
+      gameOrder: toNumber(row.game_order),
+      value: toNumber(row[params.metric]),
+    }))
     .filter((row) => topSet.has(row.playerId))
     .sort((a, b) => {
       if (a.playerId !== b.playerId) return a.playerId - b.playerId;
       if (a.gameOrder !== b.gameOrder) return a.gameOrder - b.gameOrder;
-      const dateA = a.matchDate ?? "";
-      const dateB = b.matchDate ?? "";
-      if (dateA !== dateB) return dateA.localeCompare(dateB);
-      const timeA = a.matchTime ?? "";
-      const timeB = b.matchTime ?? "";
-      if (timeA !== timeB) return timeA.localeCompare(timeB);
+      if (a.matchDate !== b.matchDate) return a.matchDate.localeCompare(b.matchDate);
+      if (a.matchTime !== b.matchTime) return a.matchTime.localeCompare(b.matchTime);
       return a.matchId - b.matchId;
     })
     .forEach((row) => {
-      const metricValue = toNumber(row[params.metric]);
       const current = grouped.get(row.playerId) ?? [];
       const previousCumulative = current.length > 0 ? current[current.length - 1].cumulative : 0;
 
       current.push({
         matchId: row.matchId,
         gameIndex: current.length + 1,
-        date: row.matchDate ?? "",
-        value: metricValue,
-        cumulative: round2(previousCumulative + metricValue),
+        date: row.matchDate,
+        value: row.value,
+        cumulative: round2(previousCumulative + row.value),
       });
 
       grouped.set(row.playerId, current);
@@ -1426,6 +1766,59 @@ export const getRaceSeries = async (params: {
   }));
 };
 
+export const getTournamentPlayerLinesFast = async (
+  tournamentId: string,
+  phase: TournamentPhaseFilter = "all"
+): Promise<PlayerStatsLine[]> => getTournamentPlayerLines(tournamentId, phase);
+
+export const getTournamentPlayerDetailFast = async (params: {
+  tournamentId: string;
+  playerId: number;
+  phase?: TournamentPhaseFilter;
+  forceRefresh?: boolean;
+}): Promise<{ line: PlayerStatsLine; games: TournamentAnalyticsPlayerGame[] }> => {
+  const phase = params.phase ?? "all";
+  const [playerLines, playerGamesFromView] = await Promise.all([
+    getTournamentPlayerLines(params.tournamentId, phase),
+    loadPlayerGamesFromAnalyticsView(params.tournamentId, phase, params.playerId),
+  ]);
+
+  const line = playerLines.find((item) => item.playerId === params.playerId);
+
+  if (line && playerGamesFromView) {
+    return {
+      line,
+      games: playerGamesFromView,
+    };
+  }
+
+  const snapshot = await getTournamentAnalyticsSnapshot(params.tournamentId, phase, {
+    forceRefresh: Boolean(params.forceRefresh),
+  });
+  const fallbackLine = snapshot.playerLines.find((item) => item.playerId === params.playerId);
+  if (!fallbackLine) {
+    throw new Error("No se encontró data analítica para este jugador en la fase seleccionada.");
+  }
+
+  const games = snapshot.playerGames
+    .filter((item) => item.playerId === params.playerId)
+    .sort((a, b) => {
+      if (a.gameOrder !== b.gameOrder) return a.gameOrder - b.gameOrder;
+      const dateA = a.matchDate ?? "";
+      const dateB = b.matchDate ?? "";
+      if (dateA !== dateB) return dateA.localeCompare(dateB);
+      const timeA = a.matchTime ?? "";
+      const timeB = b.matchTime ?? "";
+      if (timeA !== timeB) return timeA.localeCompare(timeB);
+      return a.matchId - b.matchId;
+    });
+
+  return {
+    line: fallbackLine,
+    games,
+  };
+};
+
 export const getMvpRace = async (params: {
   tournamentId: string;
   phase?: Exclude<TournamentPhaseFilter, "all">;
@@ -1436,6 +1829,21 @@ export const getMvpRace = async (params: {
   const snapshot = await getTournamentAnalyticsSnapshot(params.tournamentId, phase);
 
   return buildMvpRowsFromSnapshot(snapshot, eligibilityRate);
+};
+
+export const getMvpRaceFast = async (params: {
+  tournamentId: string;
+  phase?: Exclude<TournamentPhaseFilter, "all">;
+  eligibilityRate?: number;
+}): Promise<MvpBreakdownRow[]> => {
+  const phase = params.phase ?? "regular";
+  const eligibilityRate = params.eligibilityRate ?? 0.3;
+  const [playerLines, teamFactorMap] = await Promise.all([
+    getTournamentPlayerLines(params.tournamentId, phase),
+    loadTeamFactorMapForPhase(params.tournamentId, phase),
+  ]);
+
+  return buildMvpRowsFromPlayerLines(playerLines, teamFactorMap, eligibilityRate);
 };
 
 export const getFinalsMvpRace = async (tournamentId: string): Promise<MvpBreakdownRow[]> =>
@@ -1453,13 +1861,16 @@ export const getBattleData = async (params: {
   }
 
   const phase = params.phase ?? "regular";
-  const snapshot = await getTournamentAnalyticsSnapshot(params.tournamentId, phase);
-  const lines = snapshot.playerLines.filter((line) => uniquePlayerIds.includes(line.playerId));
+  const [playerLines, teamFactorMap] = await Promise.all([
+    getTournamentPlayerLines(params.tournamentId, phase),
+    loadTeamFactorMapForPhase(params.tournamentId, phase),
+  ]);
+  const lines = playerLines.filter((line) => uniquePlayerIds.includes(line.playerId));
 
   if (lines.length !== 2) {
     throw new Error("No hay datos suficientes para comparar esos 2 jugadores en la fase seleccionada.");
   }
-  const mvpRows = buildMvpRowsFromSnapshot(snapshot, 0.3);
+  const mvpRows = buildMvpRowsFromPlayerLines(playerLines, teamFactorMap, 0.3);
 
   const mvpByPlayer = new Map(mvpRows.map((row) => [row.playerId, row.finalScore]));
 
@@ -1488,40 +1899,26 @@ export const getBattleData = async (params: {
 export const getAnalyticsDashboardKpis = async (
   tournamentId: string
 ): Promise<TournamentAnalyticsKpi[]> => {
-  const regularSnapshot = await getTournamentAnalyticsSnapshot(tournamentId, "regular");
-  const leaderByPoints = [...regularSnapshot.playerLines]
+  const [playerLines, teamFactorMap, summary] = await Promise.all([
+    getTournamentPlayerLines(tournamentId, "regular"),
+    loadTeamFactorMapForPhase(tournamentId, "regular"),
+    loadAnalyticsSummary(tournamentId, "regular"),
+  ]);
+  const leaderByPoints = [...playerLines]
     .sort((a, b) => b.totals.points - a.totals.points)[0];
-  const leaderByMvp = buildMvpRowsFromSnapshot(regularSnapshot, 0.3)[0];
-  const leaderByDefense = [...regularSnapshot.playerLines]
-    .map((line) => {
-      const defensiveImpact = computeDefensiveImpactPerGame(line);
-
-      return {
-        line,
-        defensiveImpact,
-      };
-    })
-    .sort((a, b) => {
-      if (b.defensiveImpact !== a.defensiveImpact) {
-        return b.defensiveImpact - a.defensiveImpact;
-      }
-      if (b.line.perGame.spg !== a.line.perGame.spg) {
-        return b.line.perGame.spg - a.line.perGame.spg;
-      }
-      return b.line.perGame.bpg - a.line.perGame.bpg;
-    })[0];
+  const leaderByMvp = buildMvpRowsFromPlayerLines(playerLines, teamFactorMap, 0.3)[0];
 
   return [
     {
       id: "players",
       label: "Jugadores activos",
-      value: regularSnapshot.playersAnalyzed,
+      value: summary?.playersAnalyzed ?? playerLines.length,
       helper: "Con al menos un juego en temporada regular",
     },
     {
       id: "games",
       label: "Juegos analizados",
-      value: regularSnapshot.gamesAnalyzed,
+      value: summary?.gamesAnalyzed ?? 0,
       helper: "Partidos con datos de jugador",
     },
     {
@@ -1535,14 +1932,6 @@ export const getAnalyticsDashboardKpis = async (
       label: "Líder MVP",
       value: leaderByMvp?.name ?? "N/A",
       helper: leaderByMvp ? `Score ${leaderByMvp.finalScore.toFixed(3)}` : "Sin elegibles",
-    },
-    {
-      id: "leader_defense",
-      label: "Líder DEF",
-      value: leaderByDefense?.line.name ?? "N/A",
-      helper: leaderByDefense
-        ? `D-Impact ${leaderByDefense.defensiveImpact.toFixed(2)} · ROB ${leaderByDefense.line.perGame.spg.toFixed(1)} · TAP ${leaderByDefense.line.perGame.bpg.toFixed(1)}`
-        : "Sin registros",
     },
   ];
 };
@@ -2074,22 +2463,39 @@ export const listTournamentPlayers = async (
     return [];
   }
 
+  const playerChunks = chunkArray(uniquePlayerIds, TOURNAMENT_PLAYER_IDS_CHUNK);
+  const activeRowsPromise: Promise<QueryResult<Array<{ player_id: number }>>> =
+    phase !== "all"
+      ? runSelectWithRetry<Array<{ player_id: number }>>(() =>
+          supabase
+            .from("tournament_analytics_player_totals")
+            .select("player_id")
+            .eq("tournament_id", tournamentId)
+            .eq("phase", phase)
+        )
+      : Promise.resolve({ data: null, error: null });
+
+  const [playerChunkResults, activeRowsResult] = await Promise.all([
+    Promise.all(
+      playerChunks.map((idChunk) =>
+        runSelectWithRetry<
+          Array<{ id: number; names: string | null; lastnames: string | null; photo: string | null }>
+        >(() =>
+          supabase
+            .from("players")
+            .select("id, names, lastnames, photo")
+            .in("id", idChunk)
+        )
+      )
+    ),
+    activeRowsPromise,
+  ]);
+
   const playersById = new Map<number, { names: string; lastnames: string; photo: string | null }>();
-  for (const idChunk of chunkArray(uniquePlayerIds, TOURNAMENT_PLAYER_IDS_CHUNK)) {
-    const { data: playersData, error: playersError } = await runSelectWithRetry<
-      Array<{ id: number; names: string | null; lastnames: string | null; photo: string | null }>
-    >(() =>
-      supabase
-        .from("players")
-        .select("id, names, lastnames, photo")
-        .in("id", idChunk)
-    );
+  playerChunkResults.forEach(({ data: playersData, error: playersError }) => {
+    if (playersError || !playersData) return;
 
-    if (playersError) {
-      continue;
-    }
-
-    (playersData ?? []).forEach((row) => {
+    playersData.forEach((row) => {
       const playerId = toNumber(row.id);
       if (playerId <= 0) return;
       playersById.set(playerId, {
@@ -2098,25 +2504,13 @@ export const listTournamentPlayers = async (
         photo: toSafeText(row.photo) || null,
       });
     });
-  }
+  });
 
   let activePlayerIds: Set<number> | null = null;
-  if (phase !== "all") {
-    const { data: activeRows, error: activeError } = await runSelectWithRetry<
-      Array<{ player_id: number }>
-    >(() =>
-      supabase
-        .from("tournament_analytics_player_totals")
-        .select("player_id")
-        .eq("tournament_id", tournamentId)
-        .eq("phase", phase)
+  if (!activeRowsResult.error && activeRowsResult.data) {
+    activePlayerIds = new Set(
+      activeRowsResult.data.map((row) => toNumber(row.player_id)).filter((id) => id > 0)
     );
-
-    if (!activeError && activeRows) {
-      activePlayerIds = new Set(
-        activeRows.map((row) => toNumber(row.player_id)).filter((id) => id > 0)
-      );
-    }
   }
 
   const teamNameById = new Map(

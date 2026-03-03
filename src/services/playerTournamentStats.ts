@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import { getTournamentAnalyticsSnapshot } from "./tournamentAnalytics";
+import { getTournamentAnalyticsSnapshot, getTournamentPlayerLinesFast } from "./tournamentAnalytics";
 import type { PlayerStatsLine } from "../types/tournament-analytics";
 import {
   computeValuation,
@@ -394,6 +394,6 @@ export const listTournamentOptions = async (): Promise<TournamentOption[]> => {
 };
 
 export const getTournamentPlayersDirectory = async (tournamentId: string): Promise<PlayerStatsLine[]> => {
-  const snapshot = await getTournamentAnalyticsSnapshot(tournamentId, "all");
-  return sortPlayerLines(snapshot.playerLines);
+  const lines = await getTournamentPlayerLinesFast(tournamentId, "all");
+  return sortPlayerLines(lines);
 };
