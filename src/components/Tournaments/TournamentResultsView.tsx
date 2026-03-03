@@ -25,10 +25,10 @@ const formatDateLabel = (value: string | null) => {
 
 const formatTime = (value: string | null) => (value ? String(value).slice(0, 5) : "--:--");
 
-const formatSigned = (value: number) => {
-  if (value > 0) return `+${value}`;
-  return String(value);
-};
+const computePra = (row: TournamentResultBoxscoreRow) =>
+  row.points + row.rebounds + row.assists - row.turnovers;
+
+const formatPra = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1));
 
 const TournamentResultsView = ({
   tournamentId,
@@ -431,12 +431,12 @@ const TeamBoxscoreTable = ({ title, rows }: { title: string; rows: TournamentRes
                     <p className="text-sm font-semibold tabular-nums">{row.assists}</p>
                   </div>
                   <div className="rounded border bg-[hsl(var(--surface-2)/0.6)] px-1 py-1">
-                    <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">+/-</p>
-                    <p className="text-sm font-semibold tabular-nums">{formatSigned(row.plusMinus)}</p>
+                    <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">PRA</p>
+                    <p className="text-sm font-semibold tabular-nums">{formatPra(computePra(row))}</p>
                   </div>
                 </div>
                 <p className="mt-1 text-[11px] text-[hsl(var(--text-subtle))] tabular-nums">
-                  +/- {formatSigned(row.plusMinus)} · STL {row.steals} · BLK {row.blocks} · TO {row.turnovers} · FLS {row.fouls} · FG {row.fgm}/{row.fga} ({row.fgPct.toFixed(0)}%) · FT {row.ftm}/{row.fta} ({row.ftPct.toFixed(0)}%) · 3PT {row.tpm}/{row.tpa} ({row.tpPct.toFixed(0)}%)
+                  PRA {formatPra(computePra(row))} · STL {row.steals} · BLK {row.blocks} · TO {row.turnovers} · FLS {row.fouls} · FG {row.fgm}/{row.fga} ({row.fgPct.toFixed(0)}%) · FT {row.ftm}/{row.fta} ({row.ftPct.toFixed(0)}%) · 3PT {row.tpm}/{row.tpa} ({row.tpPct.toFixed(0)}%)
                 </p>
               </div>
             ))}
@@ -453,7 +453,7 @@ const TeamBoxscoreTable = ({ title, rows }: { title: string; rows: TournamentRes
                   <th className="px-2 py-2 text-center">AST</th>
                   <th className="px-2 py-2 text-center">STL</th>
                   <th className="px-2 py-2 text-center">BLK</th>
-                  <th className="px-2 py-2 text-center">+/-</th>
+                  <th className="px-2 py-2 text-center">PRA</th>
                   <th className="px-2 py-2 text-center">TO</th>
                   <th className="px-2 py-2 text-center">FLS</th>
                   <th className="px-2 py-2 text-center">FGM/FGA</th>
@@ -473,7 +473,7 @@ const TeamBoxscoreTable = ({ title, rows }: { title: string; rows: TournamentRes
                     <td className="px-2 py-2 text-center tabular-nums">{row.assists}</td>
                     <td className="px-2 py-2 text-center tabular-nums">{row.steals}</td>
                     <td className="px-2 py-2 text-center tabular-nums">{row.blocks}</td>
-                    <td className="px-2 py-2 text-center tabular-nums">{formatSigned(row.plusMinus)}</td>
+                    <td className="px-2 py-2 text-center tabular-nums">{formatPra(computePra(row))}</td>
                     <td className="px-2 py-2 text-center tabular-nums">{row.turnovers}</td>
                     <td className="px-2 py-2 text-center tabular-nums">{row.fouls}</td>
                     <td className="px-2 py-2 text-center tabular-nums">{row.fgm}/{row.fga}</td>

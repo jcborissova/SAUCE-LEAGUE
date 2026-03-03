@@ -12,6 +12,7 @@ import Home from "./pages/Home";
 import NotFound from "./pages/NotFound";
 import Tournaments from "./pages/tournaments";
 import TournamentViewPage from "./components/Tournaments/TournamentViewPage";
+import AdminAccess from "./pages/AdminAccess";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import RoleProvider from "./contexts/RoleContext";
@@ -23,6 +24,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <RoleProvider>
         <Router>
           <Routes>
+            <Route path="/admin" element={<AdminAccess />} />
             <Route path="/" element={<Layout />}>
               <Route index element={<Home />} />
               <Route path="players" element={<ProtectedRoute><Players /></ProtectedRoute>} />
