@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import type { MvpBreakdownRow, TournamentPhaseFilter } from "../../../types/tournament-analytics";
 import AnalyticsEmptyState from "./AnalyticsEmptyState";
 import { MVP_SCORE_WEIGHTS } from "../../../utils/tournament-stats";
+import { abbreviateLeaderboardName, getPlayerInitials } from "../../../utils/player-display";
 
 type MvpPanelProps = {
   rows: MvpBreakdownRow[];
@@ -22,14 +23,6 @@ const formatPct = (value: number) => `${(value * 100).toFixed(1)}%`;
 const formatPlainPct = (value: number) => `${value.toFixed(1)}%`;
 const formatPra = (row: MvpBreakdownRow) =>
   (row.perGame.ppg + row.perGame.rpg + row.perGame.apg - row.perGame.topg).toFixed(1);
-
-const initialsFromName = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("") || "JG";
 
 const MvpPanel: React.FC<MvpPanelProps> = ({
   rows,
@@ -119,15 +112,17 @@ const MvpPanel: React.FC<MvpPanelProps> = ({
             ) : null}
           </div>
 
-          {visibleRows.map((row, index) => (
+          {visibleRows.map((row, index) => {
+            const displayName = abbreviateLeaderboardName(row.name, 20);
+            return (
             <details key={row.playerId} className="app-card p-3 sm:p-4 group" open={index === 0}>
               <summary className="list-none cursor-pointer">
-                <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
+                <div className="grid min-h-[78px] grid-cols-[auto_1fr_auto] items-center gap-3">
                   <div className="h-8 w-8 rounded-full border bg-[hsl(var(--surface-2))] flex items-center justify-center text-xs font-bold text-[hsl(var(--primary))]">
                     #{index + 1}
                   </div>
                   <div className="min-w-0">
-                    <p className="font-semibold truncate inline-flex items-center gap-2">
+                    <p className="font-semibold truncate inline-flex items-center gap-2" title={row.name}>
                       {row.photo ? (
                         <img
                           src={row.photo}
@@ -136,10 +131,10 @@ const MvpPanel: React.FC<MvpPanelProps> = ({
                         />
                       ) : (
                         <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-2))] text-[10px]">
-                          {initialsFromName(row.name)}
+                          {getPlayerInitials(row.name)}
                         </span>
                       )}
-                      {row.name}
+                      {displayName}
                     </p>
                     <p className="text-xs text-[hsl(var(--text-subtle))] truncate">
                       {row.teamName ?? "Sin equipo"} • {row.gamesPlayed} juegos
@@ -203,7 +198,8 @@ const MvpPanel: React.FC<MvpPanelProps> = ({
                 </div>
               </div>
             </details>
-          ))}
+          );
+          })}
         </div>
       )}
     </section>

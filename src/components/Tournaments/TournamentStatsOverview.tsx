@@ -6,8 +6,8 @@ import {
   getAnalyticsDashboardKpis,
   getBattleData,
   getLeaders,
-  getMvpRace,
-  getTournamentAnalyticsSnapshot,
+  getMvpRaceFast,
+  getTournamentPlayerDetailFast,
   listTournamentPlayers,
 } from "../../services/tournamentAnalytics";
 import type {
@@ -19,6 +19,7 @@ import type {
   TournamentPhaseFilter,
   MvpBreakdownRow,
 } from "../../types/tournament-analytics";
+import { abbreviateLeaderboardName, getPlayerInitials } from "../../utils/player-display";
 import SectionCard from "../ui/SectionCard";
 import EmptyState from "../ui/EmptyState";
 import LoadingSpinner from "../LoadingSpinner";
@@ -134,14 +135,6 @@ type DuelMetricMeta = {
   higherIsBetter: boolean;
   format: (value: number) => string;
 };
-
-const initialsFromName = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("") || "JG";
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
@@ -313,7 +306,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
           getLeaders({ tournamentId, phase, metric: "blocks", limit: 10 }),
           getLeaders({ tournamentId, phase, metric: "pra", limit: 10 }),
           getLeaders({ tournamentId, phase, metric: "defensive_impact", limit: 10 }),
-          getMvpRace({
+          getMvpRaceFast({
             tournamentId,
             phase: phase === "all" ? "regular" : phase === "playoffs" ? "playoffs" : "regular",
           }),
@@ -691,17 +684,15 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
     }
 
     try {
-      const snapshot = await getTournamentAnalyticsSnapshot(tournamentId, selectedPhase, {
+      const playerDetailData = await getTournamentPlayerDetailFast({
+        tournamentId,
+        playerId,
+        phase: selectedPhase,
         forceRefresh: Boolean(options?.forceRefresh),
       });
+      const line = playerDetailData.line;
 
-      const line = snapshot.playerLines.find((item) => item.playerId === playerId);
-      if (!line) {
-        throw new Error("No se encontró data analítica para este jugador en la fase seleccionada.");
-      }
-
-      const games = snapshot.playerGames
-        .filter((item) => item.playerId === playerId)
+      const games = playerDetailData.games
         .map((item) => ({
           ...item,
           pra: round2(item.points + item.rebounds + item.assists - item.turnovers),
@@ -710,7 +701,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       let mvpRow: MvpBreakdownRow | null = null;
       if (selectedPhase !== "all") {
         try {
-          const mvpRows = await getMvpRace({
+          const mvpRows = await getMvpRaceFast({
             tournamentId,
             phase: selectedPhase,
             eligibilityRate: 0.3,
@@ -829,8 +820,8 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       {!loading && (hasContent || focus === "duel") ? (
         <>
           {!isDuelMode && kpis.length > 0 ? (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-              {kpis.slice(0, 5).map((kpi) => (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {kpis.slice(0, 4).map((kpi) => (
                 <article key={kpi.id} className="rounded-lg border bg-[hsl(var(--surface-1))] px-3 py-2.5">
                   <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">{kpi.label}</p>
                   <p className="text-sm font-bold sm:text-base">{kpi.value}</p>
@@ -927,10 +918,10 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                 />
                               ) : (
                                 <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-2))] text-[10px]">
-                                  {initialsFromName(player.name)}
+                                  {getPlayerInitials(player.name)}
                                 </span>
                               )}
-                              {player.name}
+                              <span title={player.name}>{abbreviateLeaderboardName(player.name, 18)}</span>
                             </p>
                             <p className="text-lg font-black tabular-nums">
                               {duelResult.summary.categoryWins[player.playerId] ?? 0}
@@ -1005,10 +996,10 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                     previewMvpRows.map((row, index) => (
                       <div
                         key={row.playerId}
-                        className="flex items-center justify-between rounded-lg border bg-[hsl(var(--surface-2)/0.7)] px-3 py-2 text-sm"
+                        className="flex min-h-[78px] items-center justify-between rounded-lg border bg-[hsl(var(--surface-2)/0.7)] px-3 py-2 text-sm"
                       >
                         <div className="min-w-0">
-                          <p className="truncate font-semibold inline-flex items-center gap-2">
+                          <p className="truncate font-semibold inline-flex items-center gap-2" title={row.name}>
                             {row.photo ? (
                               <img
                                 src={row.photo}
@@ -1017,10 +1008,10 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                               />
                             ) : (
                               <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] text-[10px]">
-                                {initialsFromName(row.name)}
+                                {getPlayerInitials(row.name)}
                               </span>
                             )}
-                            #{index + 1} {row.name}
+                            #{index + 1} {abbreviateLeaderboardName(row.name, 20)}
                           </p>
                           <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
                             {row.teamName ?? "Sin equipo"} · PJ {row.gamesPlayed}
@@ -1060,10 +1051,10 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                         return (
                           <div
                             key={row.playerId}
-                            className="flex items-center justify-between rounded-lg border bg-[hsl(var(--surface-2)/0.7)] px-3 py-2 text-sm"
+                            className="flex min-h-[78px] items-center justify-between rounded-lg border bg-[hsl(var(--surface-2)/0.7)] px-3 py-2 text-sm"
                           >
                             <div className="min-w-0">
-                              <p className="truncate font-semibold inline-flex items-center gap-2">
+                              <p className="truncate font-semibold inline-flex items-center gap-2" title={row.name}>
                                 {row.photo ? (
                                   <img
                                     src={row.photo}
@@ -1072,10 +1063,10 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                   />
                                 ) : (
                                   <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] text-[10px]">
-                                    {initialsFromName(row.name)}
+                                    {getPlayerInitials(row.name)}
                                   </span>
                                 )}
-                                #{index + 1} {row.name}
+                                #{index + 1} {abbreviateLeaderboardName(row.name, 20)}
                               </p>
                               <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
                                 {row.teamName ?? "Sin equipo"} · PJ {row.gamesPlayed}
@@ -1113,10 +1104,10 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                         return (
                           <div
                             key={row.playerId}
-                            className="flex items-center justify-between rounded-lg border bg-[hsl(var(--surface-2)/0.7)] px-3 py-2 text-sm"
+                            className="flex min-h-[78px] items-center justify-between rounded-lg border bg-[hsl(var(--surface-2)/0.7)] px-3 py-2 text-sm"
                           >
                             <div className="min-w-0">
-                              <p className="truncate font-semibold inline-flex items-center gap-2">
+                              <p className="truncate font-semibold inline-flex items-center gap-2" title={row.name}>
                                 {row.photo ? (
                                   <img
                                     src={row.photo}
@@ -1125,10 +1116,10 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                   />
                                 ) : (
                                   <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] text-[10px]">
-                                    {initialsFromName(row.name)}
+                                    {getPlayerInitials(row.name)}
                                   </span>
                                 )}
-                                #{index + 1} {row.name}
+                                #{index + 1} {abbreviateLeaderboardName(row.name, 20)}
                               </p>
                               <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
                                 {row.teamName ?? "Sin equipo"} · PJ {row.gamesPlayed}
@@ -1160,10 +1151,10 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                       return (
                         <div
                           key={row.playerId}
-                          className="flex items-center justify-between rounded-lg border bg-[hsl(var(--surface-2)/0.7)] px-3 py-2 text-sm"
+                          className="flex min-h-[78px] items-center justify-between rounded-lg border bg-[hsl(var(--surface-2)/0.7)] px-3 py-2 text-sm"
                         >
                           <div className="min-w-0">
-                            <p className="truncate font-semibold inline-flex items-center gap-2">
+                            <p className="truncate font-semibold inline-flex items-center gap-2" title={row.name}>
                               {row.photo ? (
                                 <img
                                   src={row.photo}
@@ -1172,10 +1163,10 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                 />
                               ) : (
                                 <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] text-[10px]">
-                                  {initialsFromName(row.name)}
+                                  {getPlayerInitials(row.name)}
                                 </span>
                               )}
-                              #{index + 1} {row.name}
+                              #{index + 1} {abbreviateLeaderboardName(row.name, 20)}
                             </p>
                             <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
                               {row.teamName ?? "Sin equipo"} · PJ {row.gamesPlayed}
@@ -1267,8 +1258,8 @@ const LeadersFullscreen = ({
     ? "grid grid-cols-[auto_1fr_auto_auto] gap-3 border-b bg-[hsl(var(--surface-2))] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]"
     : "grid grid-cols-[auto_1fr_auto] gap-3 border-b bg-[hsl(var(--surface-2))] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]";
   const rowGridClass = hasSecondary
-    ? "grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 px-3 py-2.5 text-sm"
-    : "grid grid-cols-[auto_1fr_auto] items-center gap-3 px-3 py-2.5 text-sm";
+    ? "grid min-h-[74px] grid-cols-[auto_1fr_auto_auto] items-center gap-3 px-3 py-2.5 text-sm"
+    : "grid min-h-[74px] grid-cols-[auto_1fr_auto] items-center gap-3 px-3 py-2.5 text-sm";
 
   return (
     <div className="fixed inset-0 z-[70] bg-[hsl(var(--background))]">
@@ -1322,7 +1313,7 @@ const LeadersFullscreen = ({
                       #{index + 1}
                     </span>
                     <div className="min-w-0">
-                      <p className="truncate font-semibold inline-flex items-center gap-2">
+                      <p className="truncate font-semibold inline-flex items-center gap-2" title={row.name}>
                         {row.photo ? (
                           <img
                             src={row.photo}
@@ -1331,10 +1322,10 @@ const LeadersFullscreen = ({
                           />
                         ) : (
                           <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] text-[10px]">
-                            {initialsFromName(row.name)}
+                            {getPlayerInitials(row.name)}
                           </span>
                         )}
-                        {row.name}
+                        {abbreviateLeaderboardName(row.name, 24)}
                       </p>
                       <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
                         {row.teamName ?? "Sin equipo"} · {row.helperText}

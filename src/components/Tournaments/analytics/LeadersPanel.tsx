@@ -4,6 +4,7 @@ import type {
   TournamentPhaseFilter,
   TournamentStatMetric,
 } from "../../../types/tournament-analytics";
+import { abbreviateLeaderboardName, getPlayerInitials } from "../../../utils/player-display";
 import AppSelect from "../../ui/AppSelect";
 import AnalyticsEmptyState from "./AnalyticsEmptyState";
 import { LEADER_CATEGORIES, PHASE_OPTIONS } from "./constants";
@@ -24,14 +25,6 @@ const formatLeaderValue = (metric: TournamentStatMetric, value: number) => {
   if (metric === "pra") return value.toFixed(1);
   return value.toLocaleString("es-ES");
 };
-
-const initialsFromName = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("") || "JG";
 
 const LeadersPanel: React.FC<LeadersPanelProps> = ({
   rows,
@@ -147,8 +140,11 @@ const LeadersPanel: React.FC<LeadersPanelProps> = ({
             ) : null}
           </div>
 
-          {visibleRows.map((row, index) => (
-            <article key={row.playerId} className="app-card p-3 sm:p-4">
+          {visibleRows.map((row, index) => {
+            const displayName = abbreviateLeaderboardName(row.name, 20);
+
+            return (
+            <article key={row.playerId} className="app-card min-h-[78px] p-3 sm:p-4">
               <button
                 type="button"
                 onClick={() => onPlayerSelect?.(row.playerId, phase)}
@@ -163,7 +159,7 @@ const LeadersPanel: React.FC<LeadersPanelProps> = ({
                   #{index + 1}
                 </div>
                 <div className="min-w-0">
-                  <p className="font-semibold truncate inline-flex items-center gap-2">
+                  <p className="font-semibold truncate inline-flex items-center gap-2" title={row.name}>
                     {row.photo ? (
                       <img
                         src={row.photo}
@@ -172,10 +168,10 @@ const LeadersPanel: React.FC<LeadersPanelProps> = ({
                       />
                     ) : (
                       <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-2))] text-[10px]">
-                        {initialsFromName(row.name)}
+                        {getPlayerInitials(row.name)}
                       </span>
                     )}
-                    {row.name}
+                    {displayName}
                   </p>
                   <p className="text-xs text-[hsl(var(--text-subtle))] truncate">
                     {row.teamName ?? "Sin equipo"} • {row.gamesPlayed} juegos
@@ -188,7 +184,8 @@ const LeadersPanel: React.FC<LeadersPanelProps> = ({
                 </div>
               </button>
             </article>
-          ))}
+          );
+          })}
         </div>
       )}
     </section>

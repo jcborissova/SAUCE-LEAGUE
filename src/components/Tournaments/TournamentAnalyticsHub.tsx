@@ -4,9 +4,10 @@ import {
   getBattleData,
   getFinalsMvpRace,
   getLeaders,
-  getMvpRace,
+  getMvpRaceFast,
   getRaceSeries,
-  getTournamentAnalyticsSnapshot,
+  getTournamentPlayerDetailFast,
+  getTournamentPlayerLinesFast,
   listTournamentPlayers,
   clearTournamentAnalyticsCache,
 } from "../../services/tournamentAnalytics";
@@ -277,8 +278,8 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
       setErrorMessage(null);
 
       try {
-        const [snapshot, spotlight] = await Promise.all([
-          getTournamentAnalyticsSnapshot(tournamentId, globalPhase),
+        const [playerLines, spotlight] = await Promise.all([
+          getTournamentPlayerLinesFast(tournamentId, globalPhase),
           getRaceSeries({
             tournamentId,
             phase: globalPhase,
@@ -289,7 +290,7 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
 
         if (cancelled) return;
 
-        setDashboardQuickLeaders(buildQuickLeaders(snapshot.playerLines));
+        setDashboardQuickLeaders(buildQuickLeaders(playerLines));
         setDashboardRaceSeries(spotlight);
       } catch (error) {
         if (cancelled) return;
@@ -398,7 +399,7 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
       setErrorMessage(null);
 
       try {
-        const rows = await getMvpRace({
+        const rows = await getMvpRaceFast({
           tournamentId,
           phase: "regular",
           eligibilityRate: 0.3,
@@ -573,16 +574,15 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
     }
 
     try {
-      const snapshot = await getTournamentAnalyticsSnapshot(tournamentId, phase, {
+      const playerDetailData = await getTournamentPlayerDetailFast({
+        tournamentId,
+        playerId,
+        phase,
         forceRefresh: Boolean(options?.forceRefresh),
       });
-      const line = snapshot.playerLines.find((item) => item.playerId === playerId);
-      if (!line) {
-        throw new Error("No se encontró data analítica para este jugador en la fase seleccionada.");
-      }
+      const line = playerDetailData.line;
 
-      const games = snapshot.playerGames
-        .filter((item) => item.playerId === playerId)
+      const games = playerDetailData.games
         .map((item) => ({
           ...item,
           pra: round2(item.points + item.rebounds + item.assists - item.turnovers),
@@ -591,7 +591,7 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
       let mvpRow: MvpBreakdownRow | null = null;
       if (phase !== "all") {
         try {
-          const mvpRows = await getMvpRace({
+          const mvpRows = await getMvpRaceFast({
             tournamentId,
             phase,
             eligibilityRate: 0.3,

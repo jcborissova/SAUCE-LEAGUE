@@ -277,7 +277,7 @@ export type TournamentAnalyticsSnapshot = {
 };
 
 export type TournamentAnalyticsKpi = {
-  id: "players" | "games" | "leader_points" | "leader_mvp" | "leader_defense";
+  id: "players" | "games" | "leader_points" | "leader_mvp";
   label: string;
   value: string | number;
   helper: string;

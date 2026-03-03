@@ -20,6 +20,7 @@ import type {
   TournamentLeaderRow,
   TournamentPhaseFilter,
 } from "../../../types/tournament-analytics";
+import { abbreviateLeaderboardName, getPlayerInitials } from "../../../utils/player-display";
 import AppSelect from "../../ui/AppSelect";
 import type { AnalyticsPanelKey } from "./constants";
 import { RACE_METRICS } from "./constants";
@@ -72,14 +73,6 @@ const formatQuickLeaderValue = (groupMetric: string, value: number) => {
   if (groupMetric === "PRA") return value.toFixed(1);
   return value.toLocaleString("es-ES");
 };
-
-const initialsFromName = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("") || "JG";
 
 const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   loading,
@@ -182,7 +175,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
         <div className="app-card p-6 text-center text-sm text-[hsl(var(--text-subtle))]">Cargando dashboard...</div>
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
             {kpis.map((kpi) => (
               <article key={kpi.id} className="app-card px-3 py-2.5">
                 <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">{kpi.label}</p>
@@ -205,19 +198,22 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                 <article key={group.metric} className="app-card p-3 space-y-2">
                   <h4 className="text-sm font-semibold">{group.metric}</h4>
                   <div className="space-y-1.5">
-                    {group.rows.map((row, index) => (
+                    {group.rows.map((row, index) => {
+                      const displayName = abbreviateLeaderboardName(row.name, 18);
+
+                      return (
                       <button
                         key={`${group.metric}-${row.playerId}`}
                         type="button"
                         onClick={() => onPlayerSelect?.(row.playerId, spotlightPhase)}
-                        className={`w-full rounded-lg px-1 py-1 text-left flex items-center justify-between gap-2 text-sm transition ${
+                        className={`w-full min-h-[42px] rounded-lg px-1 py-1 text-left flex items-center justify-between gap-2 text-sm transition ${
                           onPlayerSelect
                             ? "hover:bg-[hsl(var(--surface-2)/0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))]"
                             : ""
                         }`}
                         disabled={!onPlayerSelect}
                       >
-                        <p className="truncate inline-flex items-center gap-2">
+                        <p className="truncate inline-flex items-center gap-2" title={row.name}>
                           {row.photo ? (
                             <img
                               src={row.photo}
@@ -226,17 +222,18 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                             />
                           ) : (
                             <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-2))] text-[10px]">
-                              {initialsFromName(row.name)}
+                              {getPlayerInitials(row.name)}
                             </span>
                           )}
                           <span className="text-[hsl(var(--text-subtle))] mr-1">#{index + 1}</span>
-                          {row.name}
+                          {displayName}
                         </p>
                         <p className="font-semibold text-[hsl(var(--primary))] tabular-nums shrink-0">
                           {formatQuickLeaderValue(group.metric, row.value)}
                         </p>
                       </button>
-                    ))}
+                    );
+                    })}
                   </div>
                 </article>
               ))}
