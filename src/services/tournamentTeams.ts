@@ -18,6 +18,9 @@ type TournamentTeamInput = {
   playerIds: number[];
 };
 
+const PLAYER_DIRECTORY_COLUMNS = "id, names, lastnames, backjerseyname, jerseynumber";
+const PLAYER_IN_QUERY_CHUNK = 200;
+
 const toNumber = (value: unknown): number => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -55,10 +58,19 @@ const isMissingTournamentColumnError = (message: string): boolean => {
   return normalized.includes("tournament_id") && normalized.includes("team_players");
 };
 
+const chunkArray = <T>(items: T[], size: number): T[][] => {
+  if (size <= 0) return [items];
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+};
+
 export const fetchTournamentPlayers = async (): Promise<Player[]> => {
   const { data, error } = await supabase
     .from("players")
-    .select("*")
+    .select(PLAYER_DIRECTORY_COLUMNS)
     .eq("is_guest", false)
     .order("id", { ascending: true });
 
@@ -69,6 +81,45 @@ export const fetchTournamentPlayers = async (): Promise<Player[]> => {
   return (data ?? [])
     .map((row) => normalizePlayer(row as Record<string, unknown>))
     .filter((player) => player.id > 0);
+};
+
+const fetchPlayersByIds = async (
+  playerIds: number[],
+  options?: { withPhoto?: boolean }
+): Promise<Player[]> => {
+  const uniqueIds = Array.from(new Set(playerIds.map((id) => toNumber(id)).filter((id) => id > 0)));
+  if (uniqueIds.length === 0) return [];
+
+  const playersMap = new Map<number, Player>();
+
+  for (const idChunk of chunkArray(uniqueIds, PLAYER_IN_QUERY_CHUNK)) {
+    const result = options?.withPhoto
+      ? await supabase
+          .from("players")
+          .select("id, names, lastnames, backjerseyname, jerseynumber, description, photo")
+          .eq("is_guest", false)
+          .in("id", idChunk)
+          .order("id", { ascending: true })
+      : await supabase
+          .from("players")
+          .select("id, names, lastnames, backjerseyname, jerseynumber")
+          .eq("is_guest", false)
+          .in("id", idChunk)
+          .order("id", { ascending: true });
+
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
+
+    (result.data ?? []).forEach((row) => {
+      const normalized = normalizePlayer(row as Record<string, unknown>);
+      if (normalized.id > 0) {
+        playersMap.set(normalized.id, normalized);
+      }
+    });
+  }
+
+  return Array.from(playersMap.values()).sort((a, b) => a.id - b.id);
 };
 
 export const fetchTournamentTeamAssignments = async (
@@ -150,10 +201,11 @@ export const fetchTournamentTeamAssignments = async (
 
 export const fetchTournamentTeamsRoster = async (tournamentId: string): Promise<TournamentTeamRoster[]> => {
   const teams = await fetchTournamentTeamAssignments(tournamentId);
+  const rosterPlayerIds = Array.from(new Set(teams.flatMap((team) => team.playerIds)));
   let players: Player[] = [];
 
   try {
-    players = await fetchTournamentPlayers();
+    players = await fetchPlayersByIds(rosterPlayerIds, { withPhoto: true });
   } catch (error) {
     console.error("No se pudo cargar el directorio de jugadores. Se mostraran equipos sin detalles.", error);
   }
