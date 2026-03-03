@@ -120,13 +120,17 @@ const AppSelect = <T extends PrimitiveValue>({
             as={Fragment}
             show={open}
             enter="transition ease-out duration-150"
-            enterFrom="opacity-0 -translate-y-1 scale-[0.98]"
-            enterTo="opacity-100 translate-y-0 scale-100"
+            enterFrom="opacity-0 scale-[0.98]"
+            enterTo="opacity-100 scale-100"
             leave="transition ease-in duration-120"
-            leaveFrom="opacity-100 translate-y-0 scale-100"
-            leaveTo="opacity-0 -translate-y-1 scale-[0.98]"
+            leaveFrom="opacity-100 scale-100"
+            leaveTo="opacity-0 scale-[0.98]"
           >
-            <ListboxOptions className="absolute left-0 right-0 top-[calc(100%+6px)] z-[80] max-h-[min(44vh,18rem)] overflow-auto rounded-[12px] border border-[hsl(var(--border)/0.85)] bg-[hsl(var(--surface-1)/0.98)] p-1 shadow-[0_16px_40px_hsl(var(--background)/0.22)] ring-1 ring-black/5 backdrop-blur-[8px] soft-scrollbar sm:max-h-72">
+            <ListboxOptions
+              anchor={{ to: "bottom start", gap: 6, padding: 8 }}
+              portal
+              className="z-[240] w-[var(--button-width)] max-h-[min(44vh,18rem)] overflow-auto rounded-[12px] border border-[hsl(var(--border)/0.85)] bg-[hsl(var(--surface-1)/0.98)] p-1 shadow-[0_16px_40px_hsl(var(--background)/0.22)] ring-1 ring-black/5 backdrop-blur-[8px] soft-scrollbar sm:max-h-72"
+            >
               {parsedOptions.map((option) => (
                 <ListboxOption
                   key={option.key}

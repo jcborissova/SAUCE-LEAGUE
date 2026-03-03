@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeftIcon, EyeIcon } from "@heroicons/react/24/outline";
 import { ArrowPathIcon, BoltIcon, FireIcon } from "@heroicons/react/24/solid";
 
 import {
@@ -7,6 +7,7 @@ import {
   getBattleData,
   getLeaders,
   getMvpRace,
+  getTournamentAnalyticsSnapshot,
   listTournamentPlayers,
 } from "../../services/tournamentAnalytics";
 import type {
@@ -22,13 +23,24 @@ import SectionCard from "../ui/SectionCard";
 import EmptyState from "../ui/EmptyState";
 import LoadingSpinner from "../LoadingSpinner";
 import AppSelect from "../ui/AppSelect";
+import PlayerAnalyticsModal, { type PlayerAnalyticsDetail } from "./analytics/PlayerAnalyticsModal";
 
-type StatsFocus = "points" | "rebounds" | "assists" | "mvp" | "duel";
-type PerGameMetricKey = "ppg" | "rpg" | "apg";
+type StatsFocus =
+  | "points"
+  | "rebounds"
+  | "assists"
+  | "steals"
+  | "blocks"
+  | "pra"
+  | "defensive"
+  | "mvp"
+  | "duel";
+type PerGameMetricKey = "ppg" | "rpg" | "apg" | "spg" | "bpg";
 
 type FullLeaderItem = {
   playerId: number;
   name: string;
+  photo?: string | null;
   teamName: string | null;
   valuePrimaryText: string;
   valueSecondaryText?: string;
@@ -45,18 +57,22 @@ const FOCUS_OPTIONS: Array<{ value: Exclude<StatsFocus, "duel">; label: string }
   { value: "points", label: "Puntos" },
   { value: "rebounds", label: "Rebotes" },
   { value: "assists", label: "Asistencias" },
+  { value: "steals", label: "Robos" },
+  { value: "blocks", label: "Tapones" },
+  { value: "pra", label: "PRA" },
+  { value: "defensive", label: "Líder defensivo" },
   { value: "mvp", label: "MVP" },
 ];
 
 const focusMeta: Record<
-  Exclude<StatsFocus, "mvp" | "duel">,
+  Exclude<StatsFocus, "mvp" | "duel" | "defensive" | "pra">,
   {
     title: string;
     tabLabel: string;
     metricLabel: string;
-    metric: "points" | "rebounds" | "assists";
+    metric: "points" | "rebounds" | "assists" | "steals" | "blocks";
     perGameKey: PerGameMetricKey;
-    totalKey: "points" | "rebounds" | "assists";
+    totalKey: "points" | "rebounds" | "assists" | "steals" | "blocks";
   }
 > = {
   points: {
@@ -83,11 +99,28 @@ const focusMeta: Record<
     perGameKey: "apg",
     totalKey: "assists",
   },
+  steals: {
+    title: "Líderes de robos",
+    tabLabel: "Robos",
+    metricLabel: "SPG",
+    metric: "steals",
+    perGameKey: "spg",
+    totalKey: "steals",
+  },
+  blocks: {
+    title: "Líderes de tapones",
+    tabLabel: "Tapones",
+    metricLabel: "BPG",
+    metric: "blocks",
+    perGameKey: "bpg",
+    totalKey: "blocks",
+  },
 };
 
 type DuelPlayerOption = {
   playerId: number;
   name: string;
+  photo: string | null;
   teamName: string | null;
 };
 
@@ -102,7 +135,26 @@ type DuelMetricMeta = {
   format: (value: number) => string;
 };
 
-const DUEL_METRICS: BattleMetric[] = ["ppg", "rpg", "apg", "spg", "bpg", "fg_pct", "topg"];
+const initialsFromName = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "JG";
+
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
+const DUEL_METRICS: BattleMetric[] = [
+  "ppg",
+  "rpg",
+  "apg",
+  "spg",
+  "bpg",
+  "pra",
+  "fg_pct",
+  "topg",
+];
 
 const DUEL_METRIC_META: Record<BattleMetric, DuelMetricMeta> = {
   ppg: {
@@ -127,6 +179,11 @@ const DUEL_METRIC_META: Record<BattleMetric, DuelMetricMeta> = {
   },
   bpg: {
     label: "BLK",
+    higherIsBetter: true,
+    format: (value) => value.toFixed(1),
+  },
+  pra: {
+    label: "PRA",
     higherIsBetter: true,
     format: (value) => value.toFixed(1),
   },
@@ -178,6 +235,10 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
   const [pointsLeaders, setPointsLeaders] = useState<TournamentLeaderRow[]>([]);
   const [reboundsLeaders, setReboundsLeaders] = useState<TournamentLeaderRow[]>([]);
   const [assistsLeaders, setAssistsLeaders] = useState<TournamentLeaderRow[]>([]);
+  const [stealsLeaders, setStealsLeaders] = useState<TournamentLeaderRow[]>([]);
+  const [blocksLeaders, setBlocksLeaders] = useState<TournamentLeaderRow[]>([]);
+  const [defensiveLeaders, setDefensiveLeaders] = useState<TournamentLeaderRow[]>([]);
+  const [praLeaders, setPraLeaders] = useState<TournamentLeaderRow[]>([]);
   const [mvpRows, setMvpRows] = useState<MvpBreakdownRow[]>([]);
 
   const [fullViewOpen, setFullViewOpen] = useState(false);
@@ -193,6 +254,48 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
   const [duelPlayerA, setDuelPlayerA] = useState<number | "">("");
   const [duelPlayerB, setDuelPlayerB] = useState<number | "">("");
   const [duelResult, setDuelResult] = useState<DuelResult | null>(null);
+  const [playerDetailOpen, setPlayerDetailOpen] = useState(false);
+  const [playerDetailLoading, setPlayerDetailLoading] = useState(false);
+  const [playerDetailError, setPlayerDetailError] = useState<string | null>(null);
+  const [playerDetail, setPlayerDetail] = useState<PlayerAnalyticsDetail | null>(null);
+  const [lastSelectedPlayer, setLastSelectedPlayer] = useState<{
+    playerId: number;
+    phase: TournamentPhaseFilter;
+  } | null>(null);
+
+  const playerDetailCacheRef = useRef(new Map<string, PlayerAnalyticsDetail>());
+  const playerDetailRequestRef = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadKpis = async () => {
+      try {
+        const nextKpis = await getAnalyticsDashboardKpis(tournamentId);
+        if (!cancelled) {
+          setKpis(nextKpis);
+        }
+      } catch {
+        if (!cancelled) {
+          setKpis([]);
+        }
+      }
+    };
+
+    loadKpis();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tournamentId]);
+
+  useEffect(() => {
+    playerDetailCacheRef.current.clear();
+    setPlayerDetail(null);
+    setPlayerDetailError(null);
+    setPlayerDetailOpen(false);
+    setLastSelectedPlayer(null);
+  }, [tournamentId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -202,11 +305,14 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       setError(null);
 
       try {
-        const [nextKpis, points, rebounds, assists, mvp] = await Promise.all([
-          getAnalyticsDashboardKpis(tournamentId),
-          getLeaders({ tournamentId, phase, metric: "points", limit: 5 }),
-          getLeaders({ tournamentId, phase, metric: "rebounds", limit: 5 }),
-          getLeaders({ tournamentId, phase, metric: "assists", limit: 5 }),
+        const [points, rebounds, assists, steals, blocks, pra, defensive, mvp] = await Promise.all([
+          getLeaders({ tournamentId, phase, metric: "points", limit: 10 }),
+          getLeaders({ tournamentId, phase, metric: "rebounds", limit: 10 }),
+          getLeaders({ tournamentId, phase, metric: "assists", limit: 10 }),
+          getLeaders({ tournamentId, phase, metric: "steals", limit: 10 }),
+          getLeaders({ tournamentId, phase, metric: "blocks", limit: 10 }),
+          getLeaders({ tournamentId, phase, metric: "pra", limit: 10 }),
+          getLeaders({ tournamentId, phase, metric: "defensive_impact", limit: 10 }),
           getMvpRace({
             tournamentId,
             phase: phase === "all" ? "regular" : phase === "playoffs" ? "playoffs" : "regular",
@@ -215,10 +321,13 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
 
         if (cancelled) return;
 
-        setKpis(nextKpis);
         setPointsLeaders(points);
         setReboundsLeaders(rebounds);
         setAssistsLeaders(assists);
+        setStealsLeaders(steals);
+        setBlocksLeaders(blocks);
+        setPraLeaders(pra);
+        setDefensiveLeaders(defensive);
         setMvpRows(mvp);
       } catch (err) {
         if (!cancelled) {
@@ -302,16 +411,33 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       pointsLeaders.length > 0 ||
       reboundsLeaders.length > 0 ||
       assistsLeaders.length > 0 ||
+      stealsLeaders.length > 0 ||
+      blocksLeaders.length > 0 ||
+      praLeaders.length > 0 ||
+      defensiveLeaders.length > 0 ||
       mvpRows.length > 0,
-    [pointsLeaders.length, reboundsLeaders.length, assistsLeaders.length, mvpRows.length]
+    [
+      pointsLeaders.length,
+      reboundsLeaders.length,
+      assistsLeaders.length,
+      stealsLeaders.length,
+      blocksLeaders.length,
+      praLeaders.length,
+      defensiveLeaders.length,
+      mvpRows.length,
+    ]
   );
 
   const previewRows = useMemo(() => {
     if (focus === "points") return pointsLeaders;
     if (focus === "rebounds") return reboundsLeaders;
     if (focus === "assists") return assistsLeaders;
+    if (focus === "steals") return stealsLeaders;
+    if (focus === "blocks") return blocksLeaders;
+    if (focus === "pra") return praLeaders;
+    if (focus === "defensive") return defensiveLeaders;
     return [];
-  }, [focus, pointsLeaders, reboundsLeaders, assistsLeaders]);
+  }, [focus, pointsLeaders, reboundsLeaders, assistsLeaders, stealsLeaders, blocksLeaders, praLeaders, defensiveLeaders]);
 
   const hasFocusContent = useMemo(() => {
     if (focus === "mvp") return mvpRows.length > 0;
@@ -319,29 +445,47 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
     return previewRows.length > 0;
   }, [focus, previewRows.length, mvpRows.length, duelPlayers.length]);
 
-  const previewMvpRows = useMemo(() => mvpRows.slice(0, 5), [mvpRows]);
+  const previewMvpRows = useMemo(() => mvpRows.slice(0, 10), [mvpRows]);
 
   const focusTitle = useMemo(() => {
     if (focus === "mvp") return "Carrera MVP";
     if (focus === "duel") return "Duelo 1v1";
+    if (focus === "pra") return "Líderes de PRA";
+    if (focus === "defensive") return "Líder defensivo";
     return focusMeta[focus].title;
   }, [focus]);
 
   const fullViewTitle = useMemo(() => {
     if (focus === "mvp") return "Ranking MVP completo";
     if (focus === "duel") return "Ranking completo";
+    if (focus === "pra") return "Líderes de PRA (Ranking completo)";
+    if (focus === "defensive") return "Líder defensivo (Ranking completo)";
     return `${focusMeta[focus].title} (Ranking completo)`;
   }, [focus]);
 
   const fullViewValueLabel = useMemo(() => {
     if (focus === "mvp") return "Score";
     if (focus === "duel") return "Valor";
+    if (focus === "pra") return "PRA/PJ";
+    if (focus === "defensive") return "D-Impact";
     return focusMeta[focus].metricLabel;
   }, [focus]);
 
   const fullViewSecondaryLabel = useMemo(() => {
     if (focus === "mvp" || focus === "duel") return undefined;
+    if (focus === "pra") return "PRA Total";
+    if (focus === "defensive") return "ROB/TAP";
     return "Total";
+  }, [focus]);
+
+  const fullViewInfoNote = useMemo(() => {
+    if (focus === "pra") {
+      return "PRA por partido = puntos + rebotes + asistencias - pérdidas. Ajusta el volumen ofensivo por el costo de perder posesiones.";
+    }
+    if (focus === "defensive") {
+      return "D-Impact/PJ = (1.4 x ROB/PJ) + (1.8 x TAP/PJ) + (0.35 x REB/PJ) - (0.15 x FALTAS/PJ). Mide acciones defensivas directas y su consistencia.";
+    }
+    return undefined;
   }, [focus]);
 
   const openFullLeaders = async () => {
@@ -350,8 +494,13 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
 
     if (focus === "mvp" || focus === "duel") return;
 
-    const metricInfo = focusMeta[focus];
-    const nextKey = `${tournamentId}:${phase}:${metricInfo.metric}`;
+    const metric =
+      focus === "defensive"
+        ? "defensive_impact"
+        : focus === "pra"
+          ? "pra"
+          : focusMeta[focus].metric;
+    const nextKey = `${tournamentId}:${phase}:${metric}`;
     if (fullLeadersKey === nextKey && fullLeadersRows.length > 0) return;
 
     setFullLeadersLoading(true);
@@ -361,7 +510,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       const rows = await getLeaders({
         tournamentId,
         phase,
-        metric: metricInfo.metric,
+        metric,
         limit: 500,
       });
       setFullLeadersRows(rows);
@@ -384,6 +533,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       return mvpRows.map((row) => ({
         playerId: row.playerId,
         name: row.name,
+        photo: row.photo ?? null,
         teamName: row.teamName,
         valuePrimaryText: row.finalScore.toFixed(3),
         helperText: `PJ ${row.gamesPlayed} · Elegible`,
@@ -394,10 +544,37 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       return [];
     }
 
+    if (focus === "pra") {
+      return fullLeadersRows.map((row) => ({
+        playerId: row.playerId,
+        name: row.name,
+        photo: row.photo ?? null,
+        teamName: row.teamName,
+        valuePrimaryText: row.value.toFixed(1),
+        valueSecondaryText: `${(
+          row.totals.points + row.totals.rebounds + row.totals.assists - row.totals.turnovers
+        ).toFixed(0)}`,
+        helperText: `PJ ${row.gamesPlayed}`,
+      }));
+    }
+
+    if (focus === "defensive") {
+      return fullLeadersRows.map((row) => ({
+        playerId: row.playerId,
+        name: row.name,
+        photo: row.photo ?? null,
+        teamName: row.teamName,
+        valuePrimaryText: row.value.toFixed(2),
+        valueSecondaryText: `ROB ${row.perGame.spg.toFixed(1)} · TAP ${row.perGame.bpg.toFixed(1)}`,
+        helperText: `PJ ${row.gamesPlayed}`,
+      }));
+    }
+
     const metricInfo = focusMeta[focus];
     return fullLeadersRows.map((row) => ({
       playerId: row.playerId,
       name: row.name,
+      photo: row.photo ?? null,
       teamName: row.teamName,
       valuePrimaryText: row.perGame[metricInfo.perGameKey].toFixed(1),
       valueSecondaryText: String(row.totals[metricInfo.totalKey]),
@@ -486,6 +663,95 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
     }
   };
 
+  const mvpDetailPhase: TournamentPhaseFilter = phase === "playoffs" ? "playoffs" : "regular";
+
+  const openPlayerDetail = async (
+    playerId: number,
+    selectedPhase: TournamentPhaseFilter,
+    options?: { forceRefresh?: boolean }
+  ) => {
+    const requestId = playerDetailRequestRef.current + 1;
+    playerDetailRequestRef.current = requestId;
+
+    setLastSelectedPlayer({ playerId, phase: selectedPhase });
+    setPlayerDetailOpen(true);
+    setPlayerDetailError(null);
+    setPlayerDetailLoading(true);
+
+    const cacheKey = `${tournamentId}:${selectedPhase}:${playerId}`;
+    const useCache = !options?.forceRefresh;
+
+    if (useCache) {
+      const cached = playerDetailCacheRef.current.get(cacheKey);
+      if (cached) {
+        setPlayerDetail(cached);
+        setPlayerDetailLoading(false);
+        return;
+      }
+    }
+
+    try {
+      const snapshot = await getTournamentAnalyticsSnapshot(tournamentId, selectedPhase, {
+        forceRefresh: Boolean(options?.forceRefresh),
+      });
+
+      const line = snapshot.playerLines.find((item) => item.playerId === playerId);
+      if (!line) {
+        throw new Error("No se encontró data analítica para este jugador en la fase seleccionada.");
+      }
+
+      const games = snapshot.playerGames
+        .filter((item) => item.playerId === playerId)
+        .map((item) => ({
+          ...item,
+          pra: round2(item.points + item.rebounds + item.assists - item.turnovers),
+        }));
+
+      let mvpRow: MvpBreakdownRow | null = null;
+      if (selectedPhase !== "all") {
+        try {
+          const mvpRows = await getMvpRace({
+            tournamentId,
+            phase: selectedPhase,
+            eligibilityRate: 0.3,
+          });
+          mvpRow = mvpRows.find((row) => row.playerId === playerId) ?? null;
+        } catch {
+          mvpRow = null;
+        }
+      }
+
+      const nextDetail: PlayerAnalyticsDetail = {
+        phase: selectedPhase,
+        line,
+        games,
+        mvpRow,
+      };
+
+      playerDetailCacheRef.current.set(cacheKey, nextDetail);
+
+      if (playerDetailRequestRef.current !== requestId) return;
+      setPlayerDetail(nextDetail);
+    } catch (err) {
+      if (playerDetailRequestRef.current !== requestId) return;
+      setPlayerDetail(null);
+      setPlayerDetailError(
+        err instanceof Error ? err.message : "No se pudo cargar el detalle del jugador."
+      );
+    } finally {
+      if (playerDetailRequestRef.current === requestId) {
+        setPlayerDetailLoading(false);
+      }
+    }
+  };
+
+  const retryPlayerDetail = () => {
+    if (!lastSelectedPlayer) return;
+    void openPlayerDetail(lastSelectedPlayer.playerId, lastSelectedPlayer.phase, {
+      forceRefresh: true,
+    });
+  };
+
   return (
     <section className="space-y-4">
       {!embedded ? (
@@ -563,8 +829,8 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       {!loading && (hasContent || focus === "duel") ? (
         <>
           {!isDuelMode && kpis.length > 0 ? (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {kpis.slice(0, 4).map((kpi) => (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+              {kpis.slice(0, 5).map((kpi) => (
                 <article key={kpi.id} className="rounded-lg border bg-[hsl(var(--surface-1))] px-3 py-2.5">
                   <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">{kpi.label}</p>
                   <p className="text-sm font-bold sm:text-base">{kpi.value}</p>
@@ -652,7 +918,20 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         {duelResult.players.map((player) => (
                           <div key={`duel-score-${player.playerId}`} className="rounded-lg border bg-[hsl(var(--surface-1))] px-3 py-2">
-                            <p className="truncate text-xs text-[hsl(var(--text-subtle))]">{player.name}</p>
+                            <p className="truncate text-xs text-[hsl(var(--text-subtle))] inline-flex items-center gap-2">
+                              {player.photo ? (
+                                <img
+                                  src={player.photo}
+                                  alt={player.name}
+                                  className="h-6 w-6 rounded-full object-cover border border-[hsl(var(--border)/0.82)]"
+                                />
+                              ) : (
+                                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-2))] text-[10px]">
+                                  {initialsFromName(player.name)}
+                                </span>
+                              )}
+                              {player.name}
+                            </p>
                             <p className="text-lg font-black tabular-nums">
                               {duelResult.summary.categoryWins[player.playerId] ?? 0}
                             </p>
@@ -702,7 +981,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
           ) : (
             <SectionCard
               title={focusTitle}
-              description="Top 5 del torneo"
+              description="Top 10 del torneo"
               actions={
                 hasFocusContent ? (
                   <button
@@ -717,6 +996,9 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
             >
               {focus === "mvp" ? (
                 <div className="space-y-2">
+                  <p className="rounded-lg border bg-[hsl(var(--surface-2)/0.65)] px-3 py-2 text-xs text-[hsl(var(--muted-foreground))]">
+                    MVP score = producción + eficiencia + impacto (PRA y VAL/PJ) + disponibilidad + récord del equipo.
+                  </p>
                   {previewMvpRows.length === 0 ? (
                     <p className="text-sm text-[hsl(var(--text-subtle))]">No hay datos MVP para esta fase.</p>
                   ) : (
@@ -726,24 +1008,154 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                         className="flex items-center justify-between rounded-lg border bg-[hsl(var(--surface-2)/0.7)] px-3 py-2 text-sm"
                       >
                         <div className="min-w-0">
-                          <p className="truncate font-semibold">
+                          <p className="truncate font-semibold inline-flex items-center gap-2">
+                            {row.photo ? (
+                              <img
+                                src={row.photo}
+                                alt={row.name}
+                                className="h-7 w-7 rounded-full object-cover border border-[hsl(var(--border)/0.82)]"
+                              />
+                            ) : (
+                              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] text-[10px]">
+                                {initialsFromName(row.name)}
+                              </span>
+                            )}
                             #{index + 1} {row.name}
                           </p>
                           <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
                             {row.teamName ?? "Sin equipo"} · PJ {row.gamesPlayed}
                           </p>
                         </div>
-                        <p className="font-semibold tabular-nums">{row.finalScore.toFixed(3)}</p>
+                        <div className="text-right">
+                          <p className="font-semibold tabular-nums">{row.finalScore.toFixed(3)}</p>
+                          <button
+                            type="button"
+                            onClick={() => void openPlayerDetail(row.playerId, mvpDetailPhase)}
+                            className="mt-1 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors hover:bg-[hsl(var(--surface-1))]"
+                            title="Ver detalle del jugador"
+                            aria-label={`Ver detalle de ${row.name}`}
+                          >
+                            <EyeIcon className="h-3.5 w-3.5" />
+                            Ver detalle
+                          </button>
+                        </div>
                       </div>
                     ))
                   )}
                 </div>
               ) : (
                 <div className="space-y-2">
+                  {focus === "pra" || focus === "defensive" ? (
+                    <p className="rounded-lg border bg-[hsl(var(--surface-2)/0.65)] px-3 py-2 text-xs text-[hsl(var(--muted-foreground))]">
+                      {focus === "pra"
+                        ? "PRA/PJ = puntos + rebotes + asistencias - pérdidas por juego. Es la referencia usada para medir volumen productivo neto."
+                        : "D-Impact/PJ = (1.4 x ROB/PJ) + (1.8 x TAP/PJ) + (0.35 x REB/PJ) - (0.15 x FALTAS/PJ)."}
+                    </p>
+                  ) : null}
                   {previewRows.length === 0 ? (
                     <p className="text-sm text-[hsl(var(--text-subtle))]">No hay datos para esta métrica.</p>
                   ) : (
                     previewRows.map((row, index) => {
+                      if (focus === "pra") {
+                        return (
+                          <div
+                            key={row.playerId}
+                            className="flex items-center justify-between rounded-lg border bg-[hsl(var(--surface-2)/0.7)] px-3 py-2 text-sm"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold inline-flex items-center gap-2">
+                                {row.photo ? (
+                                  <img
+                                    src={row.photo}
+                                    alt={row.name}
+                                    className="h-7 w-7 rounded-full object-cover border border-[hsl(var(--border)/0.82)]"
+                                  />
+                                ) : (
+                                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] text-[10px]">
+                                    {initialsFromName(row.name)}
+                                  </span>
+                                )}
+                                #{index + 1} {row.name}
+                              </p>
+                              <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
+                                {row.teamName ?? "Sin equipo"} · PJ {row.gamesPlayed}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs font-semibold tabular-nums">
+                                PRA/PJ {row.value.toFixed(1)}
+                              </p>
+                              <p className="text-[11px] text-[hsl(var(--muted-foreground))]">
+                                Total{" "}
+                                {(
+                                  row.totals.points +
+                                  row.totals.rebounds +
+                                  row.totals.assists -
+                                  row.totals.turnovers
+                                ).toFixed(0)}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => void openPlayerDetail(row.playerId, phase)}
+                                className="mt-1 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors hover:bg-[hsl(var(--surface-1))]"
+                                title="Ver detalle del jugador"
+                                aria-label={`Ver detalle de ${row.name}`}
+                              >
+                                <EyeIcon className="h-3.5 w-3.5" />
+                                Ver detalle
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      if (focus === "defensive") {
+                        return (
+                          <div
+                            key={row.playerId}
+                            className="flex items-center justify-between rounded-lg border bg-[hsl(var(--surface-2)/0.7)] px-3 py-2 text-sm"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold inline-flex items-center gap-2">
+                                {row.photo ? (
+                                  <img
+                                    src={row.photo}
+                                    alt={row.name}
+                                    className="h-7 w-7 rounded-full object-cover border border-[hsl(var(--border)/0.82)]"
+                                  />
+                                ) : (
+                                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] text-[10px]">
+                                    {initialsFromName(row.name)}
+                                  </span>
+                                )}
+                                #{index + 1} {row.name}
+                              </p>
+                              <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
+                                {row.teamName ?? "Sin equipo"} · PJ {row.gamesPlayed}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs font-semibold tabular-nums">
+                                D-Impact {row.value.toFixed(2)}
+                              </p>
+                              <p className="text-[11px] text-[hsl(var(--muted-foreground))]">
+                                ROB {row.perGame.spg.toFixed(1)} · TAP {row.perGame.bpg.toFixed(1)}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => void openPlayerDetail(row.playerId, phase)}
+                                className="mt-1 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors hover:bg-[hsl(var(--surface-1))]"
+                                title="Ver detalle del jugador"
+                                aria-label={`Ver detalle de ${row.name}`}
+                              >
+                                <EyeIcon className="h-3.5 w-3.5" />
+                                Ver detalle
+                              </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
                       const metricInfo = focusMeta[focus];
                       return (
                         <div
@@ -751,7 +1163,18 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                           className="flex items-center justify-between rounded-lg border bg-[hsl(var(--surface-2)/0.7)] px-3 py-2 text-sm"
                         >
                           <div className="min-w-0">
-                            <p className="truncate font-semibold">
+                            <p className="truncate font-semibold inline-flex items-center gap-2">
+                              {row.photo ? (
+                                <img
+                                  src={row.photo}
+                                  alt={row.name}
+                                  className="h-7 w-7 rounded-full object-cover border border-[hsl(var(--border)/0.82)]"
+                                />
+                              ) : (
+                                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] text-[10px]">
+                                  {initialsFromName(row.name)}
+                                </span>
+                              )}
                               #{index + 1} {row.name}
                             </p>
                             <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
@@ -765,6 +1188,16 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                             <p className="text-[11px] text-[hsl(var(--muted-foreground))]">
                               Total {row.totals[metricInfo.totalKey]}
                             </p>
+                            <button
+                              type="button"
+                              onClick={() => void openPlayerDetail(row.playerId, phase)}
+                              className="mt-1 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors hover:bg-[hsl(var(--surface-1))]"
+                              title="Ver detalle del jugador"
+                              aria-label={`Ver detalle de ${row.name}`}
+                            >
+                              <EyeIcon className="h-3.5 w-3.5" />
+                              Ver detalle
+                            </button>
                           </div>
                         </div>
                       );
@@ -782,13 +1215,26 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
           title={fullViewTitle}
           valuePrimaryLabel={fullViewValueLabel}
           valueSecondaryLabel={fullViewSecondaryLabel}
+          infoNote={fullViewInfoNote}
           rows={fullRows}
           loading={focus === "mvp" ? false : fullLeadersLoading}
           errorMessage={focus === "mvp" ? null : fullLeadersError}
           onBack={() => setFullViewOpen(false)}
           onRetry={focus === "mvp" ? undefined : retryFullLeaders}
+          onPlayerSelect={(playerId) => {
+            void openPlayerDetail(playerId, focus === "mvp" ? mvpDetailPhase : phase);
+          }}
         />
       ) : null}
+
+      <PlayerAnalyticsModal
+        isOpen={playerDetailOpen}
+        loading={playerDetailLoading}
+        errorMessage={playerDetailError}
+        detail={playerDetail}
+        onClose={() => setPlayerDetailOpen(false)}
+        onRetry={retryPlayerDetail}
+      />
     </section>
   );
 };
@@ -797,20 +1243,24 @@ const LeadersFullscreen = ({
   title,
   valuePrimaryLabel,
   valueSecondaryLabel,
+  infoNote,
   rows,
   loading,
   errorMessage,
   onBack,
   onRetry,
+  onPlayerSelect,
 }: {
   title: string;
   valuePrimaryLabel: string;
   valueSecondaryLabel?: string;
+  infoNote?: string;
   rows: FullLeaderItem[];
   loading: boolean;
   errorMessage: string | null;
   onBack: () => void;
   onRetry?: () => void;
+  onPlayerSelect?: (playerId: number) => void;
 }) => {
   const hasSecondary = Boolean(valueSecondaryLabel);
   const headerGridClass = hasSecondary
@@ -837,6 +1287,11 @@ const LeadersFullscreen = ({
         </header>
 
         <div className="soft-scrollbar flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5">
+          {infoNote ? (
+            <p className="mb-3 rounded-lg border bg-[hsl(var(--surface-2)/0.65)] px-3 py-2 text-xs text-[hsl(var(--muted-foreground))]">
+              {infoNote}
+            </p>
+          ) : null}
           {loading ? (
             <LoadingSpinner label="Cargando ranking completo" />
           ) : errorMessage ? (
@@ -867,10 +1322,35 @@ const LeadersFullscreen = ({
                       #{index + 1}
                     </span>
                     <div className="min-w-0">
-                      <p className="truncate font-semibold">{row.name}</p>
+                      <p className="truncate font-semibold inline-flex items-center gap-2">
+                        {row.photo ? (
+                          <img
+                            src={row.photo}
+                            alt={row.name}
+                            className="h-7 w-7 rounded-full object-cover border border-[hsl(var(--border)/0.82)]"
+                          />
+                        ) : (
+                          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] text-[10px]">
+                            {initialsFromName(row.name)}
+                          </span>
+                        )}
+                        {row.name}
+                      </p>
                       <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
                         {row.teamName ?? "Sin equipo"} · {row.helperText}
                       </p>
+                      {onPlayerSelect ? (
+                        <button
+                          type="button"
+                          onClick={() => onPlayerSelect(row.playerId)}
+                          className="mt-1 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors hover:bg-[hsl(var(--surface-2))]"
+                          title="Ver detalle del jugador"
+                          aria-label={`Ver detalle de ${row.name}`}
+                        >
+                          <EyeIcon className="h-3.5 w-3.5" />
+                          Ver detalle
+                        </button>
+                      ) : null}
                     </div>
                     <p className="text-right font-semibold tabular-nums">{row.valuePrimaryText}</p>
                     {hasSecondary ? (

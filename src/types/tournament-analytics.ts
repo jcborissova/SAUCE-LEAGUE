@@ -6,6 +6,8 @@ export type TournamentStatMetric =
   | "assists"
   | "steals"
   | "blocks"
+  | "defensive_impact"
+  | "pra"
   | "turnovers"
   | "fouls"
   | "fg_pct";
@@ -16,6 +18,7 @@ export type BattleMetric =
   | "apg"
   | "spg"
   | "bpg"
+  | "pra"
   | "fg_pct"
   | "topg";
 
@@ -31,6 +34,7 @@ export type PlayerStatsLine = {
     assists: number;
     steals: number;
     blocks: number;
+    plusMinus: number;
     turnovers: number;
     fouls: number;
     fgm: number;
@@ -46,6 +50,7 @@ export type PlayerStatsLine = {
     apg: number;
     spg: number;
     bpg: number;
+    plusMinus: number;
     topg: number;
     fpg: number;
   };
@@ -80,27 +85,37 @@ export type MvpBreakdownRow = PlayerStatsLine & {
   eligible: boolean;
   eligibilityThreshold: number;
   teamFactor: number;
+  availabilityRate: number;
+  tsPct: number;
+  pieShare: number;
   z: {
     ppg: number;
     apg: number;
     rpg: number;
     spg: number;
     bpg: number;
+    tsPct: number;
     fgPct: number;
+    tpPct: number;
+    pieShare: number;
+    pra: number;
+    valuationPerGame: number;
     topg: number;
     fpg: number;
     teamFactor: number;
+    availability: number;
   };
   componentScore: {
     offense: number;
     playmaking: number;
     boards: number;
-    steals: number;
-    blocks: number;
-    shooting: number;
+    defense: number;
+    efficiency: number;
+    impact: number;
+    durability: number;
+    teamRecord: number;
     turnovers: number;
     fouls: number;
-    team: number;
   };
   finalScore: number;
 };
@@ -199,6 +214,7 @@ export type TournamentResultBoxscoreRow = {
   assists: number;
   steals: number;
   blocks: number;
+  plusMinus: number;
   turnovers: number;
   fouls: number;
   fgm: number;
@@ -261,7 +277,7 @@ export type TournamentAnalyticsSnapshot = {
 };
 
 export type TournamentAnalyticsKpi = {
-  id: "players" | "games" | "leader_points" | "leader_mvp";
+  id: "players" | "games" | "leader_points" | "leader_mvp" | "leader_defense";
   label: string;
   value: string | number;
   helper: string;
@@ -272,6 +288,7 @@ export type TournamentAnalyticsCacheKey = `${string}:${TournamentPhaseFilter}`;
 export type BattlePlayerResult = {
   playerId: number;
   name: string;
+  photo?: string | null;
   teamName: string | null;
   metrics: Record<BattleMetric, number>;
   compositeScore: number;

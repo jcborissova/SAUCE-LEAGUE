@@ -25,6 +25,11 @@ const formatDateLabel = (value: string | null) => {
 
 const formatTime = (value: string | null) => (value ? String(value).slice(0, 5) : "--:--");
 
+const formatSigned = (value: number) => {
+  if (value > 0) return `+${value}`;
+  return String(value);
+};
+
 const TournamentResultsView = ({
   tournamentId,
   embedded = false,
@@ -149,7 +154,7 @@ const TournamentResultsView = ({
         <p className="text-sm text-[hsl(var(--text-subtle))]">Resultados por juego, con acceso rápido a detalle completo.</p>
       )}
 
-      <div className="grid grid-cols-2 gap-2 text-center text-xs sm:max-w-xs">
+      <div className="grid grid-cols-2 gap-2 text-center text-xs sm:max-w-2xl sm:grid-cols-4">
         <div className="rounded-lg border bg-[hsl(var(--surface-1))] px-2 py-2">
           <p className="text-[hsl(var(--text-subtle))]">Partidos</p>
           <p className="text-sm font-semibold">{summary.playedMatches}</p>
@@ -157,6 +162,14 @@ const TournamentResultsView = ({
         <div className="rounded-lg border bg-[hsl(var(--surface-1))] px-2 py-2">
           <p className="text-[hsl(var(--text-subtle))]">Con marcador</p>
           <p className="text-sm font-semibold">{summary.matchesWithStats}</p>
+        </div>
+        <div className="rounded-lg border bg-[hsl(var(--surface-1))] px-2 py-2">
+          <p className="text-[hsl(var(--text-subtle))]">Puntos totales</p>
+          <p className="text-sm font-semibold">{summary.totalPoints}</p>
+        </div>
+        <div className="rounded-lg border bg-[hsl(var(--surface-1))] px-2 py-2">
+          <p className="text-[hsl(var(--text-subtle))]">Promedio por juego</p>
+          <p className="text-sm font-semibold">{summary.avgPoints}</p>
         </div>
       </div>
 
@@ -210,6 +223,12 @@ const TournamentResultsView = ({
                           {match.teamB}
                         </p>
                       </div>
+
+                      {hasScore ? (
+                        <p className="mt-1 text-xs text-[hsl(var(--text-subtle))]">
+                          Total del partido: {match.teamAPoints + match.teamBPoints} pts
+                        </p>
+                      ) : null}
 
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         <button
@@ -353,6 +372,9 @@ const MatchDetailFullscreen = ({
             <p className="text-xs text-[hsl(var(--text-subtle))]">
               Ganador: <span className="font-semibold text-[hsl(var(--foreground))]">{match.winnerTeam ?? "Por definir"}</span>
             </p>
+            <p className="mt-1 text-xs text-[hsl(var(--text-subtle))]">
+              Total del partido: <span className="font-semibold text-[hsl(var(--foreground))]">{match.teamAPoints + match.teamBPoints}</span> pts
+            </p>
           </section>
 
           {boxscoreState?.loading ? (
@@ -395,7 +417,7 @@ const TeamBoxscoreTable = ({ title, rows }: { title: string; rows: TournamentRes
             {rows.map((row) => (
               <div key={`mob-${title}-${row.playerId}`} className="px-3 py-2.5">
                 <p className="truncate text-sm font-semibold">{row.playerName}</p>
-                <div className="mt-1.5 grid grid-cols-3 gap-1 text-center">
+                <div className="mt-1.5 grid grid-cols-4 gap-1 text-center">
                   <div className="rounded border bg-[hsl(var(--surface-2)/0.6)] px-1 py-1">
                     <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">PTS</p>
                     <p className="text-sm font-bold tabular-nums">{row.points}</p>
@@ -408,9 +430,13 @@ const TeamBoxscoreTable = ({ title, rows }: { title: string; rows: TournamentRes
                     <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">AST</p>
                     <p className="text-sm font-semibold tabular-nums">{row.assists}</p>
                   </div>
+                  <div className="rounded border bg-[hsl(var(--surface-2)/0.6)] px-1 py-1">
+                    <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">+/-</p>
+                    <p className="text-sm font-semibold tabular-nums">{formatSigned(row.plusMinus)}</p>
+                  </div>
                 </div>
                 <p className="mt-1 text-[11px] text-[hsl(var(--text-subtle))] tabular-nums">
-                  STL {row.steals} · BLK {row.blocks} · TO {row.turnovers} · FLS {row.fouls} · FG {row.fgm}/{row.fga} ({row.fgPct.toFixed(0)}%) · FT {row.ftm}/{row.fta} ({row.ftPct.toFixed(0)}%) · 3PT {row.tpm}/{row.tpa} ({row.tpPct.toFixed(0)}%)
+                  +/- {formatSigned(row.plusMinus)} · STL {row.steals} · BLK {row.blocks} · TO {row.turnovers} · FLS {row.fouls} · FG {row.fgm}/{row.fga} ({row.fgPct.toFixed(0)}%) · FT {row.ftm}/{row.fta} ({row.ftPct.toFixed(0)}%) · 3PT {row.tpm}/{row.tpa} ({row.tpPct.toFixed(0)}%)
                 </p>
               </div>
             ))}
@@ -427,6 +453,7 @@ const TeamBoxscoreTable = ({ title, rows }: { title: string; rows: TournamentRes
                   <th className="px-2 py-2 text-center">AST</th>
                   <th className="px-2 py-2 text-center">STL</th>
                   <th className="px-2 py-2 text-center">BLK</th>
+                  <th className="px-2 py-2 text-center">+/-</th>
                   <th className="px-2 py-2 text-center">TO</th>
                   <th className="px-2 py-2 text-center">FLS</th>
                   <th className="px-2 py-2 text-center">FGM/FGA</th>
@@ -446,6 +473,7 @@ const TeamBoxscoreTable = ({ title, rows }: { title: string; rows: TournamentRes
                     <td className="px-2 py-2 text-center tabular-nums">{row.assists}</td>
                     <td className="px-2 py-2 text-center tabular-nums">{row.steals}</td>
                     <td className="px-2 py-2 text-center tabular-nums">{row.blocks}</td>
+                    <td className="px-2 py-2 text-center tabular-nums">{formatSigned(row.plusMinus)}</td>
                     <td className="px-2 py-2 text-center tabular-nums">{row.turnovers}</td>
                     <td className="px-2 py-2 text-center tabular-nums">{row.fouls}</td>
                     <td className="px-2 py-2 text-center tabular-nums">{row.fgm}/{row.fga}</td>

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import type { Player } from "../../types/player";
 import { ArrowPathIcon } from "@heroicons/react/24/solid";
 import { ArrowDownTrayIcon, ArrowLeftIcon, ArrowTopRightOnSquareIcon, DocumentTextIcon } from "@heroicons/react/24/outline";
-import { Link, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 
 import TournamentScheduleView from "./TournamentScheduleView";
@@ -37,8 +37,11 @@ const MAIN_TABS: Array<{ key: MainTabKey; label: string }> = [
   { key: "players", label: "Equipos" },
 ];
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const TournamentViewPage: React.FC = () => {
   const { id: tournamentId } = useParams();
+  const hasValidTournamentId = Boolean(tournamentId && UUID_PATTERN.test(tournamentId));
   const [activeTab, setActiveTab] = useState<MainTabKey>("matches");
   const [matchesSubtab, setMatchesSubtab] = useState<MatchesSubtab>("schedule");
   const [statsSubtab, setStatsSubtab] = useState<StatsSubtab>("analytics");
@@ -46,6 +49,7 @@ const TournamentViewPage: React.FC = () => {
 
   const [tournamentName, setTournamentName] = useState("Sauce League");
   const [tournamentLoading, setTournamentLoading] = useState(false);
+  const [tournamentFound, setTournamentFound] = useState<boolean | null>(null);
 
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
@@ -55,22 +59,38 @@ const TournamentViewPage: React.FC = () => {
   const [rulesPdfUrl, setRulesPdfUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!tournamentId) return;
+    if (!hasValidTournamentId || !tournamentId) {
+      setTournamentLoading(false);
+      setTournamentFound(false);
+      setTournamentName("Sauce League");
+      return;
+    }
+
     let cancelled = false;
 
     const loadTournament = async () => {
       setTournamentLoading(true);
+      setTournamentFound(null);
 
       try {
         const { data, error } = await supabase
           .from("tournaments")
-          .select("name")
+          .select("id, name")
           .eq("id", tournamentId)
           .maybeSingle();
 
         if (cancelled) return;
-        if (!error && data?.name) setTournamentName(data.name);
-        else setTournamentName("Sauce League");
+        if (!error && data?.id) {
+          setTournamentName(data.name || "Sauce League");
+          setTournamentFound(true);
+        } else {
+          setTournamentName("Sauce League");
+          setTournamentFound(false);
+        }
+      } catch {
+        if (cancelled) return;
+        setTournamentName("Sauce League");
+        setTournamentFound(false);
       } finally {
         if (!cancelled) setTournamentLoading(false);
       }
@@ -81,7 +101,7 @@ const TournamentViewPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [tournamentId]);
+  }, [hasValidTournamentId, tournamentId]);
 
   useEffect(() => {
     setTeams([]);
@@ -92,7 +112,7 @@ const TournamentViewPage: React.FC = () => {
   }, [tournamentId]);
 
   useEffect(() => {
-    if (!tournamentId || activeTab !== "players" || teamsLoaded) return;
+    if (!tournamentId || !hasValidTournamentId || tournamentFound !== true || activeTab !== "players" || teamsLoaded) return;
     let cancelled = false;
 
     const fetchTeamsAndPlayers = async () => {
@@ -122,10 +142,10 @@ const TournamentViewPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, teamsLoaded, tournamentId, teamsReloadToken]);
+  }, [activeTab, hasValidTournamentId, teamsLoaded, tournamentFound, tournamentId, teamsReloadToken]);
 
   useEffect(() => {
-    if (!tournamentId) return;
+    if (!tournamentId || !hasValidTournamentId || tournamentFound !== true) return;
     let cancelled = false;
 
     const loadRules = async () => {
@@ -142,23 +162,23 @@ const TournamentViewPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [tournamentId]);
+  }, [hasValidTournamentId, tournamentFound, tournamentId]);
 
   const totalPlayers = useMemo(() => teams.reduce((acc, team) => acc + team.players.length, 0), [teams]);
   const resolvedRulesPdfUrl = rulesPdfUrl || TOURNAMENT_RULES_PDF_URL;
 
-  if (!tournamentId) {
+  if (!tournamentId || !hasValidTournamentId) {
+    return <Navigate to="/404" replace />;
+  }
+
+  if (tournamentFound === false) {
+    return <Navigate to="/404" replace />;
+  }
+
+  if (tournamentLoading || tournamentFound === null) {
     return (
-      <div className="w-full py-2">
-        <EmptyState
-          title="No se encontró el torneo solicitado"
-          description="Revisa el enlace o vuelve al listado de torneos."
-          action={
-            <Link to="/tournaments" className="btn-secondary">
-              Volver a torneos
-            </Link>
-          }
-        />
+      <div className="w-full py-12 flex items-center justify-center">
+        <ArrowPathIcon className="h-9 w-9 animate-spin text-[hsl(var(--primary))]" />
       </div>
     );
   }
