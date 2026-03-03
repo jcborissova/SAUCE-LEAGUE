@@ -137,6 +137,15 @@ type DuelMetricMeta = {
 };
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
+const DUEL_UNASSIGNED_TEAM = "__duel_unassigned_team__";
+
+const getDuelTeamKey = (teamName: string | null | undefined): string => {
+  const normalized = (teamName ?? "").trim();
+  return normalized.length > 0 ? normalized : DUEL_UNASSIGNED_TEAM;
+};
+
+const getDuelTeamLabel = (teamKey: string): string =>
+  teamKey === DUEL_UNASSIGNED_TEAM ? "Sin equipo" : teamKey;
 
 const DUEL_METRICS: BattleMetric[] = [
   "ppg",
@@ -244,6 +253,8 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
   const [duelPlayersLoading, setDuelPlayersLoading] = useState(false);
   const [duelLoading, setDuelLoading] = useState(false);
   const [duelError, setDuelError] = useState<string | null>(null);
+  const [duelTeamA, setDuelTeamA] = useState<string>("");
+  const [duelTeamB, setDuelTeamB] = useState<string>("");
   const [duelPlayerA, setDuelPlayerA] = useState<number | "">("");
   const [duelPlayerB, setDuelPlayerB] = useState<number | "">("");
   const [duelResult, setDuelResult] = useState<DuelResult | null>(null);
@@ -575,6 +586,91 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
     }));
   }, [focus, mvpRows, fullLeadersRows]);
 
+  const duelPlayerById = useMemo(() => {
+    const map = new Map<number, DuelPlayerOption>();
+    duelPlayers.forEach((player) => {
+      map.set(player.playerId, player);
+    });
+    return map;
+  }, [duelPlayers]);
+
+  const duelTeamOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    duelPlayers.forEach((player) => {
+      const teamKey = getDuelTeamKey(player.teamName);
+      if (!map.has(teamKey)) {
+        map.set(teamKey, getDuelTeamLabel(teamKey));
+      }
+    });
+
+    return Array.from(map.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((left, right) => left.label.localeCompare(right.label, "es", { sensitivity: "base" }));
+  }, [duelPlayers]);
+
+  const duelPlayersForTeamA = useMemo(() => {
+    const rows = duelPlayers.filter((player) =>
+      duelTeamA ? getDuelTeamKey(player.teamName) === duelTeamA : true
+    );
+
+    return rows.sort((left, right) => left.name.localeCompare(right.name, "es", { sensitivity: "base" }));
+  }, [duelPlayers, duelTeamA]);
+
+  const duelPlayersForTeamB = useMemo(() => {
+    const rows = duelPlayers.filter((player) =>
+      duelTeamB ? getDuelTeamKey(player.teamName) === duelTeamB : true
+    );
+
+    return rows.sort((left, right) => left.name.localeCompare(right.name, "es", { sensitivity: "base" }));
+  }, [duelPlayers, duelTeamB]);
+
+  const duelPlayerAInfo =
+    typeof duelPlayerA === "number" ? duelPlayerById.get(duelPlayerA) ?? null : null;
+  const duelPlayerBInfo =
+    typeof duelPlayerB === "number" ? duelPlayerById.get(duelPlayerB) ?? null : null;
+
+  useEffect(() => {
+    if (focus !== "duel") return;
+
+    const teamValues = duelTeamOptions.map((team) => team.value);
+    if (teamValues.length === 0) {
+      if (duelTeamA !== "") setDuelTeamA("");
+      if (duelTeamB !== "") setDuelTeamB("");
+      return;
+    }
+
+    const teamFromPlayerA = duelPlayerAInfo ? getDuelTeamKey(duelPlayerAInfo.teamName) : "";
+    const teamFromPlayerB = duelPlayerBInfo ? getDuelTeamKey(duelPlayerBInfo.teamName) : "";
+
+    const nextTeamA = teamFromPlayerA || (teamValues.includes(duelTeamA) ? duelTeamA : teamValues[0]) || "";
+    const fallbackTeamB = teamValues.find((teamValue) => teamValue !== nextTeamA) ?? nextTeamA;
+    const nextTeamB =
+      teamFromPlayerB || (teamValues.includes(duelTeamB) ? duelTeamB : fallbackTeamB) || "";
+
+    if (nextTeamA !== duelTeamA) setDuelTeamA(nextTeamA);
+    if (nextTeamB !== duelTeamB) setDuelTeamB(nextTeamB);
+  }, [focus, duelTeamOptions, duelPlayerAInfo, duelPlayerBInfo, duelTeamA, duelTeamB]);
+
+  useEffect(() => {
+    if (focus !== "duel") return;
+
+    const validIds = new Set(duelPlayersForTeamA.map((player) => player.playerId));
+    setDuelPlayerA((previous) => (typeof previous === "number" && validIds.has(previous) ? previous : ""));
+  }, [focus, duelPlayersForTeamA]);
+
+  useEffect(() => {
+    if (focus !== "duel") return;
+
+    const validIds = new Set(duelPlayersForTeamB.map((player) => player.playerId));
+    setDuelPlayerB((previous) => (typeof previous === "number" && validIds.has(previous) ? previous : ""));
+  }, [focus, duelPlayersForTeamB]);
+
+  useEffect(() => {
+    if (focus !== "duel") return;
+    if (typeof duelPlayerA !== "number" || typeof duelPlayerB !== "number") return;
+    if (duelPlayerA === duelPlayerB) setDuelPlayerB("");
+  }, [focus, duelPlayerA, duelPlayerB]);
+
   const canCompareDuel =
     typeof duelPlayerA === "number" &&
     typeof duelPlayerB === "number" &&
@@ -847,42 +943,106 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
               }
             >
               <div className="space-y-3">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <label className="space-y-1">
-                    <span className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Jugador A</span>
-                    <AppSelect
-                      value={duelPlayerA}
-                      onChange={(event) => setDuelPlayerA(event.target.value ? Number(event.target.value) : "")}
-                      className="input-base"
-                    >
-                      <option value="">Seleccionar</option>
-                      {duelPlayers.map((player) => (
-                        <option key={`duel-a-${player.playerId}`} value={player.playerId}>
-                          {player.name} {player.teamName ? `(${player.teamName})` : ""}
-                        </option>
-                      ))}
-                    </AppSelect>
-                  </label>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <article className="rounded-lg border bg-[hsl(var(--surface-1))] p-3 space-y-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+                      Lado A
+                    </p>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Equipo</span>
+                      <AppSelect
+                        value={duelTeamA}
+                        onChange={(event) => {
+                          setDuelTeamA(String(event.target.value));
+                          setDuelPlayerA("");
+                        }}
+                        className="input-base"
+                      >
+                        <option value="">Seleccionar equipo</option>
+                        {duelTeamOptions.map((teamOption) => (
+                          <option key={`duel-team-a-${teamOption.value}`} value={teamOption.value}>
+                            {teamOption.label}
+                          </option>
+                        ))}
+                      </AppSelect>
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Jugador</span>
+                      <AppSelect
+                        value={duelPlayerA}
+                        onChange={(event) => setDuelPlayerA(event.target.value ? Number(event.target.value) : "")}
+                        className="input-base"
+                        disabled={!duelTeamA || duelPlayersForTeamA.length === 0}
+                      >
+                        <option value="">{duelTeamA ? "Seleccionar jugador" : "Elige equipo primero"}</option>
+                        {duelPlayersForTeamA.map((player) => (
+                          <option
+                            key={`duel-a-${player.playerId}`}
+                            value={player.playerId}
+                            disabled={duelPlayerB === player.playerId}
+                          >
+                            {player.name}
+                          </option>
+                        ))}
+                      </AppSelect>
+                    </label>
+                  </article>
 
-                  <label className="space-y-1">
-                    <span className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Jugador B</span>
-                    <AppSelect
-                      value={duelPlayerB}
-                      onChange={(event) => setDuelPlayerB(event.target.value ? Number(event.target.value) : "")}
-                      className="input-base"
-                    >
-                      <option value="">Seleccionar</option>
-                      {duelPlayers.map((player) => (
-                        <option key={`duel-b-${player.playerId}`} value={player.playerId}>
-                          {player.name} {player.teamName ? `(${player.teamName})` : ""}
-                        </option>
-                      ))}
-                    </AppSelect>
-                  </label>
+                  <article className="rounded-lg border bg-[hsl(var(--surface-1))] p-3 space-y-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+                      Lado B
+                    </p>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Equipo</span>
+                      <AppSelect
+                        value={duelTeamB}
+                        onChange={(event) => {
+                          setDuelTeamB(String(event.target.value));
+                          setDuelPlayerB("");
+                        }}
+                        className="input-base"
+                      >
+                        <option value="">Seleccionar equipo</option>
+                        {duelTeamOptions.map((teamOption) => (
+                          <option key={`duel-team-b-${teamOption.value}`} value={teamOption.value}>
+                            {teamOption.label}
+                          </option>
+                        ))}
+                      </AppSelect>
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Jugador</span>
+                      <AppSelect
+                        value={duelPlayerB}
+                        onChange={(event) => setDuelPlayerB(event.target.value ? Number(event.target.value) : "")}
+                        className="input-base"
+                        disabled={!duelTeamB || duelPlayersForTeamB.length === 0}
+                      >
+                        <option value="">{duelTeamB ? "Seleccionar jugador" : "Elige equipo primero"}</option>
+                        {duelPlayersForTeamB.map((player) => (
+                          <option
+                            key={`duel-b-${player.playerId}`}
+                            value={player.playerId}
+                            disabled={duelPlayerA === player.playerId}
+                          >
+                            {player.name}
+                          </option>
+                        ))}
+                      </AppSelect>
+                    </label>
+                  </article>
                 </div>
 
                 <p className="text-xs text-[hsl(var(--text-subtle))]">
-                  Modo jocoso activado: aquí se define quién manda en la cancha, sin lloros.
+                  Modo jocoso activado:{" "}
+                  <span className="font-semibold text-[hsl(var(--foreground))]">
+                    {duelPlayerAInfo?.name ?? "Selecciona jugador A"}
+                  </span>{" "}
+                  vs{" "}
+                  <span className="font-semibold text-[hsl(var(--foreground))]">
+                    {duelPlayerBInfo?.name ?? "Selecciona jugador B"}
+                  </span>
+                  .
                 </p>
 
                 {duelPlayersLoading ? <LoadingSpinner label="Cargando jugadores para duelo" /> : null}
