@@ -1,9 +1,11 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  ArrowDownTrayIcon,
   HashtagIcon,
   IdentificationIcon,
   PencilSquareIcon,
   UserCircleIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { MagnifyingGlassPlusIcon } from "@heroicons/react/24/solid";
 
@@ -19,6 +21,18 @@ type Props = {
   onEdit: (player: Player) => void;
 };
 
+const buildPhotoDownloadName = (name: string) => {
+  const normalized = name
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
+  return `${normalized || "jugador"}-perfil.jpg`;
+};
+
 const PlayerProfileModal: React.FC<Props> = ({ isOpen, player, onClose, onEdit }) => {
   const [zoomOpen, setZoomOpen] = useState(false);
 
@@ -26,6 +40,29 @@ const PlayerProfileModal: React.FC<Props> = ({ isOpen, player, onClose, onEdit }
     if (!player) return "";
     return `${player.names} ${player.lastnames}`.replace(/\s+/g, " ").trim();
   }, [player]);
+  const photoDownloadName = useMemo(
+    () => buildPhotoDownloadName(fullName || `jugador-${player?.id ?? ""}`),
+    [fullName, player?.id]
+  );
+
+  useEffect(() => {
+    if (!isOpen) {
+      setZoomOpen(false);
+      return;
+    }
+    if (!player?.photo) {
+      setZoomOpen(false);
+    }
+  }, [isOpen, player?.id, player?.photo]);
+
+  useEffect(() => {
+    if (!zoomOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setZoomOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [zoomOpen]);
 
   if (!isOpen || !player) return null;
 
@@ -56,17 +93,31 @@ const PlayerProfileModal: React.FC<Props> = ({ isOpen, player, onClose, onEdit }
               <div className="relative p-4">
                 <div className="mx-auto flex h-40 w-40 items-center justify-center overflow-hidden rounded-[14px] border bg-[hsl(var(--surface-2))] shadow-[0_8px_18px_hsl(var(--background)/0.08)] sm:h-44 sm:w-44">
                   {player.photo ? (
-                    <button
-                      type="button"
-                      onClick={() => setZoomOpen(true)}
-                      className="group relative h-full w-full"
-                      aria-label="Ampliar foto del jugador"
-                    >
-                      <img src={player.photo} alt={fullName} className="h-full w-full object-cover" />
-                      <span className="absolute bottom-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-[8px] border border-white/35 bg-black/45 text-white opacity-90 backdrop-blur-sm transition-opacity group-hover:opacity-100">
-                        <MagnifyingGlassPlusIcon className="h-4 w-4" />
-                      </span>
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setZoomOpen(true)}
+                        className="group relative h-full w-full"
+                        aria-label="Ampliar foto del jugador"
+                        title="Ampliar foto"
+                      >
+                        <img src={player.photo} alt={fullName} className="h-full w-full object-cover" />
+                        <span className="absolute bottom-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-[8px] border border-white/35 bg-black/45 text-white opacity-90 backdrop-blur-sm transition-opacity group-hover:opacity-100">
+                          <MagnifyingGlassPlusIcon className="h-4 w-4" />
+                        </span>
+                      </button>
+                      <a
+                        href={player.photo}
+                        download={photoDownloadName}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="absolute bottom-2 left-2 inline-flex h-8 w-8 items-center justify-center rounded-[8px] border border-white/35 bg-black/45 text-white opacity-90 backdrop-blur-sm transition-opacity hover:opacity-100"
+                        aria-label="Descargar foto del jugador"
+                        title="Descargar foto"
+                      >
+                        <ArrowDownTrayIcon className="h-4 w-4" />
+                      </a>
+                    </>
                   ) : (
                     <UserCircleIcon className="h-20 w-20 text-[hsl(var(--text-subtle))]" />
                   )}
@@ -122,8 +173,40 @@ const PlayerProfileModal: React.FC<Props> = ({ isOpen, player, onClose, onEdit }
           onClick={() => setZoomOpen(false)}
           role="dialog"
           aria-modal="true"
+          aria-label="Vista ampliada de la foto del jugador"
         >
-          <img src={player.photo} alt={fullName} className="max-h-full max-w-full rounded-[12px] object-contain" />
+          <div className="absolute right-4 top-4 flex items-center gap-2">
+            <a
+              href={player.photo}
+              download={photoDownloadName}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/35 bg-black/45 text-white backdrop-blur-sm"
+              aria-label="Descargar foto del jugador"
+              title="Descargar foto"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <ArrowDownTrayIcon className="h-5 w-5" />
+            </a>
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/35 bg-black/45 text-white backdrop-blur-sm"
+              onClick={(event) => {
+                event.stopPropagation();
+                setZoomOpen(false);
+              }}
+              aria-label="Cerrar vista ampliada"
+              title="Cerrar"
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
+          <img
+            src={player.photo}
+            alt={fullName}
+            className="max-h-full max-w-full rounded-[12px] object-contain"
+            onClick={(event) => event.stopPropagation()}
+          />
         </div>
       ) : null}
     </>

@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  ArrowDownTrayIcon,
   AdjustmentsHorizontalIcon,
   HandRaisedIcon,
+  MagnifyingGlassPlusIcon,
   RocketLaunchIcon,
   ShieldCheckIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/solid";
 import type {
   MvpBreakdownRow,
@@ -123,6 +126,18 @@ const initialsFromName = (name: string) =>
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("") || "JG";
 
+const buildPhotoDownloadName = (name: string) => {
+  const normalized = name
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
+  return `${normalized || "jugador"}-perfil.jpg`;
+};
+
 const formatDate = (value: string | null) => {
   if (!value) return "Sin fecha";
   const parsed = new Date(`${value}T00:00:00`);
@@ -156,11 +171,31 @@ const PlayerAnalyticsModal: React.FC<PlayerAnalyticsModalProps> = ({
   onRetry,
 }) => {
   const [activeTab, setActiveTab] = useState<TabKey>("summary");
+  const [photoLightboxOpen, setPhotoLightboxOpen] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
     setActiveTab("summary");
   }, [isOpen, detail?.line.playerId, detail?.phase]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setPhotoLightboxOpen(false);
+      return;
+    }
+    if (!detail?.line.photo) {
+      setPhotoLightboxOpen(false);
+    }
+  }, [isOpen, detail?.line.playerId, detail?.line.photo]);
+
+  useEffect(() => {
+    if (!photoLightboxOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPhotoLightboxOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [photoLightboxOpen]);
 
   const summary = useMemo(() => {
     if (!detail) return null;
@@ -273,82 +308,105 @@ const PlayerAnalyticsModal: React.FC<PlayerAnalyticsModalProps> = ({
   const modalSubtitle = detail
     ? `${detail.line.teamName ?? "Sin equipo"} • ${phaseLabel(detail.phase)}`
     : "Analítica individual";
+  const playerPhotoUrl = detail?.line.photo?.trim() ?? "";
+  const photoDownloadName = buildPhotoDownloadName(detail?.line.name ?? "jugador");
   const visibleInsightBadges = insight ? insight.badges.slice(0, 3) : [];
   const hiddenInsightBadgeCount = insight ? Math.max(0, insight.badges.length - visibleInsightBadges.length) : 0;
 
   return (
-    <ModalShell
-      isOpen={isOpen}
-      onClose={onClose}
-      title={modalTitle}
-      subtitle={modalSubtitle}
-      maxWidthClassName="sm:max-w-6xl"
-      overlayClassName="!z-[90]"
-      actions={
-        <button type="button" className="btn-secondary" onClick={onClose}>
-          Cerrar
-        </button>
-      }
-    >
-      {loading ? (
-        <div className="rounded-[10px] border bg-[hsl(var(--surface-2)/0.45)] p-4 text-sm text-[hsl(var(--muted-foreground))]">
-          Cargando detalle del jugador...
-        </div>
-      ) : null}
-
-      {!loading && errorMessage ? (
-        <div className="space-y-3 rounded-[10px] border border-[hsl(var(--destructive)/0.28)] bg-[hsl(var(--destructive)/0.08)] p-4 text-sm text-[hsl(var(--destructive))]">
-          <p>{errorMessage}</p>
-          <button type="button" className="btn-secondary" onClick={onRetry}>
-            Reintentar
+    <>
+      <ModalShell
+        isOpen={isOpen}
+        onClose={onClose}
+        title={modalTitle}
+        subtitle={modalSubtitle}
+        maxWidthClassName="sm:max-w-6xl"
+        overlayClassName="!z-[90]"
+        actions={
+          <button type="button" className="btn-secondary" onClick={onClose}>
+            Cerrar
           </button>
-        </div>
-      ) : null}
+        }
+      >
+        {loading ? (
+          <div className="rounded-[10px] border bg-[hsl(var(--surface-2)/0.45)] p-4 text-sm text-[hsl(var(--muted-foreground))]">
+            Cargando detalle del jugador...
+          </div>
+        ) : null}
 
-      {!loading && !errorMessage && detail && summary ? (
-        <div className="space-y-4">
-          <section className="app-card p-3 sm:p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                {detail.line.photo ? (
-                  <img
-                    src={detail.line.photo}
-                    alt={detail.line.name}
-                    className="h-12 w-12 rounded-full border object-cover"
-                  />
-                ) : (
-                  <span className="inline-flex h-12 w-12 items-center justify-center rounded-full border bg-[hsl(var(--surface-2))] text-sm font-semibold">
-                    {initialsFromName(detail.line.name)}
+        {!loading && errorMessage ? (
+          <div className="space-y-3 rounded-[10px] border border-[hsl(var(--destructive)/0.28)] bg-[hsl(var(--destructive)/0.08)] p-4 text-sm text-[hsl(var(--destructive))]">
+            <p>{errorMessage}</p>
+            <button type="button" className="btn-secondary" onClick={onRetry}>
+              Reintentar
+            </button>
+          </div>
+        ) : null}
+
+        {!loading && !errorMessage && detail && summary ? (
+          <div className="space-y-4">
+            <section className="app-card p-3 sm:p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  {playerPhotoUrl ? (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setPhotoLightboxOpen(true)}
+                        className="group relative h-12 w-12 overflow-hidden rounded-full border"
+                        aria-label="Ampliar foto del jugador"
+                        title="Ampliar foto"
+                      >
+                        <img src={playerPhotoUrl} alt={detail.line.name} className="h-full w-full object-cover" />
+                        <span className="absolute inset-0 inline-flex items-center justify-center bg-black/30 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                          <MagnifyingGlassPlusIcon className="h-4 w-4" />
+                        </span>
+                      </button>
+                      <a
+                        href={playerPhotoUrl}
+                        download={photoDownloadName}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="absolute -bottom-1 -right-1 inline-flex h-6 w-6 items-center justify-center rounded-full border bg-[hsl(var(--surface-1))] text-[hsl(var(--text-strong))] shadow-[0_1px_6px_hsl(var(--background)/0.34)]"
+                        aria-label="Descargar foto del jugador"
+                        title="Descargar foto"
+                      >
+                        <ArrowDownTrayIcon className="h-3.5 w-3.5" />
+                      </a>
+                    </div>
+                  ) : (
+                    <span className="inline-flex h-12 w-12 items-center justify-center rounded-full border bg-[hsl(var(--surface-2))] text-sm font-semibold">
+                      {initialsFromName(detail.line.name)}
+                    </span>
+                  )}
+                  <div>
+                    <p className="text-sm text-[hsl(var(--muted-foreground))]">{detail.line.teamName ?? "Sin equipo"}</p>
+                    <p className="text-xs text-[hsl(var(--text-subtle))]">{detail.line.gamesPlayed} juegos analizados</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 text-xs">
+                  {insight ? (
+                    <Badge variant={insight.gradeTone} className="px-3 py-1.5 text-sm">
+                      Nivel {insight.grade}
+                    </Badge>
+                  ) : null}
+                  <span className="rounded-full border bg-[hsl(var(--surface-2))] px-2.5 py-1 font-semibold">
+                    VAL/PJ {detail.line.valuationPerGame.toFixed(2)}
                   </span>
-                )}
-                <div>
-                  <p className="text-sm text-[hsl(var(--muted-foreground))]">{detail.line.teamName ?? "Sin equipo"}</p>
-                  <p className="text-xs text-[hsl(var(--text-subtle))]">{detail.line.gamesPlayed} juegos analizados</p>
+                  <span className="rounded-full border bg-[hsl(var(--surface-2))] px-2.5 py-1 font-semibold">
+                    PRA PJ {summary.praPerGame.toFixed(1)}
+                  </span>
+                  {detail.mvpRow ? (
+                    <span className="rounded-full border bg-[hsl(var(--surface-2))] px-2.5 py-1 font-semibold">
+                      MVP score {detail.mvpRow.finalScore.toFixed(3)}
+                    </span>
+                  ) : null}
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2 text-xs">
-                {insight ? (
-                  <Badge variant={insight.gradeTone} className="px-3 py-1.5 text-sm">
-                    Nivel {insight.grade}
-                  </Badge>
-                ) : null}
-                <span className="rounded-full border bg-[hsl(var(--surface-2))] px-2.5 py-1 font-semibold">
-                  VAL/PJ {detail.line.valuationPerGame.toFixed(2)}
-                </span>
-                <span className="rounded-full border bg-[hsl(var(--surface-2))] px-2.5 py-1 font-semibold">
-                  PRA PJ {summary.praPerGame.toFixed(1)}
-                </span>
-                {detail.mvpRow ? (
-                  <span className="rounded-full border bg-[hsl(var(--surface-2))] px-2.5 py-1 font-semibold">
-                    MVP score {detail.mvpRow.finalScore.toFixed(3)}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-
-            {insight ? (
-              <div className={`mt-3 rounded-[10px] border p-3 ${insightToneClassByVariant[insight.gradeTone]}`.trim()}>
+              {insight ? (
+                <div className={`mt-3 rounded-[10px] border p-3 ${insightToneClassByVariant[insight.gradeTone]}`.trim()}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]">
@@ -434,10 +492,10 @@ const PlayerAnalyticsModal: React.FC<PlayerAnalyticsModalProps> = ({
               </div>
             ) : null}
 
-            <div className="mt-3 inline-flex rounded-xl border bg-[hsl(var(--surface-2))] p-1">
-              <button
-                type="button"
-                onClick={() => setActiveTab("summary")}
+              <div className="mt-3 inline-flex rounded-xl border bg-[hsl(var(--surface-2))] p-1">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("summary")}
                 className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                   activeTab === "summary"
                     ? "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]"
@@ -460,7 +518,7 @@ const PlayerAnalyticsModal: React.FC<PlayerAnalyticsModalProps> = ({
             </div>
           </section>
 
-          {activeTab === "summary" ? (
+            {activeTab === "summary" ? (
             <section className="space-y-3">
               <article className="app-card p-3">
                 <h4 className="text-sm font-semibold mb-2">Números principales</h4>
@@ -591,7 +649,7 @@ const PlayerAnalyticsModal: React.FC<PlayerAnalyticsModalProps> = ({
                 </article>
               ) : null}
             </section>
-          ) : (
+            ) : (
             <section className="app-card p-3 sm:p-4">
               {gamesWithCalculations.length === 0 ? (
                 <p className="text-sm text-[hsl(var(--muted-foreground))]">
@@ -647,10 +705,55 @@ const PlayerAnalyticsModal: React.FC<PlayerAnalyticsModalProps> = ({
                 </div>
               )}
             </section>
-          )}
+            )}
+          </div>
+        ) : null}
+      </ModalShell>
+
+      {photoLightboxOpen && playerPhotoUrl ? (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 p-4"
+          onClick={() => setPhotoLightboxOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Vista ampliada de la foto del jugador"
+        >
+          <div className="absolute right-4 top-4 flex items-center gap-2">
+            <a
+              href={playerPhotoUrl}
+              download={photoDownloadName}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/35 bg-black/45 text-white backdrop-blur-sm"
+              aria-label="Descargar foto del jugador"
+              title="Descargar foto"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <ArrowDownTrayIcon className="h-5 w-5" />
+            </a>
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/35 bg-black/45 text-white backdrop-blur-sm"
+              onClick={(event) => {
+                event.stopPropagation();
+                setPhotoLightboxOpen(false);
+              }}
+              aria-label="Cerrar vista ampliada"
+              title="Cerrar"
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
+
+          <img
+            src={playerPhotoUrl}
+            alt={modalTitle}
+            className="max-h-full max-w-full rounded-[12px] object-contain"
+            onClick={(event) => event.stopPropagation()}
+          />
         </div>
       ) : null}
-    </ModalShell>
+    </>
   );
 };
 
