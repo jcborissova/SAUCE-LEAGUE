@@ -29,6 +29,11 @@ import {
 } from "../components/ui/table";
 
 import { supabase } from "../lib/supabase";
+import {
+  isPlayerPhotoStorageUrl,
+  removePlayerPhotoByUrl,
+  uploadPlayerPhoto,
+} from "../lib/playerPhotoStorage";
 import { toast } from "react-toastify";
 import type { Player, PlayerFormState } from "../types/player";
 import type { PlayerStatsLine } from "../types/tournament-analytics";
@@ -69,6 +74,9 @@ const formatTournamentStartDate = (value: string | null) => {
     year: "numeric",
   }).format(new Date(year, month - 1, day));
 };
+
+const PLAYER_SELECT_COLUMNS =
+  "id, names, lastnames, backjerseyname, jerseynumber, cedula, description, photo, is_guest";
 
 const Players: React.FC = () => {
   const [players, setPlayers] = useState<Player[]>([]);
@@ -115,18 +123,14 @@ const Players: React.FC = () => {
     });
   };
 
-  const fileToBase64 = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-
   const fetchPlayers = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.from("players").select("*").eq("is_guest", false).order("id");
+      const { data, error } = await supabase
+        .from("players")
+        .select(PLAYER_SELECT_COLUMNS)
+        .eq("is_guest", false)
+        .order("id");
 
       if (error) throw error;
 
@@ -224,11 +228,26 @@ const Players: React.FC = () => {
     try {
       setLoading(true);
       let photoToSave = "";
+      const currentPhoto =
+        modalMode === "edit" && editingPlayerId
+          ? (players.find((player) => player.id === editingPlayerId)?.photo ?? "")
+          : "";
 
       if (typeof newPlayer.photo === "string") {
-        photoToSave = newPlayer.photo;
+        photoToSave = newPlayer.photo.trim();
       } else if (newPlayer.photo instanceof File) {
-        photoToSave = await fileToBase64(newPlayer.photo);
+        photoToSave = await uploadPlayerPhoto(newPlayer.photo, {
+          playerId: editingPlayerId,
+          label: `${newPlayer.names} ${newPlayer.lastnames}`,
+        });
+
+        if (isPlayerPhotoStorageUrl(currentPhoto) && currentPhoto !== photoToSave) {
+          try {
+            await removePlayerPhotoByUrl(currentPhoto);
+          } catch (cleanupError) {
+            console.warn("No se pudo eliminar la foto anterior del jugador.", cleanupError);
+          }
+        }
       }
 
       const payload = {
@@ -264,8 +283,18 @@ const Players: React.FC = () => {
   const handleDeletePlayer = async (id: number) => {
     try {
       setLoading(true);
+      const playerToDelete = players.find((player) => player.id === id);
       const { error } = await supabase.from("players").delete().eq("id", id);
       if (error) throw error;
+
+      if (playerToDelete?.photo && isPlayerPhotoStorageUrl(playerToDelete.photo)) {
+        try {
+          await removePlayerPhotoByUrl(playerToDelete.photo);
+        } catch (cleanupError) {
+          console.warn("No se pudo limpiar la foto del jugador eliminado.", cleanupError);
+        }
+      }
+
       toast.success("Jugador eliminado");
       fetchPlayers();
     } catch (err) {

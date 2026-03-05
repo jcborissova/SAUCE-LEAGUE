@@ -33,6 +33,9 @@ type Props = {
   leagueId: number;
 };
 
+const PLAYER_SELECT_COLUMNS =
+  "id, names, lastnames, backjerseyname, jerseynumber, cedula, description, photo, is_guest";
+
 const LeagueManager: React.FC<Props> = ({ leagueId }) => {
   const [players, setPlayers] = useState<LeaguePlayer[]>([]);
   const [available, setAvailable] = useState<LeaguePlayer[]>([]);
@@ -53,32 +56,68 @@ const LeagueManager: React.FC<Props> = ({ leagueId }) => {
 
     const { data: leagueData } = await supabase
       .from("league_players")
-      .select("player_id, order_number, players(*)")
+      .select(`player_id, order_number, arrival_time, players(${PLAYER_SELECT_COLUMNS})`)
       .eq("league_id", leagueId)
       .order("order_number");
 
-    const { data: allPlayers } = await supabase.from("players").select("*");
+    const { data: allPlayers } = await supabase.from("players").select(PLAYER_SELECT_COLUMNS);
 
-    const leaguePlayers: LeaguePlayer[] = (leagueData || []).map((item: any) => ({
-      ...item.players,
-      isGuest: item.players.is_guest,
-      order_number: item.order_number ?? 9999,
-      arrival_time: item.arrival_time,
-    }));
+    const toSinglePlayer = (value: any): any => {
+      if (Array.isArray(value)) return value[0] ?? null;
+      return value ?? null;
+    };
+
+    const leaguePlayers: LeaguePlayer[] = (leagueData || [])
+      .map((item: any) => {
+        const player = toSinglePlayer(item.players);
+        if (!player) return null;
+        return {
+          ...player,
+          isGuest: player.is_guest,
+          order_number: item.order_number ?? 9999,
+          arrival_time: item.arrival_time,
+        } as LeaguePlayer;
+      })
+      .filter(Boolean) as LeaguePlayer[];
 
     setPlayers(leaguePlayers);
 
     const leagueIds = leaguePlayers.map((p) => p.id);
-    const notInLeague = (allPlayers || []).filter((p: any) => !leagueIds.includes(p.id));
+    const notInLeague: LeaguePlayer[] = (allPlayers || [])
+      .filter((p: any) => !leagueIds.includes(p.id))
+      .map((player: any) => ({
+        ...player,
+        isGuest: player.is_guest,
+        order_number: 9999,
+      }));
     setAvailable(notInLeague);
 
     const { data: activeData } = await supabase
       .from("active_players")
-      .select("*, player:players(*)")
+      .select(`league_id, player_id, team, position, player:players(${PLAYER_SELECT_COLUMNS})`)
       .eq("league_id", leagueId)
       .order("position");
 
-    setActivePlayers(activeData || []);
+    const normalizedActive: ActivePlayer[] = (activeData || [])
+      .map((item: any) => {
+        const player = toSinglePlayer(item.player);
+        if (!player) return null;
+
+        return {
+          league_id: Number(item.league_id),
+          player_id: Number(item.player_id),
+          team: item.team === "B" ? "B" : "A",
+          position: Number(item.position ?? 0),
+          player: {
+            ...player,
+            isGuest: player.is_guest,
+            order_number: 9999,
+          },
+        } as ActivePlayer;
+      })
+      .filter(Boolean) as ActivePlayer[];
+
+    setActivePlayers(normalizedActive);
     setLoading(false);
   };
 

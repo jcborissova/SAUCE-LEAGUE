@@ -138,11 +138,12 @@ type QueryError = { message: string } | null;
 type QueryResult<T> = { data: T | null; error: QueryError };
 
 const ANALYTICS_QUERY_RETRIES = 1;
-const REVISION_CACHE_TTL_MS = 12000;
+const REVISION_CACHE_TTL_MS = 60_000;
 const ANALYTICS_PLAYER_GAME_PAGE_SIZE = 600;
 const ANALYTICS_PLAYER_TOTALS_PAGE_SIZE = 600;
 const TOURNAMENT_PLAYER_IDS_CHUNK = 250;
-const TOURNAMENT_PLAYER_LIST_CACHE_TTL_MS = 20_000;
+const TOURNAMENT_PLAYER_LIST_CACHE_TTL_MS = 120_000;
+const TOURNAMENT_PLAYER_SINGLE_QUERY_MAX_IDS = 800;
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -768,6 +769,11 @@ const tournamentPlayersListCache = new Map<
   }
 >();
 
+const tournamentPlayersListInflight = new Map<
+  string,
+  Promise<Array<{ playerId: number; name: string; photo: string | null; teamName: string | null }>>
+>();
+
 const toAnalyticsPhase = (value: unknown): "regular" | "playoffs" | "finals" => {
   if (value === "playoffs" || value === "finals") return value;
   return "regular";
@@ -947,38 +953,64 @@ const loadPlayerTotalsFromAnalyticsView = async (
   phaseFilter: TournamentPhaseFilter
 ): Promise<PlayerStatsLine[] | null> => {
   const selectColumns =
-    "tournament_id, phase, player_id, names, lastnames, photo, team_name, games_played, points, rebounds, assists, steals, blocks, turnovers, fouls, fgm, fga, fg_pct, ftm, fta, ft_pct, tpm, tpa, tp_pct, ppg, rpg, apg, spg, bpg, topg, fpg";
-  const allRows: Record<string, unknown>[] = [];
-  let from = 0;
+    "tournament_id, phase, player_id, names, lastnames, team_name, games_played, points, rebounds, assists, steals, blocks, turnovers, fouls, fgm, fga, fg_pct, ftm, fta, ft_pct, tpm, tpa, tp_pct, ppg, rpg, apg, spg, bpg, topg, fpg";
 
-  while (true) {
-    const to = from + ANALYTICS_PLAYER_TOTALS_PAGE_SIZE - 1;
-    let query = supabase
-      .from("tournament_analytics_player_totals")
-      .select(selectColumns)
-      .eq("tournament_id", tournamentId)
-      .range(from, to);
+  const loadRowsBySource = async (
+    source:
+      | "tournament_player_totals_cache"
+      | "tournament_analytics_player_totals"
+  ): Promise<{ rows: Record<string, unknown>[]; error: QueryError }> => {
+    const rows: Record<string, unknown>[] = [];
+    let from = 0;
 
-    if (phaseFilter !== "all") {
-      query = query.eq("phase", phaseFilter);
+    while (true) {
+      const to = from + ANALYTICS_PLAYER_TOTALS_PAGE_SIZE - 1;
+      let query = supabase
+        .from(source)
+        .select(selectColumns)
+        .eq("tournament_id", tournamentId)
+        .order("player_id", { ascending: true })
+        .order("phase", { ascending: true })
+        .range(from, to);
+
+      if (phaseFilter !== "all") {
+        query = query.eq("phase", phaseFilter);
+      }
+
+      const { data, error } = await runSelectWithRetry<Record<string, unknown>[]>(() =>
+        toSelectPromise<Record<string, unknown>[]>(query)
+      );
+
+      if (error || !data) {
+        return {
+          rows: [],
+          error,
+        };
+      }
+
+      const chunk = data as Record<string, unknown>[];
+      if (chunk.length === 0) {
+        break;
+      }
+
+      rows.push(...chunk);
+      if (chunk.length < ANALYTICS_PLAYER_TOTALS_PAGE_SIZE) {
+        break;
+      }
+
+      from += ANALYTICS_PLAYER_TOTALS_PAGE_SIZE;
     }
 
-    const { data, error } = await runSelectWithRetry<Record<string, unknown>[]>(() =>
-      toSelectPromise<Record<string, unknown>[]>(query)
-    );
-    if (error || !data) return null;
+    return { rows, error: null };
+  };
 
-    const chunk = data as Record<string, unknown>[];
-    if (chunk.length === 0) {
-      break;
-    }
+  const cacheRowsResult = await loadRowsBySource("tournament_player_totals_cache");
+  let allRows = cacheRowsResult.rows;
 
-    allRows.push(...chunk);
-    if (chunk.length < ANALYTICS_PLAYER_TOTALS_PAGE_SIZE) {
-      break;
-    }
-
-    from += ANALYTICS_PLAYER_TOTALS_PAGE_SIZE;
+  if (cacheRowsResult.error || cacheRowsResult.rows.length === 0) {
+    const viewRowsResult = await loadRowsBySource("tournament_analytics_player_totals");
+    if (viewRowsResult.error) return null;
+    allRows = viewRowsResult.rows;
   }
 
   if (phaseFilter !== "all") {
@@ -1008,7 +1040,7 @@ const loadPlayerTotalsFromAnalyticsView = async (
       return {
         playerId: toNumber(row.player_id),
         name: playerName,
-        photo: row.photo ? String(row.photo) : null,
+        photo: null,
         teamName: row.team_name ? String(row.team_name) : null,
         gamesPlayed,
         totals,
@@ -1056,7 +1088,7 @@ const loadPlayerTotalsFromAnalyticsView = async (
       ({
         playerId,
         name: fallbackName,
-        photo: row.photo ? String(row.photo) : null,
+        photo: null,
         teamName: row.team_name ? String(row.team_name) : null,
         gamesPlayed: 0,
         totals: {
@@ -1093,7 +1125,6 @@ const loadPlayerTotalsFromAnalyticsView = async (
       } as PlayerStatsLine);
 
     current.name = current.name || fallbackName;
-    current.photo = current.photo ?? (row.photo ? String(row.photo) : null);
     current.teamName = current.teamName ?? (row.team_name ? String(row.team_name) : null);
     current.gamesPlayed += gamesPlayed;
     current.totals.points += points;
@@ -1248,6 +1279,7 @@ export const clearTournamentAnalyticsCache = (tournamentId?: string) => {
     analyticsPlayerLinesInflight.clear();
     analyticsRevisionCache.clear();
     tournamentPlayersListCache.clear();
+    tournamentPlayersListInflight.clear();
     return;
   }
 
@@ -1278,6 +1310,12 @@ export const clearTournamentAnalyticsCache = (tournamentId?: string) => {
   for (const key of tournamentPlayersListCache.keys()) {
     if (key.startsWith(`${tournamentId}:`)) {
       tournamentPlayersListCache.delete(key);
+    }
+  }
+
+  for (const key of tournamentPlayersListInflight.keys()) {
+    if (key.startsWith(`${tournamentId}:`)) {
+      tournamentPlayersListInflight.delete(key);
     }
   }
 
@@ -2436,6 +2474,17 @@ export const saveMatchStats = async (payload: {
     throw new Error(syncError.message);
   }
 
+  const { error: refreshTotalsCacheError } = await supabase.rpc(
+    "refresh_tournament_player_totals_cache",
+    {
+      p_tournament_id: match.tournament_id,
+    }
+  );
+
+  if (refreshTotalsCacheError && refreshTotalsCacheError.code !== "PGRST202") {
+    console.warn("No se pudo refrescar el cache SQL de totales de jugadores.", refreshTotalsCacheError);
+  }
+
   clearTournamentAnalyticsCache(match.tournament_id);
 };
 
@@ -2449,156 +2498,200 @@ export const listTournamentPlayers = async (
     return cached.rows;
   }
 
-  const { data: teamsData, error: teamsError } = await runSelectWithRetry<
-    Array<{ id: number; name: string | null }>
-  >(() =>
-    supabase
-      .from("teams")
-      .select("id, name")
-      .eq("tournament_id", tournamentId)
-  );
+  const inflight = tournamentPlayersListInflight.get(cacheKey);
+  if (inflight) return inflight;
 
-  if (teamsError) {
-    throw new Error(teamsError.message);
-  }
+  const loader = (async () => {
+    const [teamsResult, scopedLinksResult] = await Promise.all([
+      runSelectWithRetry<Array<{ id: number; name: string | null }>>(() =>
+        supabase
+          .from("teams")
+          .select("id, name")
+          .eq("tournament_id", tournamentId)
+      ),
+      runSelectWithRetry<Array<{ team_id: number; player_id: number }>>(() =>
+        supabase
+          .from("team_players")
+          .select("team_id, player_id")
+          .eq("tournament_id", tournamentId)
+      ),
+    ]);
 
-  const teamRows = (teamsData ?? []) as Array<{ id: number; name: string | null }>;
-  const teamIds = teamRows.map((row) => toNumber(row.id)).filter((id) => id > 0);
-  if (teamIds.length === 0) {
-    tournamentPlayersListCache.set(cacheKey, { fetchedAt: Date.now(), rows: [] });
-    return [];
-  }
-
-  let linksRows: Array<{ team_id: number; player_id: number }> = [];
-  const { data: scopedLinksData, error: scopedLinksError } = await runSelectWithRetry<
-    Array<{ team_id: number; player_id: number }>
-  >(() =>
-    supabase
-      .from("team_players")
-      .select("team_id, player_id")
-      .eq("tournament_id", tournamentId)
-      .in("team_id", teamIds)
-  );
-
-  if (!scopedLinksError) {
-    linksRows = (scopedLinksData ?? []) as Array<{ team_id: number; player_id: number }>;
-  } else if (
-    isMissingTeamPlayersTournamentColumnError(scopedLinksError.message) ||
-    isStatementTimeoutError(scopedLinksError.message)
-  ) {
-    const { data: legacyLinksData, error: legacyLinksError } = await runSelectWithRetry<
-      Array<{ team_id: number; player_id: number }>
-    >(() =>
-      supabase
-        .from("team_players")
-        .select("team_id, player_id")
-        .in("team_id", teamIds)
-    );
-
-    if (legacyLinksError) {
-      throw new Error(legacyLinksError.message);
+    if (teamsResult.error) {
+      throw new Error(teamsResult.error.message);
     }
 
-    linksRows = (legacyLinksData ?? []) as Array<{ team_id: number; player_id: number }>;
-  } else {
-    throw new Error(scopedLinksError.message);
-  }
+    const teamRows = (teamsResult.data ?? []) as Array<{ id: number; name: string | null }>;
+    const teamIds = teamRows.map((row) => toNumber(row.id)).filter((id) => id > 0);
+    if (teamIds.length === 0) {
+      tournamentPlayersListCache.set(cacheKey, { fetchedAt: Date.now(), rows: [] });
+      return [];
+    }
 
-  const uniquePlayerIds = Array.from(
-    new Set(linksRows.map((row) => toNumber(row.player_id)).filter((id) => id > 0))
-  );
-  if (uniquePlayerIds.length === 0) {
-    tournamentPlayersListCache.set(cacheKey, { fetchedAt: Date.now(), rows: [] });
-    return [];
-  }
+    const teamIdSet = new Set(teamIds);
+    let linksRows: Array<{ team_id: number; player_id: number }> = [];
+    if (!scopedLinksResult.error) {
+      linksRows = ((scopedLinksResult.data ?? []) as Array<{ team_id: number; player_id: number }>).filter((row) =>
+        teamIdSet.has(toNumber(row.team_id))
+      );
+    } else if (
+      isMissingTeamPlayersTournamentColumnError(scopedLinksResult.error.message) ||
+      isStatementTimeoutError(scopedLinksResult.error.message)
+    ) {
+      const { data: legacyLinksData, error: legacyLinksError } = await runSelectWithRetry<
+        Array<{ team_id: number; player_id: number }>
+      >(() =>
+        supabase
+          .from("team_players")
+          .select("team_id, player_id")
+          .in("team_id", teamIds)
+      );
 
-  const playerChunks = chunkArray(uniquePlayerIds, TOURNAMENT_PLAYER_IDS_CHUNK);
-  const activeRowsPromise: Promise<QueryResult<Array<{ player_id: number }>>> =
-    phase !== "all"
-      ? runSelectWithRetry<Array<{ player_id: number }>>(() =>
-          supabase
-            .from("tournament_analytics_player_totals")
-            .select("player_id")
-            .eq("tournament_id", tournamentId)
-            .eq("phase", phase)
-        )
-      : Promise.resolve({ data: null, error: null });
+      if (legacyLinksError) {
+        throw new Error(legacyLinksError.message);
+      }
 
-  const [playerChunkResults, activeRowsResult] = await Promise.all([
-    Promise.all(
-      playerChunks.map((idChunk) =>
-        runSelectWithRetry<
-          Array<{ id: number; names: string | null; lastnames: string | null; photo: string | null }>
-        >(() =>
-          supabase
-            .from("players")
-            .select("id, names, lastnames, photo")
-            .in("id", idChunk)
-        )
-      )
-    ),
-    activeRowsPromise,
-  ]);
+      linksRows = ((legacyLinksData ?? []) as Array<{ team_id: number; player_id: number }>).filter((row) =>
+        teamIdSet.has(toNumber(row.team_id))
+      );
+    } else {
+      throw new Error(scopedLinksResult.error.message);
+    }
 
-  const playersById = new Map<number, { names: string; lastnames: string; photo: string | null }>();
-  playerChunkResults.forEach(({ data: playersData, error: playersError }) => {
-    if (playersError || !playersData) return;
+    const uniquePlayerIds = Array.from(
+      new Set(linksRows.map((row) => toNumber(row.player_id)).filter((id) => id > 0))
+    );
+    if (uniquePlayerIds.length === 0) {
+      tournamentPlayersListCache.set(cacheKey, { fetchedAt: Date.now(), rows: [] });
+      return [];
+    }
 
-    playersData.forEach((row) => {
-      const playerId = toNumber(row.id);
-      if (playerId <= 0) return;
-      playersById.set(playerId, {
-        names: toSafeText(row.names),
-        lastnames: toSafeText(row.lastnames),
-        photo: toSafeText(row.photo) || null,
+    const activeRowsPromise: Promise<QueryResult<Array<{ player_id: number }>>> =
+      phase !== "all"
+        ? (async () => {
+            const cacheResult = await runSelectWithRetry<Array<{ player_id: number }>>(() =>
+              supabase
+                .from("tournament_player_totals_cache")
+                .select("player_id")
+                .eq("tournament_id", tournamentId)
+                .eq("phase", phase)
+            );
+
+            if (!cacheResult.error && (cacheResult.data?.length ?? 0) > 0) {
+              return cacheResult;
+            }
+
+            const viewResult = await runSelectWithRetry<Array<{ player_id: number }>>(() =>
+              supabase
+                .from("tournament_analytics_player_totals")
+                .select("player_id")
+                .eq("tournament_id", tournamentId)
+                .eq("phase", phase)
+            );
+
+            if (!viewResult.error) return viewResult;
+            return cacheResult;
+          })()
+        : Promise.resolve({ data: null, error: null });
+
+    const playersLoadPromise: Promise<
+      Array<
+        QueryResult<Array<{ id: number; names: string | null; lastnames: string | null; photo: string | null }>>
+      >
+    > =
+      uniquePlayerIds.length <= TOURNAMENT_PLAYER_SINGLE_QUERY_MAX_IDS
+        ? Promise.all([
+            runSelectWithRetry<
+              Array<{ id: number; names: string | null; lastnames: string | null; photo: string | null }>
+            >(() =>
+              supabase
+                .from("players")
+                .select("id, names, lastnames, photo")
+                .in("id", uniquePlayerIds)
+            ),
+          ])
+        : Promise.all(
+            chunkArray(uniquePlayerIds, TOURNAMENT_PLAYER_IDS_CHUNK).map((idChunk) =>
+              runSelectWithRetry<
+                Array<{ id: number; names: string | null; lastnames: string | null; photo: string | null }>
+              >(() =>
+                supabase
+                  .from("players")
+                  .select("id, names, lastnames, photo")
+                  .in("id", idChunk)
+              )
+            )
+          );
+
+    const [playerChunkResults, activeRowsResult] = await Promise.all([playersLoadPromise, activeRowsPromise]);
+
+    const playersById = new Map<number, { names: string; lastnames: string; photo: string | null }>();
+    playerChunkResults.forEach(({ data: playersData, error: playersError }) => {
+      if (playersError || !playersData) return;
+
+      playersData.forEach((row) => {
+        const playerId = toNumber(row.id);
+        if (playerId <= 0) return;
+        playersById.set(playerId, {
+          names: toSafeText(row.names),
+          lastnames: toSafeText(row.lastnames),
+          photo: toSafeText(row.photo) || null,
+        });
       });
     });
-  });
 
-  let activePlayerIds: Set<number> | null = null;
-  if (!activeRowsResult.error && activeRowsResult.data) {
-    activePlayerIds = new Set(
-      activeRowsResult.data.map((row) => toNumber(row.player_id)).filter((id) => id > 0)
+    let activePlayerIds: Set<number> | null = null;
+    if (!activeRowsResult.error && activeRowsResult.data) {
+      activePlayerIds = new Set(
+        activeRowsResult.data.map((row) => toNumber(row.player_id)).filter((id) => id > 0)
+      );
+    }
+
+    const teamNameById = new Map(
+      teamRows.map((row) => [toNumber(row.id), toSafeText(row.name)])
     );
-  }
+    const rowsByPlayerId = new Map<
+      number,
+      { playerId: number; name: string; photo: string | null; teamName: string | null }
+    >();
 
-  const teamNameById = new Map(
-    teamRows.map((row) => [toNumber(row.id), toSafeText(row.name)])
-  );
-  const rowsByPlayerId = new Map<
-    number,
-    { playerId: number; name: string; photo: string | null; teamName: string | null }
-  >();
+    linksRows.forEach((row) => {
+      const playerId = toNumber(row.player_id);
+      const teamId = toNumber(row.team_id);
+      if (playerId <= 0) return;
+      if (activePlayerIds && !activePlayerIds.has(playerId)) return;
+      if (rowsByPlayerId.has(playerId)) return;
 
-  linksRows.forEach((row) => {
-    const playerId = toNumber(row.player_id);
-    const teamId = toNumber(row.team_id);
-    if (playerId <= 0) return;
-    if (activePlayerIds && !activePlayerIds.has(playerId)) return;
-    if (rowsByPlayerId.has(playerId)) return;
+      const player = playersById.get(playerId);
+      const name = fullName(player?.names, player?.lastnames) || `Jugador ${playerId}`;
+      const teamName = teamNameById.get(teamId) || null;
 
-    const player = playersById.get(playerId);
-    const name = fullName(player?.names, player?.lastnames) || `Jugador ${playerId}`;
-    const teamName = teamNameById.get(teamId) || null;
-
-    rowsByPlayerId.set(playerId, {
-      playerId,
-      name,
-      photo: player?.photo ?? null,
-      teamName,
+      rowsByPlayerId.set(playerId, {
+        playerId,
+        name,
+        photo: player?.photo ?? null,
+        teamName,
+      });
     });
-  });
 
-  const rows = Array.from(rowsByPlayerId.values()).sort((a, b) =>
-    a.name.localeCompare(b.name, "es", { sensitivity: "base" })
-  );
+    const rows = Array.from(rowsByPlayerId.values()).sort((a, b) =>
+      a.name.localeCompare(b.name, "es", { sensitivity: "base" })
+    );
 
-  tournamentPlayersListCache.set(cacheKey, {
-    fetchedAt: Date.now(),
-    rows,
-  });
+    tournamentPlayersListCache.set(cacheKey, {
+      fetchedAt: Date.now(),
+      rows,
+    });
 
-  return rows;
+    return rows;
+  })();
+
+  tournamentPlayersListInflight.set(cacheKey, loader);
+  try {
+    return await loader;
+  } finally {
+    tournamentPlayersListInflight.delete(cacheKey);
+  }
 };
 
 const toMatchOverview = (row: Record<string, unknown>): TournamentResultMatchOverview => ({
