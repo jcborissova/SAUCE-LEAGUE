@@ -564,6 +564,15 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
   const topScorers = insight.topScorers.slice(0, 5);
   const topTeams = insight.topTeams.slice(0, 4);
   const idealFive = insight.idealFive;
+  const idealFiveRoleOrder = ["PG", "SG", "SF", "PF", "C"];
+  const idealFiveLineup = idealFive
+    ? [...idealFive.lineup].sort((a, b) => {
+        const indexA = idealFiveRoleOrder.indexOf(a.role);
+        const indexB = idealFiveRoleOrder.indexOf(b.role);
+        if (indexA !== indexB) return indexA - indexB;
+        return b.overallScore - a.overallScore;
+      })
+    : [];
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -661,67 +670,137 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
       >
         {idealFive ? (
           <div className="space-y-3">
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="success">Química: {idealFive.chemistryScore.toFixed(1)}</Badge>
-              <Badge variant="primary">Modelo: {idealFive.modelScore.toFixed(1)}</Badge>
-              <Badge
-                variant={
-                  idealFive.confidence === "alta"
-                    ? "success"
-                    : idealFive.confidence === "media"
-                      ? "warning"
-                      : "danger"
-                }
-              >
-                Confianza: {idealFive.confidence}
-              </Badge>
-              <Badge variant="primary">Muestra: {idealFive.sampleSize} jugadores</Badge>
-              <Badge variant="default">Mín. juegos: {idealFive.minGames}</Badge>
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-              {idealFive.lineup.map((slot) => (
-                <article key={`${slot.role}-${slot.playerId}`} className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <Badge variant={IDEAL_FIVE_ROLE_BADGE_VARIANT[slot.role]}>{slot.role}</Badge>
-                    <div className="text-right text-[10px] text-[hsl(var(--text-subtle))]">
-                      <p>Fit {slot.roleScore.toFixed(1)}</p>
-                      <p>Obj {slot.overallScore.toFixed(1)}</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-2 inline-flex items-center gap-2">
-                    {slot.photo ? (
-                      <img
-                        src={slot.photo}
-                        alt={slot.name}
-                        className="h-9 w-9 rounded-full border border-[hsl(var(--border)/0.82)] object-cover"
-                      />
-                    ) : (
-                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-2))] text-[10px] font-semibold">
-                        {getPlayerInitials(slot.name)}
-                      </span>
-                    )}
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold" title={slot.name}>
-                        {abbreviateLeaderboardName(slot.name, 16)}
-                      </p>
-                      <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
-                        {slot.teamName ?? "Sin equipo"} · {slot.gamesPlayed} PJ
-                      </p>
-                    </div>
-                  </div>
-
-                  <p className="mt-2 text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">{slot.keyStatLabel}</p>
-                  <p className="text-xs font-semibold text-[hsl(var(--text-strong))] tabular-nums">{slot.keyStatValue}</p>
-                  <p className="mt-1 text-[10px] text-[hsl(var(--text-subtle))]">{slot.archetype}</p>
+            <div className="sm:hidden space-y-3">
+              <div className="grid grid-cols-3 gap-2">
+                <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-2 py-1.5">
+                  <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Química</p>
+                  <p className="text-sm font-semibold tabular-nums">{idealFive.chemistryScore.toFixed(1)}</p>
                 </article>
-              ))}
+                <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-2 py-1.5">
+                  <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Modelo</p>
+                  <p className="text-sm font-semibold tabular-nums">{idealFive.modelScore.toFixed(1)}</p>
+                </article>
+                <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-2 py-1.5">
+                  <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Confianza</p>
+                  <p className="text-sm font-semibold capitalize">{idealFive.confidence}</p>
+                </article>
+              </div>
+
+              <ol className="space-y-2">
+                {idealFiveLineup.map((slot) => (
+                  <li key={`${slot.role}-${slot.playerId}`}>
+                    <article className="rounded-[12px] border bg-[hsl(var(--surface-1))] px-3 py-2.5 shadow-sm">
+                      <div className="flex items-center gap-2.5">
+                        <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-full border bg-[hsl(var(--surface-2))] px-2 text-[11px] font-black tracking-wide text-[hsl(var(--primary))]">
+                          {slot.role}
+                        </span>
+
+                        <div className="min-w-0 inline-flex flex-1 items-center gap-2">
+                          {slot.photo ? (
+                            <img
+                              src={slot.photo}
+                              alt={slot.name}
+                              className="h-9 w-9 rounded-full border border-[hsl(var(--border)/0.82)] object-cover"
+                            />
+                          ) : (
+                            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-2))] text-[10px] font-semibold">
+                              {getPlayerInitials(slot.name)}
+                            </span>
+                          )}
+
+                          <div className="min-w-0">
+                            <p className="truncate text-[13px] font-semibold leading-tight" title={slot.name}>
+                              {abbreviateLeaderboardName(slot.name, 22)}
+                            </p>
+                            <p className="truncate text-[11px] text-[hsl(var(--muted-foreground))]">
+                              {slot.teamName ?? "Sin equipo"} · {slot.gamesPlayed} PJ
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="shrink-0 text-right">
+                          <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">{slot.keyStatLabel}</p>
+                          <p className="text-[13px] font-semibold tabular-nums text-[hsl(var(--text-strong))]">{slot.keyStatValue}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px] text-[hsl(var(--text-subtle))]">
+                        <p className="truncate">{slot.archetype}</p>
+                        <p className="shrink-0 tabular-nums">Fit {slot.roleScore.toFixed(1)}</p>
+                      </div>
+                    </article>
+                  </li>
+                ))}
+              </ol>
+
+              <p className="text-[11px] leading-tight text-[hsl(var(--text-subtle))]" title={`${idealFive.note} (${idealFive.modelVersion})`}>
+                {idealFive.note} ({idealFive.modelVersion})
+              </p>
             </div>
 
-            <p className="text-xs text-[hsl(var(--text-subtle))]">
-              {idealFive.note} ({idealFive.modelVersion})
-            </p>
+            <div className="hidden sm:block space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="success">Química: {idealFive.chemistryScore.toFixed(1)}</Badge>
+                <Badge variant="primary">Modelo: {idealFive.modelScore.toFixed(1)}</Badge>
+                <Badge
+                  variant={
+                    idealFive.confidence === "alta"
+                      ? "success"
+                      : idealFive.confidence === "media"
+                        ? "warning"
+                        : "danger"
+                  }
+                >
+                  Confianza: {idealFive.confidence}
+                </Badge>
+                <Badge variant="primary">Muestra: {idealFive.sampleSize} jugadores</Badge>
+                <Badge variant="default">Mín. juegos: {idealFive.minGames}</Badge>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                {idealFiveLineup.map((slot) => (
+                  <article key={`${slot.role}-${slot.playerId}`} className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <Badge variant={IDEAL_FIVE_ROLE_BADGE_VARIANT[slot.role]}>{slot.role}</Badge>
+                      <div className="text-right text-[10px] text-[hsl(var(--text-subtle))]">
+                        <p>Fit {slot.roleScore.toFixed(1)}</p>
+                        <p>Obj {slot.overallScore.toFixed(1)}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 inline-flex items-center gap-2">
+                      {slot.photo ? (
+                        <img
+                          src={slot.photo}
+                          alt={slot.name}
+                          className="h-9 w-9 rounded-full border border-[hsl(var(--border)/0.82)] object-cover"
+                        />
+                      ) : (
+                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-2))] text-[10px] font-semibold">
+                          {getPlayerInitials(slot.name)}
+                        </span>
+                      )}
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold" title={slot.name}>
+                          {abbreviateLeaderboardName(slot.name, 16)}
+                        </p>
+                        <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
+                          {slot.teamName ?? "Sin equipo"} · {slot.gamesPlayed} PJ
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="mt-2 text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">{slot.keyStatLabel}</p>
+                    <p className="text-xs font-semibold text-[hsl(var(--text-strong))] tabular-nums">{slot.keyStatValue}</p>
+                    <p className="mt-1 text-[10px] text-[hsl(var(--text-subtle))]">{slot.archetype}</p>
+                  </article>
+                ))}
+              </div>
+
+              <p className="text-xs text-[hsl(var(--text-subtle))]">
+                {idealFive.note} ({idealFive.modelVersion})
+              </p>
+            </div>
           </div>
         ) : (
           <p className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3 text-sm text-[hsl(var(--muted-foreground))]">
