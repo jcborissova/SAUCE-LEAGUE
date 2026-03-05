@@ -574,12 +574,15 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
     }
 
     try {
-      const playerDetailData = await getTournamentPlayerDetailFast({
-        tournamentId,
-        playerId,
-        phase,
-        forceRefresh: Boolean(options?.forceRefresh),
-      });
+      const [playerDetailData, phaseLines] = await Promise.all([
+        getTournamentPlayerDetailFast({
+          tournamentId,
+          playerId,
+          phase,
+          forceRefresh: Boolean(options?.forceRefresh),
+        }),
+        getTournamentPlayerLinesFast(tournamentId, phase),
+      ]);
       const line = playerDetailData.line;
 
       const games = playerDetailData.games
@@ -607,6 +610,7 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
         line,
         games,
         mvpRow,
+        phaseLines,
       };
 
       playerDetailCacheRef.current.set(cacheKey, nextDetail);

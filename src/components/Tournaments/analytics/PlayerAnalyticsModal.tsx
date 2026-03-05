@@ -1,4 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
+import {
+  AdjustmentsHorizontalIcon,
+  HandRaisedIcon,
+  RocketLaunchIcon,
+  ShieldCheckIcon,
+} from "@heroicons/react/24/solid";
 import type {
   MvpBreakdownRow,
   PlayerStatsLine,
@@ -6,7 +12,9 @@ import type {
   TournamentPhaseFilter,
 } from "../../../types/tournament-analytics";
 import { computeImpactScore, computeValuation, round2 } from "../../../utils/tournament-stats";
+import { buildPlayerDeepInsight, type InsightBadgeIcon } from "../../../utils/player-insights";
 import ModalShell from "../../ui/ModalShell";
+import Badge from "../../ui/Badge";
 
 export type PlayerAnalyticsGameDetail = TournamentAnalyticsPlayerGame & {
   pra: number;
@@ -17,6 +25,7 @@ export type PlayerAnalyticsDetail = {
   line: PlayerStatsLine;
   games: PlayerAnalyticsGameDetail[];
   mvpRow: MvpBreakdownRow | null;
+  phaseLines?: PlayerStatsLine[];
 };
 
 type PlayerAnalyticsModalProps = {
@@ -32,6 +41,79 @@ type TabKey = "summary" | "games";
 
 const metricCardClassName =
   "rounded-[10px] border bg-[hsl(var(--surface-1))] px-2.5 py-2 shadow-[0_1px_0_hsl(var(--border)/0.24)]";
+
+const BasketballBallIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true">
+    <circle cx="12" cy="12" r="9" />
+    <path d="M3 12h18" />
+    <path d="M12 3c2.6 2.2 4.2 5.5 4.2 9s-1.6 6.8-4.2 9" />
+    <path d="M12 3c-2.6 2.2-4.2 5.5-4.2 9s1.6 6.8 4.2 9" />
+  </svg>
+);
+
+const HoopIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true">
+    <rect x="5" y="3.5" width="14" height="4.5" rx="1.2" />
+    <path d="M12 8v3" />
+    <ellipse cx="12" cy="12.4" rx="5" ry="1.9" />
+    <path d="M7.2 12.6 9.5 18M12 12.8V19m4.8-6.4L14.5 18" />
+  </svg>
+);
+
+const CourtIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true">
+    <rect x="3.5" y="4" width="17" height="16" rx="1.8" />
+    <path d="M12 4v16" />
+    <circle cx="12" cy="12" r="2.4" />
+    <path d="M3.5 9h2.4M3.5 15h2.4M20.5 9h-2.4M20.5 15h-2.4" />
+  </svg>
+);
+
+const insightToneClassByVariant: Record<"primary" | "success" | "warning" | "danger", string> = {
+  primary:
+    "border-[hsl(var(--border)/0.78)] bg-[hsl(var(--surface-2)/0.62)] shadow-[0_1px_0_hsl(var(--border)/0.36)] border-l-[3px] border-l-[hsl(var(--primary)/0.58)]",
+  success:
+    "border-[hsl(var(--border)/0.78)] bg-[hsl(var(--surface-2)/0.62)] shadow-[0_1px_0_hsl(var(--border)/0.36)] border-l-[3px] border-l-[hsl(var(--success)/0.58)]",
+  warning:
+    "border-[hsl(var(--border)/0.78)] bg-[hsl(var(--surface-2)/0.62)] shadow-[0_1px_0_hsl(var(--border)/0.36)] border-l-[3px] border-l-[hsl(var(--warning)/0.62)]",
+  danger:
+    "border-[hsl(var(--border)/0.78)] bg-[hsl(var(--surface-2)/0.62)] shadow-[0_1px_0_hsl(var(--border)/0.36)] border-l-[3px] border-l-[hsl(var(--destructive)/0.6)]",
+};
+
+const badgeCardToneByTier: Record<"HOF" | "Gold" | "Silver" | "Bronze", string> = {
+  HOF: "border-[hsl(var(--border)/0.72)] bg-[hsl(var(--surface-1))] border-l-[3px] border-l-[hsl(var(--success)/0.56)]",
+  Gold: "border-[hsl(var(--border)/0.72)] bg-[hsl(var(--surface-1))] border-l-[3px] border-l-[hsl(var(--warning)/0.62)]",
+  Silver: "border-[hsl(var(--border)/0.72)] bg-[hsl(var(--surface-1))] border-l-[3px] border-l-[hsl(var(--primary)/0.56)]",
+  Bronze: "border-[hsl(var(--border)/0.72)] bg-[hsl(var(--surface-1))] border-l-[3px] border-l-[hsl(var(--text-subtle)/0.52)]",
+};
+
+const badgeIconToneByTier: Record<"HOF" | "Gold" | "Silver" | "Bronze", string> = {
+  HOF: "text-[hsl(var(--success))]",
+  Gold: "text-[hsl(var(--warning))]",
+  Silver: "text-[hsl(var(--primary))]",
+  Bronze: "text-[hsl(var(--text-subtle))]",
+};
+
+const badgeTierToneByTier: Record<"HOF" | "Gold" | "Silver" | "Bronze", string> = {
+  HOF: "border-[hsl(var(--success)/0.3)] bg-[hsl(var(--success)/0.1)] text-[hsl(var(--success))]",
+  Gold: "border-[hsl(var(--warning)/0.34)] bg-[hsl(var(--warning)/0.1)] text-[hsl(var(--warning))]",
+  Silver: "border-[hsl(var(--primary)/0.3)] bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]",
+  Bronze: "border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] text-[hsl(var(--text-subtle))]",
+};
+
+const badgeIconByKey: Record<
+  InsightBadgeIcon,
+  React.ComponentType<{ className?: string }>
+> = {
+  fire: BasketballBallIcon,
+  sparkles: CourtIcon,
+  rocket: RocketLaunchIcon,
+  star: HoopIcon,
+  shield: ShieldCheckIcon,
+  hand: HandRaisedIcon,
+  target: HoopIcon,
+  control: AdjustmentsHorizontalIcon,
+};
 
 const initialsFromName = (name: string) =>
   name
@@ -134,6 +216,12 @@ const PlayerAnalyticsModal: React.FC<PlayerAnalyticsModalProps> = ({
     };
   }, [detail]);
 
+  const insight = useMemo(() => {
+    if (!detail) return null;
+    const peers = detail.phaseLines && detail.phaseLines.length > 0 ? detail.phaseLines : [detail.line];
+    return buildPlayerDeepInsight(detail.line, peers);
+  }, [detail]);
+
   const gamesWithCalculations = useMemo(() => {
     if (!detail) return [];
 
@@ -185,6 +273,8 @@ const PlayerAnalyticsModal: React.FC<PlayerAnalyticsModalProps> = ({
   const modalSubtitle = detail
     ? `${detail.line.teamName ?? "Sin equipo"} • ${phaseLabel(detail.phase)}`
     : "Analítica individual";
+  const visibleInsightBadges = insight ? insight.badges.slice(0, 3) : [];
+  const hiddenInsightBadgeCount = insight ? Math.max(0, insight.badges.length - visibleInsightBadges.length) : 0;
 
   return (
     <ModalShell
@@ -193,6 +283,7 @@ const PlayerAnalyticsModal: React.FC<PlayerAnalyticsModalProps> = ({
       title={modalTitle}
       subtitle={modalSubtitle}
       maxWidthClassName="sm:max-w-6xl"
+      overlayClassName="!z-[90]"
       actions={
         <button type="button" className="btn-secondary" onClick={onClose}>
           Cerrar
@@ -237,6 +328,11 @@ const PlayerAnalyticsModal: React.FC<PlayerAnalyticsModalProps> = ({
               </div>
 
               <div className="flex flex-wrap gap-2 text-xs">
+                {insight ? (
+                  <Badge variant={insight.gradeTone} className="px-3 py-1.5 text-sm">
+                    Nivel {insight.grade}
+                  </Badge>
+                ) : null}
                 <span className="rounded-full border bg-[hsl(var(--surface-2))] px-2.5 py-1 font-semibold">
                   VAL/PJ {detail.line.valuationPerGame.toFixed(2)}
                 </span>
@@ -250,6 +346,93 @@ const PlayerAnalyticsModal: React.FC<PlayerAnalyticsModalProps> = ({
                 ) : null}
               </div>
             </div>
+
+            {insight ? (
+              <div className={`mt-3 rounded-[10px] border p-3 ${insightToneClassByVariant[insight.gradeTone]}`.trim()}>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+                      Perfil inteligente (fase actual)
+                    </p>
+                    <p className="text-sm font-semibold text-[hsl(var(--text-strong))]">
+                      Nivel {insight.grade} · {insight.score.toFixed(1)}/100
+                    </p>
+                    <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                      Confianza {insight.confidence} · {insight.confidenceNote}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {insight.styleTags.map((tag) => (
+                    <Badge key={tag}>{tag}</Badge>
+                  ))}
+                </div>
+
+                {visibleInsightBadges.length > 0 ? (
+                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    {visibleInsightBadges.map((badge) => {
+                      const Icon = badgeIconByKey[badge.icon];
+                      return (
+                        <article
+                          key={`${badge.name}-${badge.tier}`}
+                          className={`rounded-[10px] border px-2.5 py-2 ${badgeCardToneByTier[badge.tier]}`.trim()}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span
+                              className={`inline-flex h-8 w-8 items-center justify-center rounded-[8px] border bg-[hsl(var(--surface-2)/0.78)] ${badgeIconToneByTier[badge.tier]}`.trim()}
+                            >
+                              <Icon className="h-4 w-4" />
+                            </span>
+                            <span
+                              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide ${badgeTierToneByTier[badge.tier]}`.trim()}
+                            >
+                              {badge.tier}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs font-semibold text-[hsl(var(--text-strong))]">{badge.name}</p>
+                          <p className="text-[11px] text-[hsl(var(--muted-foreground))]">{badge.note}</p>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {hiddenInsightBadgeCount > 0 ? (
+                  <p className="mt-2 text-[11px] text-[hsl(var(--text-subtle))]">
+                    +{hiddenInsightBadgeCount} badge{hiddenInsightBadgeCount > 1 ? "s" : ""} adicional
+                    {hiddenInsightBadgeCount > 1 ? "es" : ""} en análisis interno.
+                  </p>
+                ) : null}
+
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-2.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+                      Lo más duro
+                    </p>
+                    <p className="mt-1 text-xs text-[hsl(var(--text-strong))]">
+                      {insight.strengths.length > 0
+                        ? insight.strengths
+                            .slice(0, 2)
+                            .map((item) => `${item.label}: ${item.value}`)
+                            .join(" • ")
+                        : "Aporte equilibrado en varias áreas del juego."}
+                    </p>
+                  </div>
+
+                  <div className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-2.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+                      Para subir de nivel
+                    </p>
+                    <p className="mt-1 text-xs text-[hsl(var(--text-strong))]">
+                      {insight.watchouts.length > 0
+                        ? `${insight.watchouts[0].label}: ${insight.watchouts[0].value}`
+                        : "Mantener la consistencia partido a partido."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-3 inline-flex rounded-xl border bg-[hsl(var(--surface-2))] p-1">
               <button
