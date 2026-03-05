@@ -8,6 +8,7 @@ type ModalShellProps = {
   subtitle?: string;
   children: React.ReactNode;
   maxWidthClassName?: string;
+  overlayClassName?: string;
   actions?: React.ReactNode;
 };
 
@@ -18,6 +19,7 @@ const ModalShell: React.FC<ModalShellProps> = ({
   subtitle,
   children,
   maxWidthClassName = "sm:max-w-3xl",
+  overlayClassName,
   actions,
 }) => {
   useEffect(() => {
@@ -34,7 +36,7 @@ const ModalShell: React.FC<ModalShellProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="modal-shell" role="dialog" aria-modal="true">
+    <div className={`modal-shell ${overlayClassName ?? ""}`.trim()} role="dialog" aria-modal="true">
       <button type="button" className="absolute inset-0" aria-label="Cerrar modal" onClick={onClose} />
       <div className={`modal-card soft-scrollbar relative ${maxWidthClassName}`.trim()}>
         <div className="pointer-events-none absolute left-1/2 top-2 h-1 w-14 -translate-x-1/2 rounded-full bg-[hsl(var(--border))] sm:hidden" />

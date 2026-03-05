@@ -317,6 +317,53 @@ const buildPlayerLines = (
   });
 };
 
+const hydrateMissingPlayerPhotos = async (playerLines: PlayerStatsLine[]): Promise<PlayerStatsLine[]> => {
+  if (playerLines.length === 0) return playerLines;
+
+  const missingPhotoIds = Array.from(
+    new Set(
+      playerLines
+        .filter((line) => !toSafeText(line.photo))
+        .map((line) => toNumber(line.playerId))
+        .filter((playerId) => playerId > 0)
+    )
+  );
+
+  if (missingPhotoIds.length === 0) return playerLines;
+
+  const photoByPlayerId = new Map<number, string>();
+
+  for (const idsChunk of chunkArray(missingPhotoIds, TOURNAMENT_PLAYER_IDS_CHUNK)) {
+    const { data, error } = await runSelectWithRetry<Array<{ id: number; photo: string | null }>>(() =>
+      supabase
+        .from("players")
+        .select("id, photo")
+        .in("id", idsChunk)
+    );
+
+    // Si falla la hidratacion de fotos, seguimos con las lineas actuales para no romper analytics.
+    if (error || !data) continue;
+
+    data.forEach((row) => {
+      const playerId = toNumber(row.id);
+      const photo = toSafeText(row.photo);
+      if (playerId > 0 && photo) {
+        photoByPlayerId.set(playerId, photo);
+      }
+    });
+  }
+
+  return playerLines.map((line) => {
+    if (toSafeText(line.photo)) return line;
+    const photo = photoByPlayerId.get(line.playerId);
+    if (!photo) return line;
+    return {
+      ...line,
+      photo,
+    };
+  });
+};
+
 const buildPlayerPlusMinusByPlayer = (
   rows: TournamentAnalyticsPlayerGame[]
 ): Map<number, { total: number; perGame: number }> => {
@@ -1576,6 +1623,8 @@ const getTournamentPlayerLines = async (
       playerLines = statsRows.length > 0 ? buildPlayerLines(statsRows, "all") : [];
     }
 
+    playerLines = await hydrateMissingPlayerPhotos(playerLines);
+
     analyticsPlayerLinesCache.set(cacheKey, {
       revisionKey,
       playerLines,
@@ -1796,7 +1845,7 @@ export const getTournamentPlayerDetailFast = async (params: {
     forceRefresh: Boolean(params.forceRefresh),
   });
   const fallbackLine = snapshot.playerLines.find((item) => item.playerId === params.playerId);
-  if (!fallbackLine) {
+  if (!line && !fallbackLine) {
     throw new Error("No se encontró data analítica para este jugador en la fase seleccionada.");
   }
 
@@ -1814,7 +1863,7 @@ export const getTournamentPlayerDetailFast = async (params: {
     });
 
   return {
-    line: fallbackLine,
+    line: line ?? fallbackLine!,
     games,
   };
 };

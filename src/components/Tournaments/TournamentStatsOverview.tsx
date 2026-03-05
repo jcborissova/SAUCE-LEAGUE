@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftIcon, EyeIcon } from "@heroicons/react/24/outline";
+import { ArrowLeftIcon, EyeIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { ArrowPathIcon, BoltIcon, FireIcon } from "@heroicons/react/24/solid";
 
 import {
@@ -8,6 +8,7 @@ import {
   getLeaders,
   getMvpRaceFast,
   getTournamentPlayerDetailFast,
+  getTournamentPlayerLinesFast,
   listTournamentPlayers,
 } from "../../services/tournamentAnalytics";
 import type {
@@ -147,6 +148,19 @@ const getDuelTeamKey = (teamName: string | null | undefined): string => {
 const getDuelTeamLabel = (teamKey: string): string =>
   teamKey === DUEL_UNASSIGNED_TEAM ? "Sin equipo" : teamKey;
 
+const normalizeText = (value: string): string =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+const phaseLabel = (phase: TournamentPhaseFilter): string => {
+  if (phase === "regular") return "Temporada regular";
+  if (phase === "playoffs") return "Playoffs";
+  return "Todas las fases";
+};
+
 const DUEL_METRICS: BattleMetric[] = [
   "ppg",
   "rpg",
@@ -248,6 +262,11 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
   const [fullLeadersError, setFullLeadersError] = useState<string | null>(null);
   const [fullLeadersRows, setFullLeadersRows] = useState<TournamentLeaderRow[]>([]);
   const [fullLeadersKey, setFullLeadersKey] = useState<string | null>(null);
+  const [playerDirectoryOpen, setPlayerDirectoryOpen] = useState(false);
+  const [playerDirectoryLoading, setPlayerDirectoryLoading] = useState(false);
+  const [playerDirectoryError, setPlayerDirectoryError] = useState<string | null>(null);
+  const [playerDirectoryRows, setPlayerDirectoryRows] = useState<DuelPlayerOption[]>([]);
+  const [playerDirectoryQuery, setPlayerDirectoryQuery] = useState("");
 
   const [duelPlayers, setDuelPlayers] = useState<DuelPlayerOption[]>([]);
   const [duelPlayersLoading, setDuelPlayersLoading] = useState(false);
@@ -299,6 +318,10 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
     setPlayerDetailError(null);
     setPlayerDetailOpen(false);
     setLastSelectedPlayer(null);
+    setPlayerDirectoryOpen(false);
+    setPlayerDirectoryRows([]);
+    setPlayerDirectoryQuery("");
+    setPlayerDirectoryError(null);
   }, [tournamentId]);
 
   useEffect(() => {
@@ -350,11 +373,19 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
   }, [tournamentId, phase]);
 
   useEffect(() => {
-    if (!fullViewOpen) return;
+    if (!fullViewOpen && !playerDirectoryOpen) return;
 
     const previousOverflow = document.body.style.overflow;
     const onEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setFullViewOpen(false);
+      if (event.key !== "Escape") return;
+      if (playerDetailOpen) return;
+      if (playerDirectoryOpen) {
+        setPlayerDirectoryOpen(false);
+        return;
+      }
+      if (fullViewOpen) {
+        setFullViewOpen(false);
+      }
     };
 
     document.body.style.overflow = "hidden";
@@ -364,7 +395,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onEscape);
     };
-  }, [fullViewOpen]);
+  }, [fullViewOpen, playerDirectoryOpen, playerDetailOpen]);
 
   useEffect(() => {
     if (isDuelMode) {
@@ -409,6 +440,38 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       cancelled = true;
     };
   }, [focus, tournamentId, phase]);
+
+  useEffect(() => {
+    if (!playerDirectoryOpen) return;
+
+    let cancelled = false;
+    const loadPlayerDirectory = async () => {
+      setPlayerDirectoryLoading(true);
+      setPlayerDirectoryError(null);
+
+      try {
+        const rows = await listTournamentPlayers(tournamentId, phase);
+        if (!cancelled) {
+          setPlayerDirectoryRows(rows);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setPlayerDirectoryRows([]);
+          setPlayerDirectoryError(err instanceof Error ? err.message : "No se pudo cargar el directorio de jugadores.");
+        }
+      } finally {
+        if (!cancelled) {
+          setPlayerDirectoryLoading(false);
+        }
+      }
+    };
+
+    loadPlayerDirectory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [playerDirectoryOpen, tournamentId, phase]);
 
   const hasContent = useMemo(
     () =>
@@ -585,6 +648,16 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       helperText: `PJ ${row.gamesPlayed}`,
     }));
   }, [focus, mvpRows, fullLeadersRows]);
+
+  const filteredPlayerDirectoryRows = useMemo(() => {
+    const query = normalizeText(playerDirectoryQuery);
+    if (!query) return playerDirectoryRows;
+
+    return playerDirectoryRows.filter((player) => {
+      const searchable = normalizeText(`${player.name} ${player.teamName ?? ""}`);
+      return searchable.includes(query);
+    });
+  }, [playerDirectoryQuery, playerDirectoryRows]);
 
   const duelPlayerById = useMemo(() => {
     const map = new Map<number, DuelPlayerOption>();
@@ -780,12 +853,15 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
     }
 
     try {
-      const playerDetailData = await getTournamentPlayerDetailFast({
-        tournamentId,
-        playerId,
-        phase: selectedPhase,
-        forceRefresh: Boolean(options?.forceRefresh),
-      });
+      const [playerDetailData, phaseLines] = await Promise.all([
+        getTournamentPlayerDetailFast({
+          tournamentId,
+          playerId,
+          phase: selectedPhase,
+          forceRefresh: Boolean(options?.forceRefresh),
+        }),
+        getTournamentPlayerLinesFast(tournamentId, selectedPhase),
+      ]);
       const line = playerDetailData.line;
 
       const games = playerDetailData.games
@@ -813,6 +889,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
         line,
         games,
         mvpRow,
+        phaseLines,
       };
 
       playerDetailCacheRef.current.set(cacheKey, nextDetail);
@@ -893,6 +970,19 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
           </label>
         ) : null}
       </div>
+
+      {!isDuelMode ? (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setPlayerDirectoryOpen(true)}
+            className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] px-3 py-1.5 text-xs font-semibold transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--surface-2))]"
+          >
+            <MagnifyingGlassIcon className="h-4 w-4" />
+            Buscar jugador
+          </button>
+        </div>
+      ) : null}
 
       {loading ? (
         <div className="flex justify-center py-12">
@@ -1378,6 +1468,35 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
         />
       ) : null}
 
+      {playerDirectoryOpen ? (
+        <PlayersDirectoryFullscreen
+          phase={phase}
+          rows={filteredPlayerDirectoryRows}
+          totalRows={playerDirectoryRows.length}
+          loading={playerDirectoryLoading}
+          errorMessage={playerDirectoryError}
+          query={playerDirectoryQuery}
+          onQueryChange={setPlayerDirectoryQuery}
+          onBack={() => setPlayerDirectoryOpen(false)}
+          onRetry={async () => {
+            setPlayerDirectoryError(null);
+            setPlayerDirectoryRows([]);
+            setPlayerDirectoryLoading(true);
+            try {
+              const rows = await listTournamentPlayers(tournamentId, phase);
+              setPlayerDirectoryRows(rows);
+            } catch (err) {
+              setPlayerDirectoryError(err instanceof Error ? err.message : "No se pudo cargar el directorio de jugadores.");
+            } finally {
+              setPlayerDirectoryLoading(false);
+            }
+          }}
+          onPlayerSelect={(playerId) => {
+            void openPlayerDetail(playerId, phase);
+          }}
+        />
+      ) : null}
+
       <PlayerAnalyticsModal
         isOpen={playerDetailOpen}
         loading={playerDetailLoading}
@@ -1387,6 +1506,125 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
         onRetry={retryPlayerDetail}
       />
     </section>
+  );
+};
+
+const PlayersDirectoryFullscreen = ({
+  phase,
+  rows,
+  totalRows,
+  loading,
+  errorMessage,
+  query,
+  onQueryChange,
+  onBack,
+  onRetry,
+  onPlayerSelect,
+}: {
+  phase: TournamentPhaseFilter;
+  rows: DuelPlayerOption[];
+  totalRows: number;
+  loading: boolean;
+  errorMessage: string | null;
+  query: string;
+  onQueryChange: (value: string) => void;
+  onBack: () => void;
+  onRetry: () => void;
+  onPlayerSelect: (playerId: number) => void;
+}) => {
+  const hasQuery = query.trim().length > 0;
+
+  return (
+    <div className="fixed inset-0 z-[70] bg-[hsl(var(--background))]">
+      <div className="flex h-full flex-col">
+        <header className="sticky top-0 z-10 border-b bg-[hsl(var(--surface-1))] px-3 py-3 sm:px-5">
+          <div className="flex items-center justify-between gap-3">
+            <button type="button" onClick={onBack} className="btn-secondary min-h-[38px] px-3 py-1.5 text-xs sm:text-sm">
+              <ArrowLeftIcon className="h-4 w-4" />
+              Volver
+            </button>
+            <div className="min-w-0 text-right">
+              <p className="truncate text-sm font-semibold sm:text-base">Buscador de jugadores</p>
+              <p className="text-xs text-[hsl(var(--text-subtle))]">
+                {totalRows} jugadores · {phaseLabel(phase)}
+              </p>
+            </div>
+          </div>
+        </header>
+
+        <div className="soft-scrollbar flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5">
+          <label className="relative block">
+            <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => onQueryChange(event.target.value)}
+              className="input-base w-full pl-9"
+              placeholder="Buscar por nombre o equipo..."
+            />
+          </label>
+
+          <p className="mt-2 text-xs text-[hsl(var(--text-subtle))]">
+            Mostrando {rows.length} de {totalRows} jugadores.
+          </p>
+
+          {loading ? (
+            <div className="mt-4">
+              <LoadingSpinner label="Cargando directorio de jugadores" />
+            </div>
+          ) : errorMessage ? (
+            <div className="mt-4 space-y-3">
+              <div className="border border-[hsl(var(--destructive)/0.35)] bg-[hsl(var(--destructive)/0.08)] px-3 py-2 text-sm text-[hsl(var(--destructive))]">
+                {errorMessage}
+              </div>
+              <button className="btn-secondary" onClick={onRetry}>
+                Reintentar
+              </button>
+            </div>
+          ) : rows.length === 0 ? (
+            <p className="mt-4 text-sm text-[hsl(var(--text-subtle))]">
+              {hasQuery ? "No hay jugadores que coincidan con tu búsqueda." : "No hay jugadores registrados en esta fase."}
+            </p>
+          ) : (
+            <section className="mt-4 overflow-hidden rounded-lg border bg-[hsl(var(--surface-1))]">
+              <div className="divide-y">
+                {rows.map((row) => (
+                  <article key={row.playerId} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold inline-flex items-center gap-2" title={row.name}>
+                        {row.photo ? (
+                          <img
+                            src={row.photo}
+                            alt={row.name}
+                            className="h-8 w-8 rounded-full object-cover border border-[hsl(var(--border)/0.82)]"
+                          />
+                        ) : (
+                          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] text-[10px]">
+                            {getPlayerInitials(row.name)}
+                          </span>
+                        )}
+                        {abbreviateLeaderboardName(row.name, 34)}
+                      </p>
+                      <p className="truncate pl-10 text-xs text-[hsl(var(--muted-foreground))]">{row.teamName ?? "Sin equipo"}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onPlayerSelect(row.playerId)}
+                      className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors hover:bg-[hsl(var(--surface-2))]"
+                      title="Ver detalle del jugador"
+                      aria-label={`Ver detalle de ${row.name}`}
+                    >
+                      <EyeIcon className="h-3.5 w-3.5" />
+                      Ver perfil
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
 

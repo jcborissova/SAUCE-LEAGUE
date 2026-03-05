@@ -34,6 +34,175 @@ const computePraPerGame = (item: PlayerTournamentStatSummary) =>
 const computePraTotal = (item: PlayerTournamentStatSummary) =>
   item.line.totals.points + item.line.totals.rebounds + item.line.totals.assists - item.line.totals.turnovers;
 
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+
+type PlayerLevel = {
+  grade: "S" | "A" | "B" | "C" | "D" | "E";
+  label: string;
+  variant: "primary" | "success" | "warning" | "danger";
+  score: number;
+  sampleGames: number;
+  ppg: number;
+  praPerGame: number;
+  valuationPerGame: number;
+  fgPct: number;
+  topg: number;
+};
+
+const levelToneClassByVariant: Record<PlayerLevel["variant"], string> = {
+  primary: "border-[hsl(var(--primary)/0.32)] bg-[hsl(var(--primary)/0.1)]",
+  success: "border-[hsl(var(--success)/0.34)] bg-[hsl(var(--success)/0.11)]",
+  warning: "border-[hsl(var(--warning)/0.34)] bg-[hsl(var(--warning)/0.12)]",
+  danger: "border-[hsl(var(--destructive)/0.3)] bg-[hsl(var(--destructive)/0.1)]",
+};
+
+const buildPlayerLevel = (rows: PlayerTournamentStatSummary[]): PlayerLevel | null => {
+  if (rows.length === 0) return null;
+
+  const aggregate = rows.reduce(
+    (acc, item) => {
+      const { totals, valuation, gamesPlayed } = item.line;
+      acc.games += gamesPlayed;
+      acc.points += totals.points;
+      acc.rebounds += totals.rebounds;
+      acc.assists += totals.assists;
+      acc.steals += totals.steals;
+      acc.blocks += totals.blocks;
+      acc.turnovers += totals.turnovers;
+      acc.fouls += totals.fouls;
+      acc.fgm += totals.fgm;
+      acc.fga += totals.fga;
+      acc.valuation += valuation;
+      return acc;
+    },
+    {
+      games: 0,
+      points: 0,
+      rebounds: 0,
+      assists: 0,
+      steals: 0,
+      blocks: 0,
+      turnovers: 0,
+      fouls: 0,
+      fgm: 0,
+      fga: 0,
+      valuation: 0,
+    }
+  );
+
+  if (aggregate.games <= 0) return null;
+
+  const games = aggregate.games;
+  const ppg = aggregate.points / games;
+  const praPerGame = (aggregate.points + aggregate.rebounds + aggregate.assists - aggregate.turnovers) / games;
+  const valuationPerGame = aggregate.valuation / games;
+  const fgPct = aggregate.fga > 0 ? (aggregate.fgm / aggregate.fga) * 100 : 0;
+  const topg = aggregate.turnovers / games;
+  const stocksPerGame = (aggregate.steals + aggregate.blocks) / games;
+
+  const availability = clamp01(games / 22);
+  const ballSecurity = clamp01(1 - topg / 4.2);
+
+  const scoreRaw =
+    clamp01(ppg / 30) * 22 +
+    clamp01(praPerGame / 36) * 24 +
+    clamp01(valuationPerGame / 30) * 22 +
+    clamp01(fgPct / 58) * 10 +
+    clamp01(stocksPerGame / 3.2) * 8 +
+    availability * 8 +
+    ballSecurity * 6;
+
+  const score = Number(scoreRaw.toFixed(1));
+
+  if (score >= 92) {
+    return {
+      grade: "S",
+      label: "Superestrella",
+      variant: "success",
+      score,
+      sampleGames: games,
+      ppg: Number(ppg.toFixed(1)),
+      praPerGame: Number(praPerGame.toFixed(1)),
+      valuationPerGame: Number(valuationPerGame.toFixed(1)),
+      fgPct: Number(fgPct.toFixed(1)),
+      topg: Number(topg.toFixed(1)),
+    };
+  }
+
+  if (score >= 84) {
+    return {
+      grade: "A",
+      label: "Alto impacto",
+      variant: "success",
+      score,
+      sampleGames: games,
+      ppg: Number(ppg.toFixed(1)),
+      praPerGame: Number(praPerGame.toFixed(1)),
+      valuationPerGame: Number(valuationPerGame.toFixed(1)),
+      fgPct: Number(fgPct.toFixed(1)),
+      topg: Number(topg.toFixed(1)),
+    };
+  }
+
+  if (score >= 76) {
+    return {
+      grade: "B",
+      label: "Rendimiento sólido",
+      variant: "primary",
+      score,
+      sampleGames: games,
+      ppg: Number(ppg.toFixed(1)),
+      praPerGame: Number(praPerGame.toFixed(1)),
+      valuationPerGame: Number(valuationPerGame.toFixed(1)),
+      fgPct: Number(fgPct.toFixed(1)),
+      topg: Number(topg.toFixed(1)),
+    };
+  }
+
+  if (score >= 68) {
+    return {
+      grade: "C",
+      label: "Nivel competitivo",
+      variant: "warning",
+      score,
+      sampleGames: games,
+      ppg: Number(ppg.toFixed(1)),
+      praPerGame: Number(praPerGame.toFixed(1)),
+      valuationPerGame: Number(valuationPerGame.toFixed(1)),
+      fgPct: Number(fgPct.toFixed(1)),
+      topg: Number(topg.toFixed(1)),
+    };
+  }
+
+  if (score >= 58) {
+    return {
+      grade: "D",
+      label: "En desarrollo",
+      variant: "warning",
+      score,
+      sampleGames: games,
+      ppg: Number(ppg.toFixed(1)),
+      praPerGame: Number(praPerGame.toFixed(1)),
+      valuationPerGame: Number(valuationPerGame.toFixed(1)),
+      fgPct: Number(fgPct.toFixed(1)),
+      topg: Number(topg.toFixed(1)),
+    };
+  }
+
+  return {
+    grade: "E",
+    label: "Necesita evolución",
+    variant: "danger",
+    score,
+    sampleGames: games,
+    ppg: Number(ppg.toFixed(1)),
+    praPerGame: Number(praPerGame.toFixed(1)),
+    valuationPerGame: Number(valuationPerGame.toFixed(1)),
+    fgPct: Number(fgPct.toFixed(1)),
+    topg: Number(topg.toFixed(1)),
+  };
+};
+
 const PlayerTournamentStatsPanel: React.FC<Props> = ({
   playerId,
   enabled = true,
@@ -74,6 +243,7 @@ const PlayerTournamentStatsPanel: React.FC<Props> = ({
   }, [enabled, playerId]);
 
   const visibleRows = useMemo(() => (compact ? rows.slice(0, 4) : rows), [compact, rows]);
+  const playerLevel = useMemo(() => buildPlayerLevel(rows), [rows]);
 
   return (
     <section className={`space-y-3 ${className}`.trim()}>
@@ -93,6 +263,48 @@ const PlayerTournamentStatsPanel: React.FC<Props> = ({
           <Badge>{visibleRows.length} de {rows.length}</Badge>
         ) : null}
       </div>
+
+      {!compact && !loading && !errorMessage && playerLevel ? (
+        <article className={`rounded-[12px] border p-3 ${levelToneClassByVariant[playerLevel.variant]}`.trim()}>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]">Nivel real</p>
+              <p className="text-sm font-semibold text-[hsl(var(--text-strong))]">
+                {playerLevel.label} · Score {playerLevel.score.toFixed(1)}/100
+              </p>
+              <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                Muestra analizada: {playerLevel.sampleGames} juegos (todos los torneos del jugador).
+              </p>
+            </div>
+            <Badge variant={playerLevel.variant} className="px-3 py-1.5 text-sm">
+              {playerLevel.grade}
+            </Badge>
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <div className={metricCardClassName}>
+              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">PPP</p>
+              <p className="text-sm font-bold tabular-nums">{playerLevel.ppg.toFixed(1)}</p>
+            </div>
+            <div className={metricCardClassName}>
+              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">PRA PJ</p>
+              <p className="text-sm font-bold tabular-nums">{playerLevel.praPerGame.toFixed(1)}</p>
+            </div>
+            <div className={metricCardClassName}>
+              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Val/PJ</p>
+              <p className="text-sm font-bold tabular-nums">{playerLevel.valuationPerGame.toFixed(1)}</p>
+            </div>
+            <div className={metricCardClassName}>
+              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">FG%</p>
+              <p className="text-sm font-bold tabular-nums">{playerLevel.fgPct.toFixed(1)}%</p>
+            </div>
+            <div className={metricCardClassName}>
+              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">TOPG</p>
+              <p className="text-sm font-bold tabular-nums">{playerLevel.topg.toFixed(1)}</p>
+            </div>
+          </div>
+        </article>
+      ) : null}
 
       {loading ? (
         <div className="rounded-[10px] border bg-[hsl(var(--surface-2)/0.45)] p-4 text-sm text-[hsl(var(--muted-foreground))]">
