@@ -16,16 +16,23 @@ import Badge from "../components/ui/Badge";
 import { useRole } from "../contexts/RoleContext";
 import { supabase } from "../lib/supabase";
 import {
+  getTournamentPlayerLinesFast,
   getTournamentResultsOverview,
   getTournamentResultsSummary,
   getTournamentSettings,
 } from "../services/tournamentAnalytics";
 import type {
+  PlayerStatsLine,
   TournamentResultMatchOverview,
   TournamentResultSummary,
 } from "../types/tournament-analytics";
 import { TOURNAMENT_RULES_PDF_URL } from "../constants/tournamentRules";
 import { abbreviateLeaderboardName, getPlayerInitials } from "../utils/player-display";
+import {
+  IDEAL_FIVE_ROLE_BADGE_VARIANT,
+  buildIdealFiveProjection,
+  type IdealFiveProjection,
+} from "../utils/ideal-five";
 
 type TeamStandingSummary = {
   teamId: number;
@@ -75,6 +82,7 @@ type TournamentHomeInsight = {
   todayPendingMatchesCount: number;
   next7DaysPendingMatchesCount: number;
   statsCoveragePct: number;
+  idealFive: IdealFiveProjection | null;
 };
 
 type TournamentHomeFeedState = {
@@ -197,27 +205,61 @@ const loadStandingsFromView = async (tournamentId: string): Promise<TeamStanding
 };
 
 const loadTopScorersQuick = async (tournamentId: string): Promise<TournamentHomeLeader[]> => {
-  const { data, error } = await supabase
-    .from("tournament_analytics_player_totals")
-    .select("player_id, names, lastnames, photo, team_name, games_played, points, ppg")
+  const cacheResult = await supabase
+    .from("tournament_player_totals_cache")
+    .select("player_id, names, lastnames, team_name, games_played, points, ppg")
     .eq("tournament_id", tournamentId)
     .eq("phase", "regular")
     .order("points", { ascending: false })
     .limit(10);
 
-  if (error || !data) {
+  const shouldUseViewFallback = Boolean(cacheResult.error) || (cacheResult.data ?? []).length === 0;
+  const viewResult = shouldUseViewFallback
+    ? await supabase
+        .from("tournament_analytics_player_totals")
+        .select("player_id, names, lastnames, photo, team_name, games_played, points, ppg")
+        .eq("tournament_id", tournamentId)
+        .eq("phase", "regular")
+        .order("points", { ascending: false })
+        .limit(10)
+    : null;
+
+  const sourceRows = ((shouldUseViewFallback ? viewResult?.data : cacheResult.data) ?? []) as Array<Record<string, unknown>>;
+  if (sourceRows.length === 0) {
     return [];
   }
 
-  return (data as Array<Record<string, unknown>>).map((row) => {
+  const playerIds = Array.from(
+    new Set(sourceRows.map((row) => Number(row.player_id ?? 0)).filter((playerId) => Number.isFinite(playerId) && playerId > 0))
+  );
+  const photosByPlayerId = new Map<number, string>();
+
+  if (playerIds.length > 0) {
+    const { data: playerRows } = await supabase
+      .from("players")
+      .select("id, photo")
+      .in("id", playerIds);
+
+    (playerRows ?? []).forEach((row) => {
+      const playerId = Number(row.id ?? 0);
+      const photo = typeof row.photo === "string" ? row.photo.trim() : "";
+      if (playerId > 0 && photo.length > 0) {
+        photosByPlayerId.set(playerId, photo);
+      }
+    });
+  }
+
+  return sourceRows.map((row) => {
     const names = row.names ? String(row.names) : "";
     const lastnames = row.lastnames ? String(row.lastnames) : "";
     const name = `${names} ${lastnames}`.trim() || `Jugador ${Number(row.player_id ?? 0)}`;
+    const playerId = Number(row.player_id ?? 0);
+    const inlinePhoto = typeof row.photo === "string" ? row.photo.trim() : "";
 
     return {
-      playerId: Number(row.player_id ?? 0),
+      playerId,
       name,
-      photo: row.photo ? String(row.photo) : null,
+      photo: photosByPlayerId.get(playerId) ?? (inlinePhoto || null),
       teamName: row.team_name ? String(row.team_name) : null,
       totalPoints: Number(row.points ?? 0),
       ppp: Number(row.ppg ?? 0),
@@ -267,6 +309,8 @@ const buildTournamentInsight = ({
   tournamentId,
   tournamentName,
   topScorers,
+  playerLines,
+  playoffLines,
   matches,
   upcomingMatches,
   standings,
@@ -276,6 +320,8 @@ const buildTournamentInsight = ({
   tournamentId: string;
   tournamentName: string;
   topScorers: TournamentHomeLeader[];
+  playerLines: PlayerStatsLine[];
+  playoffLines: PlayerStatsLine[];
   matches: TournamentResultMatchOverview[];
   upcomingMatches: UpcomingTournamentMatch[];
   standings: TeamStandingSummary[];
@@ -296,6 +342,7 @@ const buildTournamentInsight = ({
   const bestTeam = sortedStandings[0] ?? null;
 
   const leader = topScorers[0] ?? null;
+  const idealFive = buildIdealFiveProjection(playerLines, playoffLines);
   const playedResultsCount = completedResults.length;
   const statsCoveragePct = playedResultsCount > 0 ? (summary.matchesWithStats / playedResultsCount) * 100 : 0;
 
@@ -331,6 +378,7 @@ const buildTournamentInsight = ({
     todayPendingMatchesCount,
     next7DaysPendingMatchesCount,
     statsCoveragePct,
+    idealFive,
   };
 };
 
@@ -377,12 +425,16 @@ const useTournamentHomeFeed = (): TournamentHomeFeedState => {
 
         const [
           scorersResult,
+          playerLinesResult,
+          playoffLinesResult,
           matchesResult,
           upcomingResult,
           standingsResult,
           settingsResult,
         ] = await Promise.allSettled([
           loadTopScorersQuick(tournamentId),
+          getTournamentPlayerLinesFast(tournamentId, "regular"),
+          getTournamentPlayerLinesFast(tournamentId, "playoffs"),
           getTournamentResultsOverview(tournamentId),
           loadUpcomingMatches(tournamentId),
           loadStandingsFromView(tournamentId),
@@ -390,6 +442,8 @@ const useTournamentHomeFeed = (): TournamentHomeFeedState => {
         ]);
 
         const topScorers = scorersResult.status === "fulfilled" ? scorersResult.value : [];
+        const playerLines = playerLinesResult.status === "fulfilled" ? playerLinesResult.value : [];
+        const playoffLines = playoffLinesResult.status === "fulfilled" ? playoffLinesResult.value : [];
         const matches = matchesResult.status === "fulfilled" ? matchesResult.value : [];
         const upcomingMatches = upcomingResult.status === "fulfilled" ? upcomingResult.value : [];
         const standings = standingsResult.status === "fulfilled" ? standingsResult.value : [];
@@ -401,6 +455,8 @@ const useTournamentHomeFeed = (): TournamentHomeFeedState => {
           tournamentId,
           tournamentName,
           topScorers,
+          playerLines,
+          playoffLines,
           matches,
           upcomingMatches,
           standings,
@@ -507,6 +563,7 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
   const viewerMode = mode === "viewer";
   const topScorers = insight.topScorers.slice(0, 5);
   const topTeams = insight.topTeams.slice(0, 4);
+  const idealFive = insight.idealFive;
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -597,6 +654,81 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
           </article>
         </div>
       </section>
+
+      <SectionCard
+        title="Quinteto ideal inteligente"
+        description="Selección objetiva por rol (PG, SG, SF, PF, C) usando percentiles del torneo y confiabilidad por muestra."
+      >
+        {idealFive ? (
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="success">Química: {idealFive.chemistryScore.toFixed(1)}</Badge>
+              <Badge variant="primary">Modelo: {idealFive.modelScore.toFixed(1)}</Badge>
+              <Badge
+                variant={
+                  idealFive.confidence === "alta"
+                    ? "success"
+                    : idealFive.confidence === "media"
+                      ? "warning"
+                      : "danger"
+                }
+              >
+                Confianza: {idealFive.confidence}
+              </Badge>
+              <Badge variant="primary">Muestra: {idealFive.sampleSize} jugadores</Badge>
+              <Badge variant="default">Mín. juegos: {idealFive.minGames}</Badge>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+              {idealFive.lineup.map((slot) => (
+                <article key={`${slot.role}-${slot.playerId}`} className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <Badge variant={IDEAL_FIVE_ROLE_BADGE_VARIANT[slot.role]}>{slot.role}</Badge>
+                    <div className="text-right text-[10px] text-[hsl(var(--text-subtle))]">
+                      <p>Fit {slot.roleScore.toFixed(1)}</p>
+                      <p>Obj {slot.overallScore.toFixed(1)}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 inline-flex items-center gap-2">
+                    {slot.photo ? (
+                      <img
+                        src={slot.photo}
+                        alt={slot.name}
+                        className="h-9 w-9 rounded-full border border-[hsl(var(--border)/0.82)] object-cover"
+                      />
+                    ) : (
+                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-2))] text-[10px] font-semibold">
+                        {getPlayerInitials(slot.name)}
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold" title={slot.name}>
+                        {abbreviateLeaderboardName(slot.name, 16)}
+                      </p>
+                      <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
+                        {slot.teamName ?? "Sin equipo"} · {slot.gamesPlayed} PJ
+                      </p>
+                    </div>
+                  </div>
+
+                  <p className="mt-2 text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">{slot.keyStatLabel}</p>
+                  <p className="text-xs font-semibold text-[hsl(var(--text-strong))] tabular-nums">{slot.keyStatValue}</p>
+                  <p className="mt-1 text-[10px] text-[hsl(var(--text-subtle))]">{slot.archetype}</p>
+                </article>
+              ))}
+            </div>
+
+            <p className="text-xs text-[hsl(var(--text-subtle))]">
+              {idealFive.note} ({idealFive.modelVersion})
+            </p>
+          </div>
+        ) : (
+          <p className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3 text-sm text-[hsl(var(--muted-foreground))]">
+            No hay datos suficientes para construir un quinteto ideal confiable todavía.
+          </p>
+        )}
+      </SectionCard>
 
       <section className="grid gap-3 lg:grid-cols-2">
         <SectionCard title="Agenda inmediata" description="Próximos juegos y estado del calendario.">

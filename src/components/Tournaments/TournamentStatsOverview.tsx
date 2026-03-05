@@ -1159,7 +1159,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         {duelResult.players.map((player) => (
                           <div key={`duel-score-${player.playerId}`} className="rounded-lg border bg-[hsl(var(--surface-1))] px-3 py-2">
-                            <p className="truncate text-xs text-[hsl(var(--text-subtle))] inline-flex items-center gap-2">
+                            <p className="flex min-w-0 items-center gap-2 text-xs text-[hsl(var(--text-subtle))]">
                               {player.photo ? (
                                 <img
                                   src={player.photo}
@@ -1171,7 +1171,9 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                   {getPlayerInitials(player.name)}
                                 </span>
                               )}
-                              <span title={player.name}>{abbreviateLeaderboardName(player.name, 18)}</span>
+                              <span className="truncate" title={player.name}>
+                                {abbreviateLeaderboardName(player.name, 18)}
+                              </span>
                             </p>
                             <p className="text-lg font-black tabular-nums">
                               {duelResult.summary.categoryWins[player.playerId] ?? 0}
@@ -1249,7 +1251,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                         className="flex min-h-[78px] items-center justify-between rounded-lg border bg-[hsl(var(--surface-2)/0.7)] px-3 py-2 text-sm"
                       >
                         <div className="min-w-0">
-                          <p className="truncate font-semibold inline-flex items-center gap-2" title={row.name}>
+                          <p className="flex min-w-0 items-center gap-2 font-semibold">
                             {row.photo ? (
                               <img
                                 src={row.photo}
@@ -1261,7 +1263,9 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                 {getPlayerInitials(row.name)}
                               </span>
                             )}
-                            #{index + 1} {abbreviateLeaderboardName(row.name, 20)}
+                            <span className="truncate" title={row.name}>
+                              #{index + 1} {abbreviateLeaderboardName(row.name, 20)}
+                            </span>
                           </p>
                           <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
                             {row.teamName ?? "Sin equipo"} · PJ {row.gamesPlayed}
@@ -1304,7 +1308,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                             className="flex min-h-[78px] items-center justify-between rounded-lg border bg-[hsl(var(--surface-2)/0.7)] px-3 py-2 text-sm"
                           >
                             <div className="min-w-0">
-                              <p className="truncate font-semibold inline-flex items-center gap-2" title={row.name}>
+                              <p className="flex min-w-0 items-center gap-2 font-semibold">
                                 {row.photo ? (
                                   <img
                                     src={row.photo}
@@ -1316,7 +1320,9 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                     {getPlayerInitials(row.name)}
                                   </span>
                                 )}
-                                #{index + 1} {abbreviateLeaderboardName(row.name, 20)}
+                                <span className="truncate" title={row.name}>
+                                  #{index + 1} {abbreviateLeaderboardName(row.name, 20)}
+                                </span>
                               </p>
                               <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
                                 {row.teamName ?? "Sin equipo"} · PJ {row.gamesPlayed}
@@ -1357,7 +1363,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                             className="flex min-h-[78px] items-center justify-between rounded-lg border bg-[hsl(var(--surface-2)/0.7)] px-3 py-2 text-sm"
                           >
                             <div className="min-w-0">
-                              <p className="truncate font-semibold inline-flex items-center gap-2" title={row.name}>
+                              <p className="flex min-w-0 items-center gap-2 font-semibold">
                                 {row.photo ? (
                                   <img
                                     src={row.photo}
@@ -1369,7 +1375,9 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                     {getPlayerInitials(row.name)}
                                   </span>
                                 )}
-                                #{index + 1} {abbreviateLeaderboardName(row.name, 20)}
+                                <span className="truncate" title={row.name}>
+                                  #{index + 1} {abbreviateLeaderboardName(row.name, 20)}
+                                </span>
                               </p>
                               <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
                                 {row.teamName ?? "Sin equipo"} · PJ {row.gamesPlayed}
@@ -1404,7 +1412,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                           className="flex min-h-[78px] items-center justify-between rounded-lg border bg-[hsl(var(--surface-2)/0.7)] px-3 py-2 text-sm"
                         >
                           <div className="min-w-0">
-                            <p className="truncate font-semibold inline-flex items-center gap-2" title={row.name}>
+                            <p className="flex min-w-0 items-center gap-2 font-semibold">
                               {row.photo ? (
                                 <img
                                   src={row.photo}
@@ -1416,7 +1424,9 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                   {getPlayerInitials(row.name)}
                                 </span>
                               )}
-                              #{index + 1} {abbreviateLeaderboardName(row.name, 20)}
+                              <span className="truncate" title={row.name}>
+                                #{index + 1} {abbreviateLeaderboardName(row.name, 20)}
+                              </span>
                             </p>
                             <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
                               {row.teamName ?? "Sin equipo"} · PJ {row.gamesPlayed}
@@ -1591,7 +1601,7 @@ const PlayersDirectoryFullscreen = ({
                 {rows.map((row) => (
                   <article key={row.playerId} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
                     <div className="min-w-0">
-                      <p className="truncate font-semibold inline-flex items-center gap-2" title={row.name}>
+                      <p className="flex min-w-0 items-center gap-2 font-semibold">
                         {row.photo ? (
                           <img
                             src={row.photo}
@@ -1603,7 +1613,9 @@ const PlayersDirectoryFullscreen = ({
                             {getPlayerInitials(row.name)}
                           </span>
                         )}
-                        {abbreviateLeaderboardName(row.name, 34)}
+                        <span className="truncate" title={row.name}>
+                          {abbreviateLeaderboardName(row.name, 34)}
+                        </span>
                       </p>
                       <p className="truncate pl-10 text-xs text-[hsl(var(--muted-foreground))]">{row.teamName ?? "Sin equipo"}</p>
                     </div>
@@ -1711,7 +1723,7 @@ const LeadersFullscreen = ({
                       #{index + 1}
                     </span>
                     <div className="min-w-0">
-                      <p className="truncate font-semibold inline-flex items-center gap-2" title={row.name}>
+                      <p className="flex min-w-0 items-center gap-2 font-semibold">
                         {row.photo ? (
                           <img
                             src={row.photo}
@@ -1723,7 +1735,9 @@ const LeadersFullscreen = ({
                             {getPlayerInitials(row.name)}
                           </span>
                         )}
-                        {abbreviateLeaderboardName(row.name, 24)}
+                        <span className="truncate" title={row.name}>
+                          {abbreviateLeaderboardName(row.name, 24)}
+                        </span>
                       </p>
                       <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
                         {row.teamName ?? "Sin equipo"} · {row.helperText}

@@ -122,7 +122,7 @@ const MvpPanel: React.FC<MvpPanelProps> = ({
                     #{index + 1}
                   </div>
                   <div className="min-w-0">
-                    <p className="font-semibold truncate inline-flex items-center gap-2" title={row.name}>
+                    <p className="flex min-w-0 items-center gap-2 font-semibold">
                       {row.photo ? (
                         <img
                           src={row.photo}
@@ -134,7 +134,9 @@ const MvpPanel: React.FC<MvpPanelProps> = ({
                           {getPlayerInitials(row.name)}
                         </span>
                       )}
-                      {displayName}
+                      <span className="truncate" title={row.name}>
+                        {displayName}
+                      </span>
                     </p>
                     <p className="text-xs text-[hsl(var(--text-subtle))] truncate">
                       {row.teamName ?? "Sin equipo"} • {row.gamesPlayed} juegos
