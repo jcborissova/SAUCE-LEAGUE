@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowPathIcon,
   CalendarDaysIcon,
   FireIcon,
+  SparklesIcon,
   TrophyIcon,
   UserGroupIcon,
 } from "@heroicons/react/24/solid";
@@ -13,6 +14,7 @@ import PageShell from "../components/ui/PageShell";
 import SectionCard from "../components/ui/SectionCard";
 import StatPill from "../components/ui/StatPill";
 import Badge from "../components/ui/Badge";
+import ModalShell from "../components/ui/ModalShell";
 import { useRole } from "../contexts/RoleContext";
 import { supabase } from "../lib/supabase";
 import {
@@ -27,7 +29,7 @@ import type {
   TournamentResultSummary,
 } from "../types/tournament-analytics";
 import { TOURNAMENT_RULES_PDF_URL } from "../constants/tournamentRules";
-import { abbreviateLeaderboardName, getPlayerInitials } from "../utils/player-display";
+import { abbreviateLeaderboardName } from "../utils/player-display";
 import {
   IDEAL_FIVE_ROLE_BADGE_VARIANT,
   buildIdealFiveProjection,
@@ -76,6 +78,7 @@ type TournamentHomeInsight = {
   nextMatch: UpcomingTournamentMatch | null;
   topScorers: TournamentHomeLeader[];
   topTeams: TeamStandingSummary[];
+  playerLines: PlayerStatsLine[];
   resultsSummary: TournamentResultSummary;
   playedResultsCount: number;
   pendingMatchesCount: number;
@@ -92,7 +95,31 @@ type TournamentHomeFeedState = {
   refresh: () => void;
 };
 
-const formatPct = (value: number) => `${(value * 100).toFixed(1)}%`;
+type DailyTournamentSpotlight = {
+  id: string;
+  badge: string;
+  title: string;
+  description: string;
+  accent: "primary" | "warning" | "success";
+  photo: string | null;
+  photoAlt: string;
+  statLeftLabel: string;
+  statLeftValue: string;
+  statRightLabel: string;
+  statRightValue: string;
+};
+
+type DailyTournamentSpotlightVariant = {
+  idSuffix: string;
+  title: string;
+  description: string;
+  badge?: DailyTournamentSpotlight["badge"];
+  accent?: DailyTournamentSpotlight["accent"];
+};
+
+const DAILY_SPOTLIGHT_AUTO_PREFIX = "sauce-league:home:nunaico:auto:v1";
+const DAILY_SPOTLIGHT_READ_PREFIX = "sauce-league:home:nunaico:read:v1";
+const DAILY_SPOTLIGHT_USER_SEED_KEY = "sauce-league:home:nunaico:user-seed:v1";
 
 const toIsoDateParts = (value: string) => {
   const [year, month, day] = value.split("-").map(Number);
@@ -372,6 +399,7 @@ const buildTournamentInsight = ({
     nextMatch: upcomingMatches[0] ?? null,
     topScorers: topScorers.slice(0, 8),
     topTeams: sortedStandings.slice(0, 6),
+    playerLines,
     resultsSummary: summary,
     playedResultsCount,
     pendingMatchesCount,
@@ -380,6 +408,766 @@ const buildTournamentInsight = ({
     statsCoveragePct,
     idealFive,
   };
+};
+
+const hashString = (value: string): number => {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(index);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+};
+
+const buildDailySpotlightAutoShownKey = (
+  tournamentId: string,
+  mode: "viewer" | "admin",
+  dateIso: string
+) => `${DAILY_SPOTLIGHT_AUTO_PREFIX}:${mode}:${tournamentId}:${dateIso}`;
+
+const buildDailySpotlightReadKey = (
+  tournamentId: string,
+  mode: "viewer" | "admin",
+  dateIso: string
+) => `${DAILY_SPOTLIGHT_READ_PREFIX}:${mode}:${tournamentId}:${dateIso}`;
+
+const getDailySpotlightUserSeed = (): string => {
+  if (typeof window === "undefined") return "server";
+
+  try {
+    const existing = window.localStorage.getItem(DAILY_SPOTLIGHT_USER_SEED_KEY);
+    if (existing && existing.trim().length > 0) return existing;
+
+    const generated = `${Date.now()}-${Math.floor(Math.random() * 1_000_000_000)}`;
+    window.localStorage.setItem(DAILY_SPOTLIGHT_USER_SEED_KEY, generated);
+    return generated;
+  } catch {
+    return "fallback";
+  }
+};
+
+const pushDailySpotlightVariants = (
+  candidates: DailyTournamentSpotlight[],
+  idPrefix: string,
+  base: Omit<DailyTournamentSpotlight, "id" | "title" | "description">,
+  variants: DailyTournamentSpotlightVariant[]
+) => {
+  variants.forEach((variant) => {
+    candidates.push({
+      ...base,
+      id: `${idPrefix}-${variant.idSuffix}`,
+      title: variant.title,
+      description: variant.description,
+      badge: variant.badge ?? base.badge,
+      accent: variant.accent ?? base.accent,
+    });
+  });
+};
+
+const selectDailySpotlight = (
+  candidates: DailyTournamentSpotlight[],
+  seedSource: string
+): DailyTournamentSpotlight | null => {
+  if (candidates.length === 0) return null;
+
+  const ranked = [...candidates].sort((candidateA, candidateB) => {
+    const scoreA = hashString(`${seedSource}:${candidateA.id}`);
+    const scoreB = hashString(`${seedSource}:${candidateB.id}`);
+    return scoreA - scoreB;
+  });
+
+  return ranked[0] ?? null;
+};
+
+const buildDailySpotlight = (
+  insight: TournamentHomeInsight,
+  mode: "viewer" | "admin",
+  userSeed: string
+): DailyTournamentSpotlight | null => {
+  const candidates: DailyTournamentSpotlight[] = [];
+  const leader = insight.leader;
+  const bestTeam = insight.bestTeam;
+  const latestResult = insight.latestResult;
+  const nextMatch = insight.nextMatch;
+  const regularLines = insight.playerLines.filter((line) => line.gamesPlayed >= 2);
+  const topScoringLines = regularLines
+    .slice()
+    .sort((lineA, lineB) => lineB.perGame.ppg - lineA.perGame.ppg)
+    .slice(0, 5);
+  const topReboundLines = regularLines
+    .slice()
+    .sort((lineA, lineB) => lineB.perGame.rpg - lineA.perGame.rpg)
+    .slice(0, 4);
+  const top3ptLines = regularLines
+    .filter((line) => line.totals.tpa >= 8)
+    .slice()
+    .sort((lineA, lineB) => lineB.tpPct - lineA.tpPct)
+    .slice(0, 4);
+  const low3ptLines = regularLines
+    .filter((line) => line.totals.tpa >= 8)
+    .slice()
+    .sort((lineA, lineB) => lineA.tpPct - lineB.tpPct)
+    .slice(0, 4);
+  const topFtLines = regularLines
+    .filter((line) => line.totals.fta >= 8)
+    .slice()
+    .sort((lineA, lineB) => lineB.ftPct - lineA.ftPct)
+    .slice(0, 4);
+  const lowFtLines = regularLines
+    .filter((line) => line.totals.fta >= 8)
+    .slice()
+    .sort((lineA, lineB) => lineA.ftPct - lineB.ftPct)
+    .slice(0, 4);
+  const topImpactLines = regularLines
+    .slice()
+    .sort((lineA, lineB) => lineB.perGame.plusMinus - lineA.perGame.plusMinus)
+    .slice(0, 4);
+  const lowImpactLines = regularLines
+    .slice()
+    .sort((lineA, lineB) => lineA.perGame.plusMinus - lineB.perGame.plusMinus)
+    .slice(0, 4);
+
+  if (leader) {
+    pushDailySpotlightVariants(
+      candidates,
+      `leader-${leader.playerId}`,
+      {
+        badge: "Nunaico del día",
+        accent: "warning",
+        photo: leader.photo,
+        photoAlt: leader.name,
+        statLeftLabel: "Puntos",
+        statLeftValue: String(leader.totalPoints),
+        statRightLabel: "PPP",
+        statRightValue: leader.ppp.toFixed(1),
+      },
+      [
+        {
+          idSuffix: "fuego",
+          title: `${abbreviateLeaderboardName(leader.name, 24)} está prendío`,
+          description: `Anda sin freno con ${leader.totalPoints} puntos y ${leader.ppp.toFixed(1)} PPP en regular.`,
+        },
+        {
+          idSuffix: "microondas",
+          title: `${abbreviateLeaderboardName(leader.name, 24)} vino microondas`,
+          description: `Le da al torneo una presión real: anota en volumen y sostiene el ritmo de su equipo.`,
+        },
+        {
+          idSuffix: "su-numero",
+          title: `${abbreviateLeaderboardName(leader.name, 24)} está en su número`,
+          description: `Cuando se calienta, la pizarra lo siente. Está marcando el paso ofensivo de la liga.`,
+        },
+        {
+          idSuffix: "luz-verde",
+          title: `${abbreviateLeaderboardName(leader.name, 24)} tiene luz verde`,
+          description: `Lo dejaron cocinar y está respondiendo: ${leader.totalPoints} puntos acumulados en el torneo.`,
+        },
+      ]
+    );
+  }
+
+  if (bestTeam) {
+    const teamFace = insight.topScorers.find((player) => player.teamName === bestTeam.name)?.photo ?? null;
+    pushDailySpotlightVariants(
+      candidates,
+      `team-${bestTeam.teamId}`,
+      {
+        badge: "Equipo caliente",
+        accent: "primary",
+        photo: teamFace,
+        photoAlt: bestTeam.name,
+        statLeftLabel: "Récord",
+        statLeftValue: `${bestTeam.pg}-${bestTeam.pp}`,
+        statRightLabel: "Win%",
+        statRightValue: `${(bestTeam.winPct * 100).toFixed(1)}%`,
+      },
+      [
+        {
+          idSuffix: "paso-firme",
+          title: `${abbreviateLeaderboardName(bestTeam.name, 24)} va con todo`,
+          description: `Marca ${bestTeam.pg}-${bestTeam.pp} y domina el paso del torneo.`,
+        },
+        {
+          idSuffix: "sin-relajo",
+          title: `${abbreviateLeaderboardName(bestTeam.name, 24)} no está en relajo`,
+          description: `Ese grupo está jugando serio y se nota en la tabla. Récord de respeto en regular.`,
+        },
+        {
+          idSuffix: "timon",
+          title: `${abbreviateLeaderboardName(bestTeam.name, 24)} tiene el timón`,
+          description: `Se plantó arriba con constancia: gana, cierra y mantiene el ritmo jornada tras jornada.`,
+        },
+      ]
+    );
+  }
+
+  regularLines
+    .slice()
+    .sort((a, b) => b.perGame.apg - a.perGame.apg)
+    .slice(0, 5)
+    .forEach((line) => {
+      pushDailySpotlightVariants(
+        candidates,
+        `creator-${line.playerId}`,
+        {
+          badge: "Mente de juego",
+          accent: "primary",
+          photo: line.photo ?? null,
+          photoAlt: line.name,
+          statLeftLabel: "APP",
+          statLeftValue: line.perGame.apg.toFixed(1),
+          statRightLabel: "PRA",
+          statRightValue: (line.perGame.ppg + line.perGame.rpg + line.perGame.apg).toFixed(1),
+        },
+        [
+          {
+            idSuffix: "reparte",
+            title: `${abbreviateLeaderboardName(line.name, 24)} reparte la funda`,
+            description: `Está moviendo el balón con intención y dejando ventaja para su equipo.`,
+          },
+          {
+            idSuffix: "ritmo",
+            title: `${abbreviateLeaderboardName(line.name, 24)} controla el ritmo`,
+            description: `Cuando acelera o pausa, todo el ataque se ordena alrededor de su lectura.`,
+          },
+          {
+            idSuffix: "direccion",
+            title: `${abbreviateLeaderboardName(line.name, 24)} dirige con calma`,
+            description: `No juega apurado, juega claro. Eso le está sumando valor al grupo cada noche.`,
+          },
+        ]
+      );
+    });
+
+  topScoringLines.forEach((line) => {
+    pushDailySpotlightVariants(
+      candidates,
+      `scoring-${line.playerId}`,
+      {
+        badge: "Fábrica de puntos",
+        accent: "success",
+        photo: line.photo ?? null,
+        photoAlt: line.name,
+        statLeftLabel: "PPP",
+        statLeftValue: line.perGame.ppg.toFixed(1),
+        statRightLabel: "PTS",
+        statRightValue: String(line.totals.points),
+      },
+      [
+        {
+          idSuffix: "cae-cuarto",
+          title: `${abbreviateLeaderboardName(line.name, 24)} cae con cuarto`,
+          description: `Cada juego te garantiza puntos. Es una de las ofensivas más estables del torneo.`,
+        },
+        {
+          idSuffix: "sin-freno",
+          title: `${abbreviateLeaderboardName(line.name, 24)} no suelta el acelerador`,
+          description: `Anota en ráfagas y obliga a la defensa a cambiar plan de juego.`,
+        },
+      ]
+    );
+  });
+
+  topReboundLines.forEach((line) => {
+    pushDailySpotlightVariants(
+      candidates,
+      `boards-${line.playerId}`,
+      {
+        badge: "Dueño del rebote",
+        accent: "success",
+        photo: line.photo ?? null,
+        photoAlt: line.name,
+        statLeftLabel: "RPP",
+        statLeftValue: line.perGame.rpg.toFixed(1),
+        statRightLabel: "PJ",
+        statRightValue: String(line.gamesPlayed),
+      },
+      [
+        {
+          idSuffix: "cristales",
+          title: `${abbreviateLeaderboardName(line.name, 24)} está limpiando los cristales`,
+          description: `Cada rebote extra es una posesión más para su equipo. Está dominando en esfuerzo.`,
+        },
+        {
+          idSuffix: "segundas",
+          title: `${abbreviateLeaderboardName(line.name, 24)} gana segundas oportunidades`,
+          description: `Su trabajo en el tablero está inclinando partidos sin necesidad de mucho ruido.`,
+        },
+      ]
+    );
+  });
+
+  regularLines
+    .slice()
+    .sort(
+      (a, b) =>
+        b.perGame.spg + b.perGame.bpg - (a.perGame.spg + a.perGame.bpg)
+    )
+    .slice(0, 5)
+    .forEach((line) => {
+      pushDailySpotlightVariants(
+        candidates,
+        `defense-${line.playerId}`,
+        {
+          badge: "Candado activo",
+          accent: "success",
+          photo: line.photo ?? null,
+          photoAlt: line.name,
+          statLeftLabel: "ROB",
+          statLeftValue: line.perGame.spg.toFixed(1),
+          statRightLabel: "TAP",
+          statRightValue: line.perGame.bpg.toFixed(1),
+        },
+        [
+          {
+            idSuffix: "cerrando",
+            title: `${abbreviateLeaderboardName(line.name, 24)} está cerrando`,
+            description: `Cuando este tigre aprieta atrás, la ofensiva rival se tranca.`,
+          },
+          {
+            idSuffix: "candado",
+            title: `${abbreviateLeaderboardName(line.name, 24)} puso candado`,
+            description: `Está metiendo manos legales, rotando bien y cambiando tiros clave.`,
+          },
+          {
+            idSuffix: "pesadilla",
+            title: `${abbreviateLeaderboardName(line.name, 24)} se volvió una pesadilla`,
+            description: `Defiende líneas de pase y complica cada posesión en el perímetro.`,
+          },
+        ]
+      );
+    });
+
+  regularLines
+    .filter((line) => line.totals.fga >= 18)
+    .slice()
+    .sort((a, b) => b.fgPct - a.fgPct)
+    .slice(0, 5)
+    .forEach((line) => {
+      pushDailySpotlightVariants(
+        candidates,
+        `efficiency-${line.playerId}`,
+        {
+          badge: "Mano fina",
+          accent: "success",
+          photo: line.photo ?? null,
+          photoAlt: line.name,
+          statLeftLabel: "FG%",
+          statLeftValue: `${line.fgPct.toFixed(1)}%`,
+          statRightLabel: "PPP",
+          statRightValue: line.perGame.ppg.toFixed(1),
+        },
+        [
+          {
+            idSuffix: "calibrado",
+            title: `${abbreviateLeaderboardName(line.name, 24)} anda calibrado`,
+            description: `Está tirando con buen timing y sacándole jugo a cada posesión.`,
+          },
+          {
+            idSuffix: "muneca-fina",
+            title: `${abbreviateLeaderboardName(line.name, 24)} tiene la muñeca fina`,
+            description: `No fuerza tanto y por eso su eficiencia ofensiva se mantiene arriba.`,
+          },
+          {
+            idSuffix: "elige-bien",
+            title: `${abbreviateLeaderboardName(line.name, 24)} está eligiendo bien`,
+            description: `Buenas decisiones, buenos tiros, buenos porcentajes. Fórmula simple y efectiva.`,
+          },
+        ]
+      );
+    });
+
+  top3ptLines.forEach((line) => {
+    pushDailySpotlightVariants(
+      candidates,
+      `triples-hot-${line.playerId}`,
+      {
+        badge: "Mira de 3",
+        accent: "success",
+        photo: line.photo ?? null,
+        photoAlt: line.name,
+        statLeftLabel: "3P%",
+        statLeftValue: `${line.tpPct.toFixed(1)}%`,
+        statRightLabel: "3PA",
+        statRightValue: String(line.totals.tpa),
+      },
+      [
+        {
+          idSuffix: "francotirador",
+          title: `${abbreviateLeaderboardName(line.name, 24)} está francotirador`,
+          description: `Desde afuera está cobrando peaje. Si le das espacio, castiga.`,
+        },
+        {
+          idSuffix: "perimetro",
+          title: `${abbreviateLeaderboardName(line.name, 24)} manda en el perímetro`,
+          description: `Su amenaza de tres abre cancha y le cambia la defensa al rival.`,
+        },
+      ]
+    );
+  });
+
+  topFtLines.forEach((line) => {
+    pushDailySpotlightVariants(
+      candidates,
+      `ft-hot-${line.playerId}`,
+      {
+        badge: "Línea segura",
+        accent: "success",
+        photo: line.photo ?? null,
+        photoAlt: line.name,
+        statLeftLabel: "TL%",
+        statLeftValue: `${line.ftPct.toFixed(1)}%`,
+        statRightLabel: "TLA",
+        statRightValue: String(line.totals.fta),
+      },
+      [
+        {
+          idSuffix: "linea-fria",
+          title: `${abbreviateLeaderboardName(line.name, 24)} no tiembla en la línea`,
+          description: `Cuando va al libre, su equipo respira. Está siendo garantía en cierre.`,
+        },
+        {
+          idSuffix: "cerrador",
+          title: `${abbreviateLeaderboardName(line.name, 24)} cierra con libres`,
+          description: `En partido apretado, estos puntos pesan como oro.`,
+        },
+      ]
+    );
+  });
+
+  topImpactLines.forEach((line) => {
+    pushDailySpotlightVariants(
+      candidates,
+      `impact-up-${line.playerId}`,
+      {
+        badge: "Impacto positivo",
+        accent: "success",
+        photo: line.photo ?? null,
+        photoAlt: line.name,
+        statLeftLabel: "+/- PJ",
+        statLeftValue: line.perGame.plusMinus.toFixed(1),
+        statRightLabel: "VAL/PJ",
+        statRightValue: line.valuationPerGame.toFixed(1),
+      },
+      [
+        {
+          idSuffix: "plus",
+          title: `${abbreviateLeaderboardName(line.name, 24)} mejora el equipo en cancha`,
+          description: `Los parciales suelen favorecer a su quinteto cuando está en juego.`,
+        },
+        {
+          idSuffix: "equilibrio",
+          title: `${abbreviateLeaderboardName(line.name, 24)} aporta equilibrio real`,
+          description: `No siempre hace ruido, pero sus minutos empujan al equipo hacia adelante.`,
+        },
+      ]
+    );
+  });
+
+  regularLines
+    .slice()
+    .sort((a, b) => b.perGame.topg - a.perGame.topg)
+    .slice(0, 5)
+    .forEach((line) => {
+      pushDailySpotlightVariants(
+        candidates,
+        `turnovers-${line.playerId}`,
+        {
+          badge: "En ajuste",
+          accent: "warning",
+          photo: line.photo ?? null,
+          photoAlt: line.name,
+          statLeftLabel: "TOPG",
+          statLeftValue: line.perGame.topg.toFixed(1),
+          statRightLabel: "APP",
+          statRightValue: line.perGame.apg.toFixed(1),
+        },
+        [
+          {
+            idSuffix: "pegamento",
+            title: `${abbreviateLeaderboardName(line.name, 24)} necesita pegamento`,
+            description: `La bola se le está escapando más de la cuenta. Hoy toca jugar más simple.`,
+          },
+          {
+            idSuffix: "mantequilla",
+            title: `${abbreviateLeaderboardName(line.name, 24)} tiene la mano con mantequilla`,
+            description: `Está soltando la bola temprano. Si baja pérdidas, sube su impacto de una vez.`,
+          },
+          {
+            idSuffix: "jabon",
+            title: `${abbreviateLeaderboardName(line.name, 24)} anda con el balón en jabón`,
+            description: `Cada posesión está pidiendo más cuidado. Menos riesgo, más control.`,
+          },
+          {
+            idSuffix: "acelerado",
+            title: `${abbreviateLeaderboardName(line.name, 24)} está jugando acelerado`,
+            description: `Con una pausa extra en cada ataque puede cortar pérdidas rápido.`,
+          },
+        ]
+      );
+    });
+
+  regularLines
+    .slice()
+    .sort((a, b) => b.perGame.fpg - a.perGame.fpg)
+    .slice(0, 5)
+    .forEach((line) => {
+      pushDailySpotlightVariants(
+        candidates,
+        `fouls-${line.playerId}`,
+        {
+          badge: "Falta control",
+          accent: "warning",
+          photo: line.photo ?? null,
+          photoAlt: line.name,
+          statLeftLabel: "FPG",
+          statLeftValue: line.perGame.fpg.toFixed(1),
+          statRightLabel: "PJ",
+          statRightValue: String(line.gamesPlayed),
+        },
+        [
+          {
+            idSuffix: "zona-faltas",
+            title: `${abbreviateLeaderboardName(line.name, 24)} está en zona de faltas`,
+            description: `Si baja el contacto innecesario, puede rendir más minutos de calidad.`,
+          },
+          {
+            idSuffix: "bonus",
+            title: `${abbreviateLeaderboardName(line.name, 24)} está regalando bonus`,
+            description: `Necesita defender con más disciplina para no poner al rival en la línea.`,
+          },
+          {
+            idSuffix: "afinar",
+            title: `${abbreviateLeaderboardName(line.name, 24)} tiene que afinar las manos`,
+            description: `Le están pitando mucho contacto. Con técnica limpia gana continuidad.`,
+          },
+        ]
+      );
+    });
+
+  regularLines
+    .filter((line) => line.totals.fga >= 18)
+    .slice()
+    .sort((a, b) => a.fgPct - b.fgPct)
+    .slice(0, 5)
+    .forEach((line) => {
+      pushDailySpotlightVariants(
+        candidates,
+        `cold-${line.playerId}`,
+        {
+          badge: "Día salao",
+          accent: "warning",
+          photo: line.photo ?? null,
+          photoAlt: line.name,
+          statLeftLabel: "FG%",
+          statLeftValue: `${line.fgPct.toFixed(1)}%`,
+          statRightLabel: "Tiros",
+          statRightValue: String(line.totals.fga),
+        },
+        [
+          {
+            idSuffix: "aro-apretado",
+            title: `${abbreviateLeaderboardName(line.name, 24)} tiene el aro apretado`,
+            description: `No está entrando como quiere, pero esto cambia con dos juegos buenos.`,
+          },
+          {
+            idSuffix: "coco",
+            title: `${abbreviateLeaderboardName(line.name, 24)} no mete un coco en una piscina`,
+            description: `Está en racha fría, pero con selección de tiro más limpia puede romper eso rápido.`,
+          },
+          {
+            idSuffix: "salao",
+            title: `${abbreviateLeaderboardName(line.name, 24)} anda salao en ofensiva`,
+            description: `La bola le está coqueteando al aro. Calma y buenos tiros para virar la historia.`,
+          },
+          {
+            idSuffix: "aro-chiquito",
+            title: `${abbreviateLeaderboardName(line.name, 24)} ve el aro chiquito`,
+            description: `Cuando vuelva a su ritmo, esos porcentajes deben subir de inmediato.`,
+          },
+        ]
+      );
+    });
+
+  low3ptLines.forEach((line) => {
+    pushDailySpotlightVariants(
+      candidates,
+      `triples-cold-${line.playerId}`,
+      {
+        badge: "Perímetro en ajuste",
+        accent: "warning",
+        photo: line.photo ?? null,
+        photoAlt: line.name,
+        statLeftLabel: "3P%",
+        statLeftValue: `${line.tpPct.toFixed(1)}%`,
+        statRightLabel: "3PA",
+        statRightValue: String(line.totals.tpa),
+      },
+      [
+        {
+          idSuffix: "frio",
+          title: `${abbreviateLeaderboardName(line.name, 24)} está frío de tres`,
+          description: `Hay volumen, pero falta precisión. Buen momento para resetear mecánica.`,
+        },
+        {
+          idSuffix: "afuera",
+          title: `${abbreviateLeaderboardName(line.name, 24)} necesita ajustar de afuera`,
+          description: `Con un par de juegos sólidos desde el perímetro cambia su lectura completa.`,
+        },
+      ]
+    );
+  });
+
+  lowFtLines.forEach((line) => {
+    pushDailySpotlightVariants(
+      candidates,
+      `ft-cold-${line.playerId}`,
+      {
+        badge: "Libres en ajuste",
+        accent: "warning",
+        photo: line.photo ?? null,
+        photoAlt: line.name,
+        statLeftLabel: "TL%",
+        statLeftValue: `${line.ftPct.toFixed(1)}%`,
+        statRightLabel: "TLA",
+        statRightValue: String(line.totals.fta),
+      },
+      [
+        {
+          idSuffix: "linea",
+          title: `${abbreviateLeaderboardName(line.name, 24)} está dejando puntos en la línea`,
+          description: `Los libres pueden ser su salto inmediato. Aquí hay margen claro de mejora.`,
+        },
+        {
+          idSuffix: "gratis",
+          title: `${abbreviateLeaderboardName(line.name, 24)} tiene que cobrar los gratis`,
+          description: `En cierre apretado, estos puntos pesan más que cualquier jugada bonita.`,
+        },
+      ]
+    );
+  });
+
+  lowImpactLines.forEach((line) => {
+    pushDailySpotlightVariants(
+      candidates,
+      `impact-down-${line.playerId}`,
+      {
+        badge: "Modo recarga",
+        accent: "primary",
+        photo: line.photo ?? null,
+        photoAlt: line.name,
+        statLeftLabel: "+/- PJ",
+        statLeftValue: line.perGame.plusMinus.toFixed(1),
+        statRightLabel: "VAL/PJ",
+        statRightValue: line.valuationPerGame.toFixed(1),
+      },
+      [
+        {
+          idSuffix: "beta",
+          title: `${abbreviateLeaderboardName(line.name, 24)} está en versión beta`,
+          description: `Tiene herramientas, pero necesita un tramo sólido para estabilizar impacto.`,
+        },
+        {
+          idSuffix: "subir",
+          title: `${abbreviateLeaderboardName(line.name, 24)} puede subir de nivel`,
+          description: `Con menos errores forzados y mejor selección, su lectura cambia de una vez.`,
+        },
+      ]
+    );
+  });
+
+  if (latestResult) {
+    const hasScore =
+      Number.isFinite(latestResult.teamAPoints) &&
+      Number.isFinite(latestResult.teamBPoints) &&
+      (latestResult.teamAPoints > 0 || latestResult.teamBPoints > 0);
+    const margin = hasScore ? Math.abs(latestResult.teamAPoints - latestResult.teamBPoints) : 0;
+    const winningTeam = hasScore
+      ? latestResult.teamAPoints > latestResult.teamBPoints
+        ? latestResult.teamA
+        : latestResult.teamB
+      : latestResult.winnerTeam;
+    const winningFace =
+      insight.topScorers.find((player) => player.teamName === winningTeam)?.photo ?? leader?.photo ?? null;
+    const losingTeam = hasScore
+      ? latestResult.teamAPoints > latestResult.teamBPoints
+        ? latestResult.teamB
+        : latestResult.teamA
+      : null;
+
+    pushDailySpotlightVariants(
+      candidates,
+      `result-${latestResult.matchId}`,
+      {
+        badge: "Cierre pesado",
+        accent: "success",
+        photo: winningFace,
+        photoAlt: winningTeam ?? "Resultado del torneo",
+        statLeftLabel: "Marcador",
+        statLeftValue: formatMatchScoreLine(latestResult),
+        statRightLabel: "Fecha",
+        statRightValue: formatHomeDate(latestResult.matchDate, { day: "2-digit", month: "short" }),
+      },
+      [
+        {
+          idSuffix: "duro",
+          title: hasScore
+            ? `${abbreviateLeaderboardName(winningTeam ?? "Partidazo", 24)} cerró duro`
+            : "Se cerró la jornada",
+          description: hasScore
+            ? `${latestResult.teamA} ${latestResult.teamAPoints} - ${latestResult.teamBPoints} ${latestResult.teamB}. Brecha de ${margin}.`
+            : `Ganó ${latestResult.winnerTeam ?? "el local"} y sigue subiendo la presión en la tabla.`,
+        },
+        {
+          idSuffix: "sin-piedad",
+          title: hasScore
+            ? `${abbreviateLeaderboardName(winningTeam ?? "Ganador", 24)} no bajó el ritmo`
+            : "Jornada cerrada con autoridad",
+          description: hasScore
+            ? `${abbreviateLeaderboardName(winningTeam ?? "El ganador", 20)} sacó ventaja de ${margin} y dejó a ${abbreviateLeaderboardName(losingTeam ?? "su rival", 18)} persiguiendo.`
+            : "El resultado se decidió por ejecución y control en los minutos finales.",
+        },
+      ]
+    );
+  }
+
+  if (nextMatch) {
+    const nextFace =
+      insight.topScorers.find(
+        (player) => player.teamName === nextMatch.teamA || player.teamName === nextMatch.teamB
+      )?.photo ?? null;
+    pushDailySpotlightVariants(
+      candidates,
+      `next-${nextMatch.matchId}`,
+      {
+        badge: "Alerta de cancha",
+        accent: "primary",
+        photo: nextFace,
+        photoAlt: `${nextMatch.teamA} vs ${nextMatch.teamB}`,
+        statLeftLabel: "Hora",
+        statLeftValue: formatHomeTime(nextMatch.matchTime),
+        statRightLabel: "Fecha",
+        statRightValue: formatHomeDate(nextMatch.matchDate, { day: "2-digit", month: "short" }),
+      },
+      [
+        {
+          idSuffix: "picante",
+          title: `${abbreviateLeaderboardName(nextMatch.teamA, 14)} vs ${abbreviateLeaderboardName(nextMatch.teamB, 14)}`,
+          description: "Próximo choque en agenda. Nada de pestañear, que este viene picante.",
+        },
+        {
+          idSuffix: "candela",
+          title: `${abbreviateLeaderboardName(nextMatch.teamA, 14)} y ${abbreviateLeaderboardName(nextMatch.teamB, 14)} vienen en candela`,
+          description: "Juego para llegar temprano. Puede mover tabla y narrativas del torneo.",
+        },
+      ]
+    );
+  }
+
+  return selectDailySpotlight(
+    candidates,
+    `${insight.tournamentId}:${mode}:${getTodayIsoLocal()}:${userSeed}:${candidates.length}`
+  );
 };
 
 const Home: React.FC = () => {
@@ -539,22 +1327,80 @@ const TournamentHomeEmpty = () => (
 
 const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
   const { insight, loading, errorMessage, refresh } = useTournamentHomeFeed();
+  const [dailySpotlight, setDailySpotlight] = useState<DailyTournamentSpotlight | null>(null);
+  const [dailySpotlightOpen, setDailySpotlightOpen] = useState(false);
+  const [dailySpotlightUnread, setDailySpotlightUnread] = useState(false);
 
-  const heroStats = useMemo(() => {
-    if (!insight) {
-      return [
+  const heroStats = insight
+    ? [
+        { label: "Finalizados", value: String(insight.playedResultsCount) },
+        { label: "Pendientes", value: String(insight.pendingMatchesCount) },
+        { label: "Cobertura", value: `${insight.statsCoveragePct.toFixed(0)}%` },
+      ]
+    : [
         { label: "Finalizados", value: "--" },
         { label: "Pendientes", value: "--" },
         { label: "Cobertura", value: "--" },
       ];
+
+  useEffect(() => {
+    if (!insight) {
+      setDailySpotlight(null);
+      setDailySpotlightOpen(false);
+      setDailySpotlightUnread(false);
+      return;
     }
 
-    return [
-      { label: "Finalizados", value: String(insight.playedResultsCount) },
-      { label: "Pendientes", value: String(insight.pendingMatchesCount) },
-      { label: "Cobertura", value: `${insight.statsCoveragePct.toFixed(0)}%` },
-    ];
-  }, [insight]);
+    const todayIso = getTodayIsoLocal();
+    const spotlight = buildDailySpotlight(insight, mode, getDailySpotlightUserSeed());
+    if (!spotlight) {
+      setDailySpotlight(null);
+      setDailySpotlightOpen(false);
+      setDailySpotlightUnread(false);
+      return;
+    }
+
+    setDailySpotlight(spotlight);
+    const autoShownKey = buildDailySpotlightAutoShownKey(insight.tournamentId, mode, todayIso);
+    const readKey = buildDailySpotlightReadKey(insight.tournamentId, mode, todayIso);
+
+    let shouldAutoOpen = true;
+    let unread = true;
+
+    try {
+      const alreadyAutoShown = window.localStorage.getItem(autoShownKey) === "1";
+      const alreadyRead = window.localStorage.getItem(readKey) === "1";
+
+      if (!alreadyAutoShown) {
+        window.localStorage.setItem(autoShownKey, "1");
+      }
+
+      shouldAutoOpen = !alreadyAutoShown;
+      unread = !alreadyRead;
+    } catch {
+      // noop: if localStorage is unavailable, behaves as session-only popup.
+    }
+
+    setDailySpotlightUnread(unread);
+    setDailySpotlightOpen(shouldAutoOpen);
+  }, [insight, mode]);
+
+  const handleCloseDailySpotlight = () => {
+    setDailySpotlightOpen(false);
+  };
+
+  const handleOpenDailySpotlightFromBubble = () => {
+    if (!insight || !dailySpotlight) return;
+    setDailySpotlightOpen(true);
+    setDailySpotlightUnread(false);
+
+    const readKey = buildDailySpotlightReadKey(insight.tournamentId, mode, getTodayIsoLocal());
+    try {
+      window.localStorage.setItem(readKey, "1");
+    } catch {
+      // noop
+    }
+  };
 
   if (loading) return <TournamentHomeLoading />;
   if (errorMessage) return <TournamentHomeError errorMessage={errorMessage} onRetry={refresh} />;
@@ -573,6 +1419,27 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
         return b.overallScore - a.overallScore;
       })
     : [];
+  const leagueFlavorLine = (() => {
+    if (insight.leader && insight.bestTeam && insight.leader.teamName === insight.bestTeam.name) {
+      return `${insight.bestTeam.name} está encendida: manda en tabla y también tiene al cañonero del torneo.`;
+    }
+
+    if (insight.nextMatch && insight.latestResult) {
+      return `Se cerró ${formatMatchScoreLine(insight.latestResult)} y lo próximo viene con swing: ${insight.nextMatch.teamA} vs ${insight.nextMatch.teamB}.`;
+    }
+
+    if (insight.leader) {
+      return `${insight.leader.name} anda en modo microondas con ${insight.leader.totalPoints} puntos acumulados.`;
+    }
+
+    return "La liga está en movimiento: cada jornada aprieta más la tabla.";
+  })();
+  const spotlightToneClass =
+    dailySpotlight?.accent === "warning"
+      ? "border-[hsl(var(--warning)/0.42)] bg-[hsl(var(--warning)/0.12)]"
+      : dailySpotlight?.accent === "success"
+        ? "border-[hsl(var(--success)/0.38)] bg-[hsl(var(--success)/0.1)]"
+        : "border-[hsl(var(--primary)/0.36)] bg-[hsl(var(--primary)/0.1)]";
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -622,185 +1489,200 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
 
           <article className="rounded-[12px] border bg-[hsl(var(--surface-1)/0.96)] p-4">
             <div className="flex items-center gap-2">
-              <UserGroupIcon className="h-5 w-5 text-[hsl(var(--primary))]" />
-              <p className="text-sm font-semibold">Jugadores en foco</p>
+              <FireIcon className="h-5 w-5 text-[hsl(var(--warning))]" />
+              <p className="text-sm font-semibold">Pulso del torneo</p>
             </div>
+
             <div className="mt-3 space-y-2.5">
-              {topScorers.length > 0 ? (
-                topScorers.slice(0, 4).map((player, index) => (
-                  <div key={player.playerId} className="flex items-center justify-between gap-2">
-                    <div className="min-w-0 inline-flex items-center gap-2">
-                      {player.photo ? (
-                        <img
-                          src={player.photo}
-                          alt={player.name}
-                          className="h-8 w-8 rounded-full object-cover border border-[hsl(var(--border)/0.82)]"
-                        />
-                      ) : (
-                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-2))] text-[10px] font-semibold">
-                          {getPlayerInitials(player.name)}
-                        </span>
-                      )}
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold" title={player.name}>
-                          #{index + 1} {abbreviateLeaderboardName(player.name, 18)}
-                        </p>
-                        <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
-                          {player.teamName ?? "Sin equipo"}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold tabular-nums">{player.totalPoints}</p>
-                      <p className="text-[11px] text-[hsl(var(--text-subtle))]">{player.ppp.toFixed(1)} PPP</p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-[hsl(var(--muted-foreground))]">Aún no hay líderes de puntos para mostrar.</p>
-              )}
+              <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-3 py-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">Próximo tip-off</p>
+                {insight.nextMatch ? (
+                  <>
+                    <p className="mt-0.5 text-sm font-semibold">
+                      {insight.nextMatch.teamA} <span className="text-[hsl(var(--text-subtle))]">vs</span> {insight.nextMatch.teamB}
+                    </p>
+                    <p className="text-xs text-[hsl(var(--muted-foreground))]">{formatUpcomingMatchLabel(insight.nextMatch)}</p>
+                  </>
+                ) : (
+                  <p className="mt-0.5 text-xs text-[hsl(var(--muted-foreground))]">Sin partido pendiente en agenda.</p>
+                )}
+              </article>
+
+              <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-3 py-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">Último cierre</p>
+                {insight.latestResult ? (
+                  <>
+                    <p className="mt-0.5 text-sm font-semibold">
+                      {insight.latestResult.teamA} <span className="text-[hsl(var(--text-subtle))]">vs</span> {insight.latestResult.teamB}
+                    </p>
+                    <p className="text-xs font-semibold tabular-nums">{formatMatchScoreLine(insight.latestResult)}</p>
+                  </>
+                ) : (
+                  <p className="mt-0.5 text-xs text-[hsl(var(--muted-foreground))]">Aún no hay resultados cerrados.</p>
+                )}
+              </article>
+
+              <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-3 py-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">Línea caliente</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-[hsl(var(--muted-foreground))]">{leagueFlavorLine}</p>
+              </article>
             </div>
           </article>
         </div>
       </section>
 
+      <section className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
+        <SectionCard title="Radar semanal" description="Calendario y cierres clave en una sola vista.">
+          <div className="space-y-2.5">
+            <div className="flex flex-wrap gap-2">
+              <Badge variant={insight.todayPendingMatchesCount > 0 ? "warning" : "default"}>
+                Hoy: {insight.todayPendingMatchesCount}
+              </Badge>
+              <Badge variant="primary">7 días: {insight.next7DaysPendingMatchesCount}</Badge>
+              <Badge
+                variant={
+                  insight.statsCoveragePct >= 70 ? "success" : insight.statsCoveragePct >= 35 ? "warning" : "danger"
+                }
+              >
+                Cobertura: {insight.statsCoveragePct.toFixed(0)}%
+              </Badge>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">Próximos juegos</p>
+                {insight.upcomingMatches.length > 0 ? (
+                  <ul className="mt-2 space-y-1.5">
+                    {insight.upcomingMatches.slice(0, 3).map((match) => (
+                      <li key={match.matchId} className="text-xs leading-relaxed">
+                        <p className="font-semibold">
+                          {match.teamA} <span className="text-[hsl(var(--text-subtle))]">vs</span> {match.teamB}
+                        </p>
+                        <p className="text-[hsl(var(--muted-foreground))]">{formatUpcomingMatchLabel(match)}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">No hay juegos pendientes en agenda.</p>
+                )}
+              </article>
+
+              <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">Cierres recientes</p>
+                {insight.latestResults.length > 0 ? (
+                  <ul className="mt-2 space-y-1.5">
+                    {insight.latestResults.slice(0, 3).map((match) => (
+                      <li key={match.matchId} className="text-xs leading-relaxed">
+                        <p className="font-semibold">{abbreviateLeaderboardName(`${match.teamA} vs ${match.teamB}`, 28)}</p>
+                        <p className="font-semibold tabular-nums">{formatMatchScoreLine(match)}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">Aún no hay resultados finalizados.</p>
+                )}
+              </article>
+            </div>
+
+            <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">Lectura de camerino</p>
+              <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">{leagueFlavorLine}</p>
+            </article>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Ranking express" description="Top anotadores y tabla sin vueltas.">
+          <div className="space-y-3">
+            <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+              <div className="mb-2 flex items-center gap-2">
+                <UserGroupIcon className="h-4 w-4 text-[hsl(var(--primary))]" />
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">Anotadores</p>
+              </div>
+              {topScorers.length > 0 ? (
+                <ul className="space-y-1.5">
+                  {topScorers.slice(0, 4).map((player, index) => (
+                    <li key={player.playerId} className="flex items-center justify-between gap-2 text-xs">
+                      <p className="truncate font-semibold" title={player.name}>
+                        #{index + 1} {abbreviateLeaderboardName(player.name, 18)}
+                      </p>
+                      <span className="shrink-0 font-semibold tabular-nums">{player.totalPoints} pts</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">Sin líderes aún.</p>
+              )}
+            </article>
+
+            <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+              <div className="mb-2 flex items-center gap-2">
+                <TrophyIcon className="h-4 w-4 text-[hsl(var(--warning))]" />
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">Equipos arriba</p>
+              </div>
+              {topTeams.length > 0 ? (
+                <ul className="space-y-1.5">
+                  {topTeams.slice(0, 4).map((team, index) => (
+                    <li key={team.teamId} className="flex items-center justify-between gap-2 text-xs">
+                      <p className="truncate font-semibold" title={team.name}>
+                        #{index + 1} {abbreviateLeaderboardName(team.name, 18)}
+                      </p>
+                      <span className="shrink-0 font-semibold tabular-nums">{team.pg}-{team.pp}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">Sin ranking suficiente todavía.</p>
+              )}
+            </article>
+          </div>
+        </SectionCard>
+      </section>
+
       <SectionCard
         title="Quinteto ideal inteligente"
-        description="Selección objetiva por rol (PG, SG, SF, PF, C) usando percentiles del torneo y confiabilidad por muestra."
+        description="Cinco puestos, una lectura objetiva y fácil de entender."
       >
         {idealFive ? (
           <div className="space-y-3">
-            <div className="sm:hidden space-y-3">
-              <div className="grid grid-cols-3 gap-2">
-                <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-2 py-1.5">
-                  <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Química</p>
-                  <p className="text-sm font-semibold tabular-nums">{idealFive.chemistryScore.toFixed(1)}</p>
-                </article>
-                <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-2 py-1.5">
-                  <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Modelo</p>
-                  <p className="text-sm font-semibold tabular-nums">{idealFive.modelScore.toFixed(1)}</p>
-                </article>
-                <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-2 py-1.5">
-                  <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Confianza</p>
-                  <p className="text-sm font-semibold capitalize">{idealFive.confidence}</p>
-                </article>
-              </div>
-
-              <ol className="space-y-2">
-                {idealFiveLineup.map((slot) => (
-                  <li key={`${slot.role}-${slot.playerId}`}>
-                    <article className="rounded-[12px] border bg-[hsl(var(--surface-1))] px-3 py-2.5 shadow-sm">
-                      <div className="flex items-center gap-2.5">
-                        <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-full border bg-[hsl(var(--surface-2))] px-2 text-[11px] font-black tracking-wide text-[hsl(var(--primary))]">
-                          {slot.role}
-                        </span>
-
-                        <div className="min-w-0 inline-flex flex-1 items-center gap-2">
-                          {slot.photo ? (
-                            <img
-                              src={slot.photo}
-                              alt={slot.name}
-                              className="h-9 w-9 rounded-full border border-[hsl(var(--border)/0.82)] object-cover"
-                            />
-                          ) : (
-                            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-2))] text-[10px] font-semibold">
-                              {getPlayerInitials(slot.name)}
-                            </span>
-                          )}
-
-                          <div className="min-w-0">
-                            <p className="truncate text-[13px] font-semibold leading-tight" title={slot.name}>
-                              {abbreviateLeaderboardName(slot.name, 22)}
-                            </p>
-                            <p className="truncate text-[11px] text-[hsl(var(--muted-foreground))]">
-                              {slot.teamName ?? "Sin equipo"} · {slot.gamesPlayed} PJ
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="shrink-0 text-right">
-                          <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">{slot.keyStatLabel}</p>
-                          <p className="text-[13px] font-semibold tabular-nums text-[hsl(var(--text-strong))]">{slot.keyStatValue}</p>
-                        </div>
-                      </div>
-
-                      <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px] text-[hsl(var(--text-subtle))]">
-                        <p className="truncate">{slot.archetype}</p>
-                        <p className="shrink-0 tabular-nums">Fit {slot.roleScore.toFixed(1)}</p>
-                      </div>
-                    </article>
-                  </li>
-                ))}
-              </ol>
-
-              <p className="text-[11px] leading-tight text-[hsl(var(--text-subtle))]" title={`${idealFive.note} (${idealFive.modelVersion})`}>
-                {idealFive.note} ({idealFive.modelVersion})
-              </p>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="success">Química: {idealFive.chemistryScore.toFixed(1)}</Badge>
+              <Badge variant="primary">Modelo: {idealFive.modelScore.toFixed(1)}</Badge>
+              <Badge
+                variant={
+                  idealFive.confidence === "alta"
+                    ? "success"
+                    : idealFive.confidence === "media"
+                      ? "warning"
+                      : "danger"
+                }
+              >
+                Confianza: {idealFive.confidence}
+              </Badge>
+              <Badge variant="default">Mín. juegos: {idealFive.minGames}</Badge>
             </div>
 
-            <div className="hidden sm:block space-y-3">
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="success">Química: {idealFive.chemistryScore.toFixed(1)}</Badge>
-                <Badge variant="primary">Modelo: {idealFive.modelScore.toFixed(1)}</Badge>
-                <Badge
-                  variant={
-                    idealFive.confidence === "alta"
-                      ? "success"
-                      : idealFive.confidence === "media"
-                        ? "warning"
-                        : "danger"
-                  }
-                >
-                  Confianza: {idealFive.confidence}
-                </Badge>
-                <Badge variant="primary">Muestra: {idealFive.sampleSize} jugadores</Badge>
-                <Badge variant="default">Mín. juegos: {idealFive.minGames}</Badge>
-              </div>
-
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                {idealFiveLineup.map((slot) => (
-                  <article key={`${slot.role}-${slot.playerId}`} className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+            <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+              {idealFiveLineup.map((slot) => (
+                <li key={`${slot.role}-${slot.playerId}`}>
+                  <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
                     <div className="flex items-start justify-between gap-2">
                       <Badge variant={IDEAL_FIVE_ROLE_BADGE_VARIANT[slot.role]}>{slot.role}</Badge>
-                      <div className="text-right text-[10px] text-[hsl(var(--text-subtle))]">
-                        <p>Fit {slot.roleScore.toFixed(1)}</p>
-                        <p>Obj {slot.overallScore.toFixed(1)}</p>
-                      </div>
+                      <p className="text-[10px] text-[hsl(var(--text-subtle))] tabular-nums">Fit {slot.roleScore.toFixed(1)}</p>
                     </div>
-
-                    <div className="mt-2 inline-flex items-center gap-2">
-                      {slot.photo ? (
-                        <img
-                          src={slot.photo}
-                          alt={slot.name}
-                          className="h-9 w-9 rounded-full border border-[hsl(var(--border)/0.82)] object-cover"
-                        />
-                      ) : (
-                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-2))] text-[10px] font-semibold">
-                          {getPlayerInitials(slot.name)}
-                        </span>
-                      )}
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold" title={slot.name}>
-                          {abbreviateLeaderboardName(slot.name, 16)}
-                        </p>
-                        <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
-                          {slot.teamName ?? "Sin equipo"} · {slot.gamesPlayed} PJ
-                        </p>
-                      </div>
-                    </div>
-
+                    <p className="mt-2 truncate text-sm font-semibold" title={slot.name}>
+                      {abbreviateLeaderboardName(slot.name, 18)}
+                    </p>
+                    <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">{slot.teamName ?? "Sin equipo"}</p>
                     <p className="mt-2 text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">{slot.keyStatLabel}</p>
-                    <p className="text-xs font-semibold text-[hsl(var(--text-strong))] tabular-nums">{slot.keyStatValue}</p>
-                    <p className="mt-1 text-[10px] text-[hsl(var(--text-subtle))]">{slot.archetype}</p>
+                    <p className="text-xs font-semibold tabular-nums">{slot.keyStatValue}</p>
                   </article>
-                ))}
-              </div>
+                </li>
+              ))}
+            </ol>
 
-              <p className="text-xs text-[hsl(var(--text-subtle))]">
-                {idealFive.note} ({idealFive.modelVersion})
-              </p>
-            </div>
+            <p className="text-xs text-[hsl(var(--text-subtle))]">
+              {idealFive.note} ({idealFive.modelVersion})
+            </p>
           </div>
         ) : (
           <p className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3 text-sm text-[hsl(var(--muted-foreground))]">
@@ -808,136 +1690,6 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
           </p>
         )}
       </SectionCard>
-
-      <section className="grid gap-3 lg:grid-cols-2">
-        <SectionCard title="Agenda inmediata" description="Próximos juegos y estado del calendario.">
-          <div className="space-y-2">
-            <div className="flex flex-wrap gap-2">
-              <Badge variant={insight.todayPendingMatchesCount > 0 ? "warning" : "default"}>
-                Hoy: {insight.todayPendingMatchesCount}
-              </Badge>
-              <Badge variant="primary">7 días: {insight.next7DaysPendingMatchesCount}</Badge>
-            </div>
-
-            {insight.upcomingMatches.length > 0 ? (
-              insight.upcomingMatches.slice(0, 4).map((match) => (
-                <article key={match.matchId} className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
-                  <p className="text-sm font-semibold">
-                    {match.teamA} <span className="text-[hsl(var(--text-subtle))]">vs</span> {match.teamB}
-                  </p>
-                  <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{formatUpcomingMatchLabel(match)}</p>
-                </article>
-              ))
-            ) : (
-              <p className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3 text-sm text-[hsl(var(--muted-foreground))]">
-                No hay partidos pendientes programados.
-              </p>
-            )}
-          </div>
-        </SectionCard>
-
-        <SectionCard title="Resultados recientes" description="Últimos cierres con marcador y cobertura.">
-          <div className="space-y-2">
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="primary">Finalizados: {insight.playedResultsCount}</Badge>
-              <Badge variant={insight.statsCoveragePct >= 70 ? "success" : insight.statsCoveragePct >= 35 ? "warning" : "danger"}>
-                Cobertura: {insight.statsCoveragePct.toFixed(0)}%
-              </Badge>
-            </div>
-
-            {insight.latestResults.length > 0 ? (
-              insight.latestResults.slice(0, 4).map((match) => (
-                <article key={match.matchId} className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold">
-                      {match.teamA} <span className="text-[hsl(var(--text-subtle))]">vs</span> {match.teamB}
-                    </p>
-                    <Badge variant={match.hasStats ? "success" : "default"}>
-                      {match.hasStats ? "Con stats" : "Sin stats"}
-                    </Badge>
-                  </div>
-                  <p className="mt-1 text-xs font-semibold tabular-nums">{formatMatchScoreLine(match)}</p>
-                  <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
-                    {formatHomeDateTime(match.matchDate, match.matchTime)}
-                  </p>
-                </article>
-              ))
-            ) : (
-              <p className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3 text-sm text-[hsl(var(--muted-foreground))]">
-                Aún no hay resultados finalizados.
-              </p>
-            )}
-          </div>
-        </SectionCard>
-      </section>
-
-      <section className="grid gap-3 lg:grid-cols-2">
-        <SectionCard title="Top anotadores" description="Más simple: puntos totales, PPP y foto del jugador.">
-          <div className="space-y-2">
-            {topScorers.length > 0 ? (
-              topScorers.map((player, index) => (
-                <article key={player.playerId} className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0 inline-flex items-center gap-2">
-                      {player.photo ? (
-                        <img
-                          src={player.photo}
-                          alt={player.name}
-                          className="h-9 w-9 rounded-full object-cover border border-[hsl(var(--border)/0.82)]"
-                        />
-                      ) : (
-                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-2))] text-[10px] font-semibold">
-                          {getPlayerInitials(player.name)}
-                        </span>
-                      )}
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold" title={player.name}>
-                          #{index + 1} {abbreviateLeaderboardName(player.name, 18)}
-                        </p>
-                        <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
-                          {player.teamName ?? "Sin equipo"} · {player.gamesPlayed} PJ
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold tabular-nums">{player.totalPoints}</p>
-                      <p className="text-xs text-[hsl(var(--text-subtle))]">{player.ppp.toFixed(1)} PPP</p>
-                    </div>
-                  </div>
-                </article>
-              ))
-            ) : (
-              <p className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3 text-sm text-[hsl(var(--muted-foreground))]">
-                Sin líderes disponibles todavía.
-              </p>
-            )}
-          </div>
-        </SectionCard>
-
-        <SectionCard title="Top equipos" description="Récord y win% para lectura rápida de la tabla.">
-          <div className="space-y-2">
-            {topTeams.length > 0 ? (
-              topTeams.map((team, index) => (
-                <article key={team.teamId} className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">#{index + 1} {team.name}</p>
-                      <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                        {team.pg}-{team.pp} · {team.pj} PJ
-                      </p>
-                    </div>
-                    <p className="text-sm font-bold tabular-nums">{formatPct(team.winPct)}</p>
-                  </div>
-                </article>
-              ))
-            ) : (
-              <p className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3 text-sm text-[hsl(var(--muted-foreground))]">
-                No hay tabla suficiente para mostrar ranking.
-              </p>
-            )}
-          </div>
-        </SectionCard>
-      </section>
 
       <SectionCard title="Accesos rápidos" description="Ir directo a las pantallas clave.">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -990,6 +1742,103 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
           ) : null}
         </div>
       </SectionCard>
+
+      <ModalShell
+        isOpen={Boolean(dailySpotlightOpen && dailySpotlight)}
+        onClose={handleCloseDailySpotlight}
+        title="Nunaico del día"
+        subtitle="Dosis rápida del torneo para arrancar la jornada."
+        maxWidthClassName="sm:max-w-xl"
+        actions={
+          <button type="button" className="btn-primary" onClick={handleCloseDailySpotlight}>
+            Entendido
+          </button>
+        }
+      >
+        {dailySpotlight ? (
+          <article className={`rounded-[12px] border p-3.5 sm:p-4 ${spotlightToneClass}`}>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={dailySpotlight.accent === "warning" ? "warning" : dailySpotlight.accent === "success" ? "success" : "primary"}>
+                {dailySpotlight.badge}
+              </Badge>
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+                <SparklesIcon className="h-3.5 w-3.5" />
+                1 vez por día
+              </span>
+            </div>
+
+            <div className="mt-3 flex items-start gap-3">
+              {dailySpotlight.photo ? (
+                <img
+                  src={dailySpotlight.photo}
+                  alt={dailySpotlight.photoAlt}
+                  className="h-14 w-14 shrink-0 rounded-full border border-[hsl(var(--border)/0.82)] object-cover"
+                />
+              ) : (
+                <span className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] text-[hsl(var(--text-subtle))]">
+                  <TrophyIcon className="h-7 w-7" />
+                </span>
+              )}
+
+              <div className="min-w-0">
+                <p className="text-base font-bold leading-tight sm:text-lg">{dailySpotlight.title}</p>
+                <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">{dailySpotlight.description}</p>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-2.5 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+                  {dailySpotlight.statLeftLabel}
+                </p>
+                <p className="text-sm font-semibold tabular-nums">{dailySpotlight.statLeftValue}</p>
+              </article>
+              <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-2.5 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+                  {dailySpotlight.statRightLabel}
+                </p>
+                <p className="text-sm font-semibold tabular-nums">{dailySpotlight.statRightValue}</p>
+              </article>
+            </div>
+          </article>
+        ) : null}
+      </ModalShell>
+
+      {dailySpotlight && !dailySpotlightOpen ? (
+        <button
+          type="button"
+          onClick={handleOpenDailySpotlightFromBubble}
+          className={`fixed bottom-24 right-3 z-40 inline-flex items-center justify-center rounded-full border border-[hsl(var(--border)/0.72)] bg-[hsl(var(--surface-1)/0.96)] p-1.5 shadow-[0_16px_40px_hsl(var(--bg)/0.45)] transition-transform duration-200 hover:scale-[1.04] sm:bottom-6 sm:right-6 ${
+            dailySpotlightUnread ? "animate-pulse" : ""
+          }`}
+          aria-label="Abrir nunaico del día"
+        >
+          {dailySpotlightUnread ? (
+            <span className="pointer-events-none absolute -inset-1 rounded-full bg-[hsl(var(--danger)/0.22)] animate-ping" />
+          ) : null}
+
+          <span className="relative z-10 inline-flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-[hsl(var(--border)/0.8)] bg-[hsl(var(--surface-2))]">
+            {dailySpotlight.photo ? (
+              <img
+                src={dailySpotlight.photo}
+                alt={dailySpotlight.photoAlt}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <TrophyIcon className="h-6 w-6 text-[hsl(var(--text-subtle))]" />
+            )}
+
+            {dailySpotlightUnread ? (
+              <span className="absolute -right-1 -top-1 inline-flex h-6 w-6 items-center justify-center">
+                <span className="absolute inline-flex h-6 w-6 rounded-full bg-[hsl(var(--danger)/0.44)] animate-ping" />
+                <span className="relative inline-flex h-6 min-w-6 items-center justify-center rounded-full border-2 border-[hsl(var(--surface-1))] bg-[hsl(var(--danger))] px-1 text-[12px] font-black leading-none text-white shadow-[0_8px_18px_hsl(var(--danger)/0.45)]">
+                  1
+                </span>
+              </span>
+            ) : null}
+          </span>
+        </button>
+      ) : null}
     </div>
   );
 };

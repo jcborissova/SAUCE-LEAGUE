@@ -35,6 +35,7 @@ import {
   derivePlayerGradeFromProfile,
   type PlayerGradeDisplay,
 } from "../../utils/player-grade";
+import { supabase } from "../../lib/supabase";
 import SectionCard from "../ui/SectionCard";
 import EmptyState from "../ui/EmptyState";
 import LoadingSpinner from "../LoadingSpinner";
@@ -161,6 +162,7 @@ const round2 = (value: number) => Math.round(value * 100) / 100;
 const DUEL_UNASSIGNED_TEAM = "__duel_unassigned_team__";
 const DUEL_SHARE_EXPORT_SCALE = 3;
 const DUEL_SHARE_IMAGE_CACHE = new Map<string, string>();
+const STORAGE_PUBLIC_MARKER = "/storage/v1/object/public/";
 
 const getDuelTeamKey = (teamName: string | null | undefined): string => {
   const normalized = (teamName ?? "").trim();
@@ -236,9 +238,53 @@ const readBlobAsDataUrl = (blob: Blob): Promise<string> =>
 
 const resolveImageUrl = (source: string): string => {
   try {
-    return new URL(source, window.location.origin).toString();
+    const resolved = new URL(source, window.location.origin);
+    if (window.location.protocol === "https:" && resolved.protocol === "http:") {
+      resolved.protocol = "https:";
+    }
+    return resolved.toString();
   } catch {
     return source;
+  }
+};
+
+const parseStorageObjectFromUrl = (
+  source: string
+): { bucket: string; objectPath: string } | null => {
+  const trimmed = source.trim();
+  if (!trimmed) return null;
+
+  const readFromPath = (path: string) => {
+    const markerIndex = path.indexOf(STORAGE_PUBLIC_MARKER);
+    if (markerIndex < 0) return null;
+    const remainder = path.slice(markerIndex + STORAGE_PUBLIC_MARKER.length);
+    const firstSlashIndex = remainder.indexOf("/");
+    if (firstSlashIndex <= 0) return null;
+    const bucket = remainder.slice(0, firstSlashIndex).trim();
+    const objectPath = decodeURIComponent(remainder.slice(firstSlashIndex + 1));
+    if (!bucket || !objectPath) return null;
+    return { bucket, objectPath };
+  };
+
+  try {
+    return readFromPath(new URL(trimmed).pathname);
+  } catch {
+    return readFromPath(trimmed);
+  }
+};
+
+const fetchImageDataUrlFromStorageDownload = async (source: string): Promise<string | null> => {
+  const parsed = parseStorageObjectFromUrl(source);
+  if (!parsed) return null;
+
+  try {
+    const { data, error } = await supabase.storage
+      .from(parsed.bucket)
+      .download(parsed.objectPath);
+    if (error || !data) return null;
+    return await readBlobAsDataUrl(data);
+  } catch {
+    return null;
   }
 };
 
@@ -260,7 +306,10 @@ const fetchImageDataUrl = async (source: string): Promise<string | null> => {
     DUEL_SHARE_IMAGE_CACHE.set(resolved, dataUrl);
     return dataUrl;
   } catch {
-    return null;
+    const downloadDataUrl = await fetchImageDataUrlFromStorageDownload(resolved);
+    if (!downloadDataUrl) return null;
+    DUEL_SHARE_IMAGE_CACHE.set(resolved, downloadDataUrl);
+    return downloadDataUrl;
   }
 };
 
@@ -1728,21 +1777,25 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                       <div className="text-center">
                                         <div className="relative mx-auto mb-1.5 h-[clamp(5rem,22vw,6rem)] w-[clamp(5rem,22vw,6rem)]">
                                           <div
-                                            className={`inline-flex h-full w-full items-center justify-center overflow-hidden rounded-full border bg-white/10 ${
+                                            className={`relative inline-flex h-full w-full items-center justify-center overflow-hidden rounded-full border bg-white/10 ${
                                               duelShareGrades?.left.ringClassName ?? "border-white/28"
                                             }`}
                                           >
+                                            <span className="pointer-events-none absolute inset-0 inline-flex items-center justify-center text-xl font-black">
+                                              {getPlayerInitials(duelSharePlayers.left.name)}
+                                            </span>
                                             {duelSharePlayers.left.photo ? (
                                               <img
                                                 src={duelSharePlayers.left.photo}
                                                 alt={duelSharePlayers.left.name}
-                                                className="h-full w-full object-cover"
+                                                className="relative z-[1] h-full w-full object-cover"
+                                                onError={(event) => {
+                                                  event.currentTarget.style.display = "none";
+                                                }}
                                                 crossOrigin="anonymous"
                                                 referrerPolicy="no-referrer"
                                               />
-                                            ) : (
-                                              <span className="text-xl font-black">{getPlayerInitials(duelSharePlayers.left.name)}</span>
-                                            )}
+                                            ) : null}
                                           </div>
                                           {duelShareGrades?.left ? (
                                             <span
@@ -1762,8 +1815,12 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                       </div>
 
                                       <div className="flex flex-col items-center">
-                                        <div className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/28 bg-[radial-gradient(circle_at_28%_28%,rgba(96,165,250,0.45),rgba(15,23,42,0.96))] text-[30px] font-black leading-none tracking-[0.01em] shadow-[0_10px_18px_-10px_rgba(59,130,246,0.55)]">
-                                          vs
+                                        <div className="relative inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/35 bg-[radial-gradient(circle_at_24%_22%,rgba(148,197,255,0.58),rgba(30,58,138,0.66)_48%,rgba(15,23,42,0.98)_100%)] shadow-[0_14px_24px_-14px_rgba(59,130,246,0.66)] sm:h-[3.125rem] sm:w-[3.125rem]">
+                                          <span className="pointer-events-none absolute inset-[2px] rounded-full border border-white/18" />
+                                          <span className="pointer-events-none absolute left-1/2 top-[6px] h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-white/52 blur-[0.3px]" />
+                                          <span className="relative text-[25px] font-black leading-none tracking-[0.02em] text-white/95 sm:text-[26px]">
+                                            VS
+                                          </span>
                                         </div>
                                         <span className="mt-0.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-white/66">
                                           Cancha
@@ -1773,21 +1830,25 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                       <div className="text-center">
                                         <div className="relative mx-auto mb-1.5 h-[clamp(5rem,22vw,6rem)] w-[clamp(5rem,22vw,6rem)]">
                                           <div
-                                            className={`inline-flex h-full w-full items-center justify-center overflow-hidden rounded-full border bg-white/10 ${
+                                            className={`relative inline-flex h-full w-full items-center justify-center overflow-hidden rounded-full border bg-white/10 ${
                                               duelShareGrades?.right.ringClassName ?? "border-white/28"
                                             }`}
                                           >
+                                            <span className="pointer-events-none absolute inset-0 inline-flex items-center justify-center text-xl font-black">
+                                              {getPlayerInitials(duelSharePlayers.right.name)}
+                                            </span>
                                             {duelSharePlayers.right.photo ? (
                                               <img
                                                 src={duelSharePlayers.right.photo}
                                                 alt={duelSharePlayers.right.name}
-                                                className="h-full w-full object-cover"
+                                                className="relative z-[1] h-full w-full object-cover"
+                                                onError={(event) => {
+                                                  event.currentTarget.style.display = "none";
+                                                }}
                                                 crossOrigin="anonymous"
                                                 referrerPolicy="no-referrer"
                                               />
-                                            ) : (
-                                              <span className="text-xl font-black">{getPlayerInitials(duelSharePlayers.right.name)}</span>
-                                            )}
+                                            ) : null}
                                           </div>
                                           {duelShareGrades?.right ? (
                                             <span
