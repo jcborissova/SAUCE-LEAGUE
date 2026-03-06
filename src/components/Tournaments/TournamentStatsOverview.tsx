@@ -40,6 +40,7 @@ import EmptyState from "../ui/EmptyState";
 import LoadingSpinner from "../LoadingSpinner";
 import AppSelect from "../ui/AppSelect";
 import PlayerAnalyticsModal, { type PlayerAnalyticsDetail } from "./analytics/PlayerAnalyticsModal";
+import sauceLeagueLogoMark from "../../assets/sauce-league-logo-mark.png";
 
 type StatsFocus =
   | "points"
@@ -210,6 +211,15 @@ const waitForNextFrame = async (): Promise<void> =>
     requestAnimationFrame(() => resolve());
   });
 
+const ensureImageLoaded = async (image: HTMLImageElement): Promise<void> => {
+  if (image.complete) return;
+  await new Promise<void>((resolve) => {
+    const done = () => resolve();
+    image.addEventListener("load", done, { once: true });
+    image.addEventListener("error", done, { once: true });
+  });
+};
+
 const readBlobAsDataUrl = (blob: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -254,6 +264,25 @@ const fetchImageDataUrl = async (source: string): Promise<string | null> => {
   }
 };
 
+const readImageElementAsDataUrl = (image: HTMLImageElement): string | null => {
+  const width = image.naturalWidth || image.width;
+  const height = image.naturalHeight || image.height;
+  if (width <= 0 || height <= 0) return null;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  try {
+    context.drawImage(image, 0, 0, width, height);
+    return canvas.toDataURL("image/png");
+  } catch {
+    return null;
+  }
+};
+
 const inlineShareCardImages = async (root: HTMLElement): Promise<() => void> => {
   const images = Array.from(root.querySelectorAll("img"));
   if (images.length === 0) return () => undefined;
@@ -262,10 +291,12 @@ const inlineShareCardImages = async (root: HTMLElement): Promise<() => void> => 
 
   await Promise.all(
     images.map(async (image) => {
+      await ensureImageLoaded(image);
+
       const source = image.currentSrc || image.src;
       if (!source || source.startsWith("data:")) return;
 
-      const dataUrl = await fetchImageDataUrl(source);
+      const dataUrl = (await fetchImageDataUrl(source)) ?? readImageElementAsDataUrl(image);
       if (!dataUrl) return;
 
       const originalSrc = image.getAttribute("src");
@@ -426,16 +457,6 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
   const [duelResult, setDuelResult] = useState<DuelResult | null>(null);
   const [duelShareLoading, setDuelShareLoading] = useState(false);
   const [duelShareError, setDuelShareError] = useState<string | null>(null);
-  const [duelShareViewport, setDuelShareViewport] = useState(() => {
-    if (typeof window === "undefined") {
-      return { width: 1280, height: 900 };
-    }
-
-    return {
-      width: window.innerWidth,
-      height: Math.round(window.visualViewport?.height ?? window.innerHeight),
-    };
-  });
   const [playerDetailOpen, setPlayerDetailOpen] = useState(false);
   const [playerDetailLoading, setPlayerDetailLoading] = useState(false);
   const [playerDetailError, setPlayerDetailError] = useState<string | null>(null);
@@ -448,29 +469,6 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
   const playerDetailCacheRef = useRef(new Map<string, PlayerAnalyticsDetail>());
   const playerDetailRequestRef = useRef(0);
   const duelShareCardRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const updateViewport = () => {
-      setDuelShareViewport({
-        width: window.innerWidth,
-        height: Math.round(window.visualViewport?.height ?? window.innerHeight),
-      });
-    };
-
-    updateViewport();
-
-    window.addEventListener("resize", updateViewport);
-    window.addEventListener("orientationchange", updateViewport);
-    window.visualViewport?.addEventListener("resize", updateViewport);
-
-    return () => {
-      window.removeEventListener("resize", updateViewport);
-      window.removeEventListener("orientationchange", updateViewport);
-      window.visualViewport?.removeEventListener("resize", updateViewport);
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1175,7 +1173,6 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       right: resolveGrade(duelSharePlayers.right),
     };
   }, [duelSharePlayers, duelPhaseLines, duelPhaseLineByPlayerId]);
-  const duelShareIsCompact = duelShareViewport.width <= 430 && duelShareViewport.height <= 760;
   const duelKeyMetricRows = useMemo(() => {
     const keyMetrics = new Set<BattleMetric>(["ppg", "rpg", "apg", "fg_pct", "topg"]);
     return duelRows.filter((row) => keyMetrics.has(row.metric));
@@ -1692,23 +1689,26 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                         </div>
 
                         <div className="flex justify-center">
-                          <div className={duelShareIsCompact ? "w-[min(100vw-0.75rem,392px)]" : "w-[min(100vw-0.25rem,406px)]"}>
+                          <div className="w-full">
                             <div
                               ref={duelShareCardRef}
-                              className={`relative w-full overflow-hidden rounded-[26px] border border-white/16 bg-[linear-gradient(160deg,#0a1326_0%,#12336a_50%,#33152f_100%)] text-white shadow-[0_30px_66px_-30px_rgba(2,6,23,0.92)] ${
-                                duelShareIsCompact ? "min-h-[640px] p-3.5" : "min-h-[700px] p-4"
-                              }`}
+                              className="relative w-full overflow-hidden rounded-[28px] border border-white/20 bg-[linear-gradient(156deg,#081224_0%,#14376f_49%,#36152f_100%)] p-4 text-white shadow-[0_36px_78px_-34px_rgba(2,6,23,0.95)] sm:p-5"
                             >
                               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_10%,rgba(59,130,246,0.34),transparent_34%),radial-gradient(circle_at_86%_14%,rgba(239,68,68,0.28),transparent_34%),radial-gradient(circle_at_50%_100%,rgba(15,23,42,0.5),transparent_48%)]" />
 
                               {duelSharePlayers ? (
-                                <div className={`relative flex h-full flex-col ${duelShareIsCompact ? "gap-2.5" : "gap-3"}`}>
+                                <div className="relative flex h-full flex-col gap-3 sm:gap-3.5">
                                   <div className="flex items-center justify-between gap-2">
                                     <div className="flex min-w-0 items-center gap-1.5">
                                       <img
-                                        src="/sauce-league-logo-mark.png"
+                                        src={sauceLeagueLogoMark}
                                         alt="Sauce League"
-                                        className="h-6 w-6 rounded-md object-contain"
+                                        className="h-7 w-7 rounded-md object-contain"
+                                        onError={(event) => {
+                                          if (event.currentTarget.src.endsWith("/sauce-league-logo-mark.png")) return;
+                                          event.currentTarget.src = "/sauce-league-logo-mark.png";
+                                        }}
+                                        crossOrigin="anonymous"
                                         referrerPolicy="no-referrer"
                                       />
                                       <div className="min-w-0">
@@ -1723,10 +1723,10 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                     </span>
                                   </div>
 
-                                  <div className={`rounded-2xl border border-white/12 bg-black/26 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${duelShareIsCompact ? "px-2.5 py-2.5" : "px-3 py-3"}`}>
+                                  <div className="rounded-2xl border border-white/12 bg-black/26 px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] sm:px-3.5 sm:py-3.5">
                                     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
                                       <div className="text-center">
-                                        <div className={`relative mx-auto mb-1.5 ${duelShareIsCompact ? "h-20 w-20" : "h-[5.25rem] w-[5.25rem]"}`}>
+                                        <div className="relative mx-auto mb-1.5 h-[clamp(5rem,22vw,6rem)] w-[clamp(5rem,22vw,6rem)]">
                                           <div
                                             className={`inline-flex h-full w-full items-center justify-center overflow-hidden rounded-full border bg-white/10 ${
                                               duelShareGrades?.left.ringClassName ?? "border-white/28"
@@ -1752,7 +1752,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                             </span>
                                           ) : null}
                                         </div>
-                                        <p className={`truncate font-bold leading-tight ${duelShareIsCompact ? "text-[13px]" : "text-[14px]"}`} title={duelSharePlayers.left.name}>
+                                        <p className="truncate text-[15px] font-bold leading-tight sm:text-base" title={duelSharePlayers.left.name}>
                                           {abbreviateLeaderboardName(duelSharePlayers.left.name, 14)}
                                         </p>
                                         <p className="truncate text-[10px] text-white/72">{duelSharePlayers.left.teamName ?? "Sin equipo"}</p>
@@ -1771,7 +1771,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                       </div>
 
                                       <div className="text-center">
-                                        <div className={`relative mx-auto mb-1.5 ${duelShareIsCompact ? "h-20 w-20" : "h-[5.25rem] w-[5.25rem]"}`}>
+                                        <div className="relative mx-auto mb-1.5 h-[clamp(5rem,22vw,6rem)] w-[clamp(5rem,22vw,6rem)]">
                                           <div
                                             className={`inline-flex h-full w-full items-center justify-center overflow-hidden rounded-full border bg-white/10 ${
                                               duelShareGrades?.right.ringClassName ?? "border-white/28"
@@ -1797,7 +1797,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                             </span>
                                           ) : null}
                                         </div>
-                                        <p className={`truncate font-bold leading-tight ${duelShareIsCompact ? "text-[13px]" : "text-[14px]"}`} title={duelSharePlayers.right.name}>
+                                        <p className="truncate text-[15px] font-bold leading-tight sm:text-base" title={duelSharePlayers.right.name}>
                                           {abbreviateLeaderboardName(duelSharePlayers.right.name, 14)}
                                         </p>
                                         <p className="truncate text-[10px] text-white/72">{duelSharePlayers.right.teamName ?? "Sin equipo"}</p>
@@ -1823,16 +1823,12 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                 </div>
 
                                 {duelDimensionSummary.length > 0 ? (
-                                  <div
-                                    className={`rounded-xl border border-white/14 bg-black/24 ${
-                                      duelShareIsCompact ? "px-2.5 py-2.5" : "px-3 py-3"
-                                    }`}
-                                  >
-                                    <div className={`flex items-center justify-between font-semibold uppercase tracking-[0.13em] text-white/76 ${duelShareIsCompact ? "mb-2 text-[8px]" : "mb-2.5 text-[9px]"}`}>
+                                  <div className="rounded-xl border border-white/14 bg-black/24 px-3 py-3 sm:px-3.5 sm:py-3.5">
+                                    <div className="mb-2 flex items-center justify-between text-[9px] font-semibold uppercase tracking-[0.13em] text-white/76 sm:mb-2.5 sm:text-[10px]">
                                       <span>Mapa de estilos</span>
                                       <span>Escala 0-100</span>
                                     </div>
-                                    <div className={`grid grid-cols-2 gap-1.5 ${duelShareIsCompact ? "mb-2 text-[8px]" : "mb-2.5 text-[9px]"}`}>
+                                    <div className="mb-2 grid grid-cols-2 gap-1.5 text-[9px] sm:mb-2.5 sm:text-[10px]">
                                       <div className="inline-flex min-w-0 items-center gap-1 truncate rounded-full border border-[#60a5fa]/42 bg-[#1d4ed8]/25 px-2 py-0.5 font-semibold text-[#bfdbfe]">
                                         <span className="h-1.5 w-1.5 rounded-full bg-[#60a5fa]" />
                                         {abbreviateLeaderboardName(duelSharePlayers.left.name, 10)}
@@ -1842,7 +1838,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                         <span className="h-1.5 w-1.5 rounded-full bg-[#f87171]" />
                                       </div>
                                     </div>
-                                    <div className={duelShareIsCompact ? "space-y-1.5" : "space-y-2"}>
+                                    <div className="space-y-2">
                                       {duelDimensionSummary.map((dimension) => {
                                         const leaderTone =
                                           dimension.winnerId === null
@@ -1852,13 +1848,14 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                               : "text-[#fca5a5]";
 
                                         return (
-                                          <div key={`share-dimension-${dimension.key}`} className={duelShareIsCompact ? "space-y-0.5" : "space-y-1"}>
-                                            <div className={`flex items-center justify-between gap-2 ${duelShareIsCompact ? "text-[9px]" : "text-[10px]"}`}>
+                                          <div key={`share-dimension-${dimension.key}`} className="space-y-1">
+                                            <div className="flex items-center justify-between gap-2 text-[10px]">
                                               <span className="truncate font-semibold text-white/92">{dimension.label}</span>
                                               <span className={`shrink-0 font-semibold tabular-nums ${leaderTone}`}>
-                                                {duelShareIsCompact
-                                                  ? `${dimension.leftScore.toFixed(0)}-${dimension.rightScore.toFixed(0)} · b${dimension.gap.toFixed(0)}`
-                                                  : `brecha ${dimension.gap.toFixed(0)}`}
+                                                <span className="sm:hidden">
+                                                  {`${dimension.leftScore.toFixed(0)}-${dimension.rightScore.toFixed(0)} · b${dimension.gap.toFixed(0)}`}
+                                                </span>
+                                                <span className="hidden sm:inline">{`brecha ${dimension.gap.toFixed(0)}`}</span>
                                               </span>
                                             </div>
                                             <div className="relative h-2 overflow-hidden rounded-full bg-white/14">
@@ -1871,13 +1868,11 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                                 style={{ width: `${dimension.rightScore}%` }}
                                               />
                                             </div>
-                                            {duelShareIsCompact ? null : (
-                                              <div className="flex items-center justify-between text-[9px] font-semibold tabular-nums text-white/82">
-                                                <span className="text-[#bfdbfe]">{dimension.leftScore.toFixed(0)}</span>
-                                                <span className="text-white/62">vs</span>
-                                                <span className="text-[#fecaca]">{dimension.rightScore.toFixed(0)}</span>
-                                              </div>
-                                            )}
+                                            <div className="hidden items-center justify-between text-[9px] font-semibold tabular-nums text-white/82 sm:flex">
+                                              <span className="text-[#bfdbfe]">{dimension.leftScore.toFixed(0)}</span>
+                                              <span className="text-white/62">vs</span>
+                                              <span className="text-[#fecaca]">{dimension.rightScore.toFixed(0)}</span>
+                                            </div>
                                           </div>
                                         );
                                       })}
