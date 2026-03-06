@@ -306,7 +306,11 @@ const TournamentViewPage: React.FC = () => {
                 }
               />
             ) : (
-              <TournamentPlayersGallery teams={teams} loading={teamsLoading} />
+              <TournamentPlayersGallery
+                tournamentId={tournamentId}
+                teams={teams}
+                loading={teamsLoading}
+              />
             )}
 
             {teamsLoaded ? (

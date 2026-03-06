@@ -6,7 +6,7 @@ import {
   EyeIcon,
   MagnifyingGlassIcon,
 } from "@heroicons/react/24/outline";
-import { ArrowPathIcon, BoltIcon, FireIcon, SparklesIcon } from "@heroicons/react/24/solid";
+import { ArrowPathIcon, FireIcon, SparklesIcon } from "@heroicons/react/24/solid";
 import { toPng } from "html-to-image";
 
 import {
@@ -424,9 +424,18 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
   const [duelPlayerA, setDuelPlayerA] = useState<number | "">("");
   const [duelPlayerB, setDuelPlayerB] = useState<number | "">("");
   const [duelResult, setDuelResult] = useState<DuelResult | null>(null);
-  const [duelMetricFocus, setDuelMetricFocus] = useState<BattleMetric | null>(null);
   const [duelShareLoading, setDuelShareLoading] = useState(false);
   const [duelShareError, setDuelShareError] = useState<string | null>(null);
+  const [duelShareViewport, setDuelShareViewport] = useState(() => {
+    if (typeof window === "undefined") {
+      return { width: 1280, height: 900 };
+    }
+
+    return {
+      width: window.innerWidth,
+      height: Math.round(window.visualViewport?.height ?? window.innerHeight),
+    };
+  });
   const [playerDetailOpen, setPlayerDetailOpen] = useState(false);
   const [playerDetailLoading, setPlayerDetailLoading] = useState(false);
   const [playerDetailError, setPlayerDetailError] = useState<string | null>(null);
@@ -439,6 +448,29 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
   const playerDetailCacheRef = useRef(new Map<string, PlayerAnalyticsDetail>());
   const playerDetailRequestRef = useRef(0);
   const duelShareCardRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const updateViewport = () => {
+      setDuelShareViewport({
+        width: window.innerWidth,
+        height: Math.round(window.visualViewport?.height ?? window.innerHeight),
+      });
+    };
+
+    updateViewport();
+
+    window.addEventListener("resize", updateViewport);
+    window.addEventListener("orientationchange", updateViewport);
+    window.visualViewport?.addEventListener("resize", updateViewport);
+
+    return () => {
+      window.removeEventListener("resize", updateViewport);
+      window.removeEventListener("orientationchange", updateViewport);
+      window.visualViewport?.removeEventListener("resize", updateViewport);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -933,26 +965,8 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
   }, [duelResult]);
 
   useEffect(() => {
-    if (duelRows.length === 0) {
-      setDuelMetricFocus(null);
-      return;
-    }
-
-    setDuelMetricFocus((previous) => {
-      if (previous && duelRows.some((row) => row.metric === previous)) return previous;
-      return duelRows[0]?.metric ?? null;
-    });
-  }, [duelRows]);
-
-  useEffect(() => {
     setDuelShareError(null);
   }, [duelResult, phase]);
-
-  const duelFocusedRow = useMemo(() => {
-    if (duelRows.length === 0) return null;
-    if (!duelMetricFocus) return duelRows[0] ?? null;
-    return duelRows.find((row) => row.metric === duelMetricFocus) ?? duelRows[0] ?? null;
-  }, [duelRows, duelMetricFocus]);
 
   const duelInsight = useMemo(() => {
     if (!duelResult || duelResult.players.length !== 2 || duelRows.length === 0) return null;
@@ -1131,53 +1145,6 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
     return `Partidazo de ${duelInsight.winner.name}: controló ${dominantLabel} y cerró con +${battleGap.toFixed(1)} en índice.`;
   }, [duelInsight, duelResult]);
 
-  const duelFocusedNarrative = useMemo(() => {
-    if (!duelFocusedRow) return "";
-
-    if (duelFocusedRow.winnerId === null) {
-      return `Paridad total en ${duelFocusedRow.meta.label}. Ninguno soltó ventaja real aquí.`;
-    }
-
-    const winnerName =
-      duelFocusedRow.winnerId === duelFocusedRow.leftPlayer.playerId
-        ? duelFocusedRow.leftPlayer.name
-        : duelFocusedRow.rightPlayer.name;
-
-    const gapLabel = duelFocusedRow.meta.format(duelFocusedRow.valueGap);
-
-    if (duelFocusedRow.meta.higherIsBetter) {
-      return `${winnerName} dominó ${duelFocusedRow.meta.label} con ventaja de ${gapLabel}.`;
-    }
-
-    return `${winnerName} ganó en ${duelFocusedRow.meta.label} cometiendo menos errores (${gapLabel} de diferencia).`;
-  }, [duelFocusedRow]);
-
-  const duelCoachTake = useMemo(() => {
-    if (!duelInsight || !duelDimensionSummary.length) return "";
-
-    const strongestDimension =
-      [...duelDimensionSummary]
-        .sort((a, b) => b.gap - a.gap)
-        .find((dimension) => dimension.winnerId !== null) ?? null;
-
-    if (!duelInsight.winner || !duelInsight.loser) {
-      if (!strongestDimension) {
-        return "La lectura técnica está clarita: igualdad real en todas las áreas.";
-      }
-
-      return `Claves de pizarra: el duelo se rompió poco en ${strongestDimension.label}.`;
-    }
-
-    const targetDimension =
-      duelDimensionSummary.find((dimension) => dimension.winnerId === duelInsight.loser?.playerId) ?? null;
-
-    if (targetDimension) {
-      return `Plan de revancha para ${duelInsight.loser.name}: subir ${targetDimension.label.toLowerCase()} y proteger mejor las pérdidas.`;
-    }
-
-    return `Plan de revancha para ${duelInsight.loser.name}: ajustar ritmo y disciplina; hoy ${duelInsight.winner.name} ganó casi todos los duelos parciales.`;
-  }, [duelDimensionSummary, duelInsight]);
-
   const duelSharePlayers = useMemo(() => {
     if (!duelResult || duelResult.players.length !== 2) return null;
     return {
@@ -1208,6 +1175,26 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       right: resolveGrade(duelSharePlayers.right),
     };
   }, [duelSharePlayers, duelPhaseLines, duelPhaseLineByPlayerId]);
+  const duelShareIsCompact = duelShareViewport.width <= 430 && duelShareViewport.height <= 760;
+  const duelKeyMetricRows = useMemo(() => {
+    const keyMetrics = new Set<BattleMetric>(["ppg", "rpg", "apg", "fg_pct", "topg"]);
+    return duelRows.filter((row) => keyMetrics.has(row.metric));
+  }, [duelRows]);
+  const duelAdvantagesByPlayer = useMemo(() => {
+    if (!duelResult || duelResult.players.length !== 2) return null;
+    const [leftPlayer, rightPlayer] = duelResult.players;
+
+    const getTopAdvantages = (playerId: number) =>
+      duelRows
+        .filter((row) => row.winnerId === playerId)
+        .sort((a, b) => b.valueGap - a.valueGap)
+        .slice(0, 2);
+
+    return {
+      left: getTopAdvantages(leftPlayer.playerId),
+      right: getTopAdvantages(rightPlayer.playerId),
+    };
+  }, [duelResult, duelRows]);
 
   const handleCompareDuel = async () => {
     if (!canCompareDuel) {
@@ -1241,7 +1228,6 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
     setDuelPlayerB(duelPlayerA);
     setDuelResult(null);
     setDuelError(null);
-    setDuelMetricFocus(null);
     setDuelShareError(null);
   };
 
@@ -1706,119 +1692,121 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                         </div>
 
                         <div className="flex justify-center">
-                          <div className="w-[min(100vw-0.25rem,398px)]">
+                          <div className={duelShareIsCompact ? "w-[min(100vw-0.75rem,392px)]" : "w-[min(100vw-0.25rem,406px)]"}>
                             <div
                               ref={duelShareCardRef}
-                              className="relative aspect-[9/17] w-full overflow-hidden rounded-[26px] border border-white/16 bg-[linear-gradient(160deg,#0a1326_0%,#12336a_50%,#33152f_100%)] p-4 text-white shadow-[0_30px_66px_-30px_rgba(2,6,23,0.92)]"
+                              className={`relative w-full overflow-hidden rounded-[26px] border border-white/16 bg-[linear-gradient(160deg,#0a1326_0%,#12336a_50%,#33152f_100%)] text-white shadow-[0_30px_66px_-30px_rgba(2,6,23,0.92)] ${
+                                duelShareIsCompact ? "min-h-[640px] p-3.5" : "min-h-[700px] p-4"
+                              }`}
                             >
                               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_10%,rgba(59,130,246,0.34),transparent_34%),radial-gradient(circle_at_86%_14%,rgba(239,68,68,0.28),transparent_34%),radial-gradient(circle_at_50%_100%,rgba(15,23,42,0.5),transparent_48%)]" />
 
                               {duelSharePlayers ? (
-                                <div className="relative flex h-full flex-col gap-3">
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="flex min-w-0 items-center gap-1.5">
-                                    <img
-                                      src="/sauce-league-logo-mark.png"
-                                      alt="Sauce League"
-                                      className="h-6 w-6 rounded-md object-contain"
-                                      referrerPolicy="no-referrer"
-                                    />
-                                    <div className="min-w-0">
-                                      <p className="truncate text-[9px] font-semibold uppercase tracking-[0.16em] text-white/80">
-                                        Sauce League
-                                      </p>
-                                      <p className="truncate text-[10px] font-semibold text-white/92">Battle Card</p>
+                                <div className={`relative flex h-full flex-col ${duelShareIsCompact ? "gap-2.5" : "gap-3"}`}>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex min-w-0 items-center gap-1.5">
+                                      <img
+                                        src="/sauce-league-logo-mark.png"
+                                        alt="Sauce League"
+                                        className="h-6 w-6 rounded-md object-contain"
+                                        referrerPolicy="no-referrer"
+                                      />
+                                      <div className="min-w-0">
+                                        <p className="truncate text-[9px] font-semibold uppercase tracking-[0.16em] text-white/80">
+                                          Sauce League
+                                        </p>
+                                        <p className="truncate text-[10px] font-semibold text-white/92">Battle Card</p>
+                                      </div>
+                                    </div>
+                                    <span className="shrink-0 rounded-full border border-white/18 bg-black/25 px-2 py-0.5 text-[9px] font-semibold text-white/76">
+                                      {phaseLabel(phase)}
+                                    </span>
+                                  </div>
+
+                                  <div className={`rounded-2xl border border-white/12 bg-black/26 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${duelShareIsCompact ? "px-2.5 py-2.5" : "px-3 py-3"}`}>
+                                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
+                                      <div className="text-center">
+                                        <div className={`relative mx-auto mb-1.5 ${duelShareIsCompact ? "h-20 w-20" : "h-[5.25rem] w-[5.25rem]"}`}>
+                                          <div
+                                            className={`inline-flex h-full w-full items-center justify-center overflow-hidden rounded-full border bg-white/10 ${
+                                              duelShareGrades?.left.ringClassName ?? "border-white/28"
+                                            }`}
+                                          >
+                                            {duelSharePlayers.left.photo ? (
+                                              <img
+                                                src={duelSharePlayers.left.photo}
+                                                alt={duelSharePlayers.left.name}
+                                                className="h-full w-full object-cover"
+                                                crossOrigin="anonymous"
+                                                referrerPolicy="no-referrer"
+                                              />
+                                            ) : (
+                                              <span className="text-xl font-black">{getPlayerInitials(duelSharePlayers.left.name)}</span>
+                                            )}
+                                          </div>
+                                          {duelShareGrades?.left ? (
+                                            <span
+                                              className={`pointer-events-none absolute bottom-0 right-0 inline-flex h-6 w-6 items-center justify-center rounded-full border-2 text-[11px] font-black shadow-[0_10px_18px_-12px_rgba(0,0,0,0.9)] ${duelShareGrades.left.badgeClassName}`}
+                                            >
+                                              {duelShareGrades.left.grade}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                        <p className={`truncate font-bold leading-tight ${duelShareIsCompact ? "text-[13px]" : "text-[14px]"}`} title={duelSharePlayers.left.name}>
+                                          {abbreviateLeaderboardName(duelSharePlayers.left.name, 14)}
+                                        </p>
+                                        <p className="truncate text-[10px] text-white/72">{duelSharePlayers.left.teamName ?? "Sin equipo"}</p>
+                                        <p className="mt-0.5 text-[10px] font-semibold text-[#93c5fd]">
+                                          Índice {(duelResult.summary.battleIndexByPlayer[duelSharePlayers.left.playerId] ?? 50).toFixed(1)}
+                                        </p>
+                                      </div>
+
+                                      <div className="flex flex-col items-center">
+                                        <div className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/28 bg-[radial-gradient(circle_at_28%_28%,rgba(96,165,250,0.45),rgba(15,23,42,0.96))] text-[30px] font-black leading-none tracking-[0.01em] shadow-[0_10px_18px_-10px_rgba(59,130,246,0.55)]">
+                                          vs
+                                        </div>
+                                        <span className="mt-0.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-white/66">
+                                          Cancha
+                                        </span>
+                                      </div>
+
+                                      <div className="text-center">
+                                        <div className={`relative mx-auto mb-1.5 ${duelShareIsCompact ? "h-20 w-20" : "h-[5.25rem] w-[5.25rem]"}`}>
+                                          <div
+                                            className={`inline-flex h-full w-full items-center justify-center overflow-hidden rounded-full border bg-white/10 ${
+                                              duelShareGrades?.right.ringClassName ?? "border-white/28"
+                                            }`}
+                                          >
+                                            {duelSharePlayers.right.photo ? (
+                                              <img
+                                                src={duelSharePlayers.right.photo}
+                                                alt={duelSharePlayers.right.name}
+                                                className="h-full w-full object-cover"
+                                                crossOrigin="anonymous"
+                                                referrerPolicy="no-referrer"
+                                              />
+                                            ) : (
+                                              <span className="text-xl font-black">{getPlayerInitials(duelSharePlayers.right.name)}</span>
+                                            )}
+                                          </div>
+                                          {duelShareGrades?.right ? (
+                                            <span
+                                              className={`pointer-events-none absolute bottom-0 right-0 inline-flex h-6 w-6 items-center justify-center rounded-full border-2 text-[11px] font-black shadow-[0_10px_18px_-12px_rgba(0,0,0,0.9)] ${duelShareGrades.right.badgeClassName}`}
+                                            >
+                                              {duelShareGrades.right.grade}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                        <p className={`truncate font-bold leading-tight ${duelShareIsCompact ? "text-[13px]" : "text-[14px]"}`} title={duelSharePlayers.right.name}>
+                                          {abbreviateLeaderboardName(duelSharePlayers.right.name, 14)}
+                                        </p>
+                                        <p className="truncate text-[10px] text-white/72">{duelSharePlayers.right.teamName ?? "Sin equipo"}</p>
+                                        <p className="mt-0.5 text-[10px] font-semibold text-[#fca5a5]">
+                                          Índice {(duelResult.summary.battleIndexByPlayer[duelSharePlayers.right.playerId] ?? 50).toFixed(1)}
+                                        </p>
+                                      </div>
                                     </div>
                                   </div>
-                                  <span className="shrink-0 rounded-full border border-white/18 bg-black/25 px-2 py-0.5 text-[9px] font-semibold text-white/76">
-                                    {phaseLabel(phase)}
-                                  </span>
-                                </div>
-
-                                <div className="rounded-2xl border border-white/12 bg-black/26 px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-                                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
-                                    <div className="text-center">
-                                      <div className="relative mx-auto mb-1.5 h-21 w-21">
-                                        <div
-                                          className={`inline-flex h-full w-full items-center justify-center overflow-hidden rounded-full border bg-white/10 ${
-                                            duelShareGrades?.left.ringClassName ?? "border-white/28"
-                                          }`}
-                                        >
-                                          {duelSharePlayers.left.photo ? (
-                                            <img
-                                              src={duelSharePlayers.left.photo}
-                                              alt={duelSharePlayers.left.name}
-                                              className="h-full w-full object-cover"
-                                              crossOrigin="anonymous"
-                                              referrerPolicy="no-referrer"
-                                            />
-                                          ) : (
-                                            <span className="text-xl font-black">{getPlayerInitials(duelSharePlayers.left.name)}</span>
-                                          )}
-                                        </div>
-                                        {duelShareGrades?.left ? (
-                                          <span
-                                            className={`pointer-events-none absolute bottom-0 right-0 inline-flex h-6 w-6 items-center justify-center rounded-full border-2 text-[11px] font-black shadow-[0_10px_18px_-12px_rgba(0,0,0,0.9)] ${duelShareGrades.left.badgeClassName}`}
-                                          >
-                                            {duelShareGrades.left.grade}
-                                          </span>
-                                        ) : null}
-                                      </div>
-                                      <p className="truncate text-[14px] font-bold leading-tight" title={duelSharePlayers.left.name}>
-                                        {abbreviateLeaderboardName(duelSharePlayers.left.name, 14)}
-                                      </p>
-                                      <p className="truncate text-[10px] text-white/72">{duelSharePlayers.left.teamName ?? "Sin equipo"}</p>
-                                      <p className="mt-0.5 text-[10px] font-semibold text-[#93c5fd]">
-                                        Índice {(duelResult.summary.battleIndexByPlayer[duelSharePlayers.left.playerId] ?? 50).toFixed(1)}
-                                      </p>
-                                    </div>
-
-                                    <div className="flex flex-col items-center">
-                                      <div className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/28 bg-[radial-gradient(circle_at_28%_28%,rgba(96,165,250,0.45),rgba(15,23,42,0.96))] text-[30px] font-black leading-none tracking-[0.01em] shadow-[0_10px_18px_-10px_rgba(59,130,246,0.55)]">
-                                        vs
-                                      </div>
-                                      <span className="mt-0.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-white/66">
-                                        Cancha
-                                      </span>
-                                    </div>
-
-                                    <div className="text-center">
-                                      <div className="relative mx-auto mb-1.5 h-21 w-21">
-                                        <div
-                                          className={`inline-flex h-full w-full items-center justify-center overflow-hidden rounded-full border bg-white/10 ${
-                                            duelShareGrades?.right.ringClassName ?? "border-white/28"
-                                          }`}
-                                        >
-                                          {duelSharePlayers.right.photo ? (
-                                            <img
-                                              src={duelSharePlayers.right.photo}
-                                              alt={duelSharePlayers.right.name}
-                                              className="h-full w-full object-cover"
-                                              crossOrigin="anonymous"
-                                              referrerPolicy="no-referrer"
-                                            />
-                                          ) : (
-                                            <span className="text-xl font-black">{getPlayerInitials(duelSharePlayers.right.name)}</span>
-                                          )}
-                                        </div>
-                                        {duelShareGrades?.right ? (
-                                          <span
-                                            className={`pointer-events-none absolute bottom-0 right-0 inline-flex h-6 w-6 items-center justify-center rounded-full border-2 text-[11px] font-black shadow-[0_10px_18px_-12px_rgba(0,0,0,0.9)] ${duelShareGrades.right.badgeClassName}`}
-                                          >
-                                            {duelShareGrades.right.grade}
-                                          </span>
-                                        ) : null}
-                                      </div>
-                                      <p className="truncate text-[14px] font-bold leading-tight" title={duelSharePlayers.right.name}>
-                                        {abbreviateLeaderboardName(duelSharePlayers.right.name, 14)}
-                                      </p>
-                                      <p className="truncate text-[10px] text-white/72">{duelSharePlayers.right.teamName ?? "Sin equipo"}</p>
-                                      <p className="mt-0.5 text-[10px] font-semibold text-[#fca5a5]">
-                                        Índice {(duelResult.summary.battleIndexByPlayer[duelSharePlayers.right.playerId] ?? 50).toFixed(1)}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
 
                                 <div className="rounded-xl border border-white/14 bg-white/[0.10] px-3 py-3">
                                   <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-white/70">Resultado inteligente</p>
@@ -1835,22 +1823,26 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                 </div>
 
                                 {duelDimensionSummary.length > 0 ? (
-                                  <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-white/14 bg-black/24 px-3 py-3">
-                                    <div className="mb-2.5 flex items-center justify-between text-[9px] font-semibold uppercase tracking-[0.13em] text-white/76">
+                                  <div
+                                    className={`rounded-xl border border-white/14 bg-black/24 ${
+                                      duelShareIsCompact ? "px-2.5 py-2.5" : "px-3 py-3"
+                                    }`}
+                                  >
+                                    <div className={`flex items-center justify-between font-semibold uppercase tracking-[0.13em] text-white/76 ${duelShareIsCompact ? "mb-2 text-[8px]" : "mb-2.5 text-[9px]"}`}>
                                       <span>Mapa de estilos</span>
                                       <span>Escala 0-100</span>
                                     </div>
-                                    <div className="mb-2.5 grid grid-cols-2 gap-1.5 text-[9px]">
-                                      <div className="inline-flex items-center gap-1 truncate rounded-full border border-[#60a5fa]/42 bg-[#1d4ed8]/25 px-2 py-0.5 font-semibold text-[#bfdbfe]">
+                                    <div className={`grid grid-cols-2 gap-1.5 ${duelShareIsCompact ? "mb-2 text-[8px]" : "mb-2.5 text-[9px]"}`}>
+                                      <div className="inline-flex min-w-0 items-center gap-1 truncate rounded-full border border-[#60a5fa]/42 bg-[#1d4ed8]/25 px-2 py-0.5 font-semibold text-[#bfdbfe]">
                                         <span className="h-1.5 w-1.5 rounded-full bg-[#60a5fa]" />
                                         {abbreviateLeaderboardName(duelSharePlayers.left.name, 10)}
                                       </div>
-                                      <div className="inline-flex items-center justify-end gap-1 truncate rounded-full border border-[#f87171]/42 bg-[#b91c1c]/26 px-2 py-0.5 font-semibold text-[#fecaca]">
+                                      <div className="inline-flex min-w-0 items-center justify-end gap-1 truncate rounded-full border border-[#f87171]/42 bg-[#b91c1c]/26 px-2 py-0.5 font-semibold text-[#fecaca]">
                                         {abbreviateLeaderboardName(duelSharePlayers.right.name, 10)}
                                         <span className="h-1.5 w-1.5 rounded-full bg-[#f87171]" />
                                       </div>
                                     </div>
-                                    <div className="space-y-2">
+                                    <div className={duelShareIsCompact ? "space-y-1.5" : "space-y-2"}>
                                       {duelDimensionSummary.map((dimension) => {
                                         const leaderTone =
                                           dimension.winnerId === null
@@ -1860,11 +1852,13 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                               : "text-[#fca5a5]";
 
                                         return (
-                                          <div key={`share-dimension-${dimension.key}`} className="space-y-1">
-                                            <div className="flex items-center justify-between gap-2 text-[10px]">
+                                          <div key={`share-dimension-${dimension.key}`} className={duelShareIsCompact ? "space-y-0.5" : "space-y-1"}>
+                                            <div className={`flex items-center justify-between gap-2 ${duelShareIsCompact ? "text-[9px]" : "text-[10px]"}`}>
                                               <span className="truncate font-semibold text-white/92">{dimension.label}</span>
                                               <span className={`shrink-0 font-semibold tabular-nums ${leaderTone}`}>
-                                                brecha {dimension.gap.toFixed(0)}
+                                                {duelShareIsCompact
+                                                  ? `${dimension.leftScore.toFixed(0)}-${dimension.rightScore.toFixed(0)} · b${dimension.gap.toFixed(0)}`
+                                                  : `brecha ${dimension.gap.toFixed(0)}`}
                                               </span>
                                             </div>
                                             <div className="relative h-2 overflow-hidden rounded-full bg-white/14">
@@ -1877,11 +1871,13 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                                 style={{ width: `${dimension.rightScore}%` }}
                                               />
                                             </div>
-                                            <div className="flex items-center justify-between text-[9px] font-semibold tabular-nums text-white/82">
-                                              <span className="text-[#bfdbfe]">{dimension.leftScore.toFixed(0)}</span>
-                                              <span className="text-white/62">vs</span>
-                                              <span className="text-[#fecaca]">{dimension.rightScore.toFixed(0)}</span>
-                                            </div>
+                                            {duelShareIsCompact ? null : (
+                                              <div className="flex items-center justify-between text-[9px] font-semibold tabular-nums text-white/82">
+                                                <span className="text-[#bfdbfe]">{dimension.leftScore.toFixed(0)}</span>
+                                                <span className="text-white/62">vs</span>
+                                                <span className="text-[#fecaca]">{dimension.rightScore.toFixed(0)}</span>
+                                              </div>
+                                            )}
                                           </div>
                                         );
                                       })}
@@ -1889,9 +1885,6 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                   </div>
                                 ) : null}
 
-                                <p className="line-clamp-2 rounded-lg border border-white/14 bg-white/[0.09] px-2.5 py-2 text-[10px] leading-snug text-white/88">
-                                  {duelBanter || "Duelo serio: aquí se habla en cancha y en números."}
-                                </p>
                                 </div>
                               ) : null}
                             </div>
@@ -1904,216 +1897,113 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                       </div>
 
                     <article className="rounded-lg border bg-[hsl(var(--surface-2)/0.72)] p-3">
-                      {duelInsight ? (
-                        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                          <article className="rounded-lg border bg-[hsl(var(--surface-1))] px-2.5 py-2">
-                            <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Dominio</p>
-                            <p className="text-xs font-semibold">
-                              {duelInsight.dominantDimension?.label ?? duelInsight.dominantMetric?.meta.label ?? "N/A"}
-                            </p>
-                            <p className="text-[11px] text-[hsl(var(--text-subtle))]">
-                              {duelInsight.dominantDimension
-                                ? `Brecha ${duelInsight.dominantDimension.gap.toFixed(1)}`
-                                : duelInsight.dominantMetric
-                                  ? `Brecha ${duelInsight.dominantMetric.meta.format(
-                                      duelInsight.dominantMetric.valueGap
-                                    )}`
-                                : "Sin ventaja clara"}
-                            </p>
-                          </article>
-                          <article className="rounded-lg border bg-[hsl(var(--surface-1))] px-2.5 py-2">
-                            <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Índice final</p>
-                            <p className="text-xs font-semibold">
-                              {duelInsight.winner
-                                ? `${abbreviateLeaderboardName(duelInsight.winner.name, 14)} arriba`
-                                : "Empate técnico"}
-                            </p>
-                            <p className="text-[11px] text-[hsl(var(--text-subtle))]">
-                              {duelInsight.winnerBattleIndex !== null && duelInsight.loserBattleIndex !== null
-                                ? `${duelInsight.winnerBattleIndex.toFixed(1)} vs ${duelInsight.loserBattleIndex.toFixed(1)}`
-                                : "Sin diferencia suficiente"}
-                            </p>
-                          </article>
-                          <article className="rounded-lg border bg-[hsl(var(--surface-1))] px-2.5 py-2">
-                            <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Ruta de revancha</p>
-                            <p className="text-xs font-semibold">
-                              {duelInsight.revengeMetric?.meta.label ?? "Subir consistencia"}
-                            </p>
-                            <p className="text-[11px] text-[hsl(var(--text-subtle))]">
-                              {duelInsight.revengeMetric
-                                ? "Ahí está la puerta para cambiar la historia."
-                                : "No hay fisura obvia: toca ajustar todo."}
-                            </p>
-                          </article>
-                        </div>
-                      ) : null}
-
-                      {duelDimensionSummary.length > 0 ? (
-                        <div className="mt-3 space-y-2">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between gap-2">
                           <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]">
-                            Lectura profunda por estilo
+                            Resumen comparativo
                           </p>
-                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-                            {duelDimensionSummary.map((dimension) => {
-                              const leftWinsDimension = dimension.winnerId === duelResult.players[0]?.playerId;
-                              const rightWinsDimension = dimension.winnerId === duelResult.players[1]?.playerId;
-                              const winnerTone = leftWinsDimension
-                                ? "text-[#2563eb]"
-                                : rightWinsDimension
-                                  ? "text-[#dc2626]"
-                                  : "text-[hsl(var(--text-subtle))]";
+                          <span className="text-[11px] text-[hsl(var(--text-subtle))]">
+                            {duelRows.length} métricas evaluadas
+                          </span>
+                        </div>
+
+                        {duelInsight ? (
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                            <article className="rounded-lg border bg-[hsl(var(--surface-1))] px-2.5 py-2">
+                              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Resultado</p>
+                              <p className="text-xs font-semibold">
+                                {duelInsight.winner
+                                  ? abbreviateLeaderboardName(duelInsight.winner.name, 18)
+                                  : "Empate técnico"}
+                              </p>
+                              <p className="text-[11px] text-[hsl(var(--text-subtle))]">
+                                Categorías {duelInsight.winnerWins} - {duelInsight.loserWins}
+                              </p>
+                            </article>
+                            <article className="rounded-lg border bg-[hsl(var(--surface-1))] px-2.5 py-2">
+                              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Índice</p>
+                              <p className="text-xs font-semibold tabular-nums">
+                                {duelInsight.winnerBattleIndex !== null && duelInsight.loserBattleIndex !== null
+                                  ? `${duelInsight.winnerBattleIndex.toFixed(1)} vs ${duelInsight.loserBattleIndex.toFixed(1)}`
+                                  : "Sin diferencia"}
+                              </p>
+                              <p className="text-[11px] text-[hsl(var(--text-subtle))]">Margen {duelInsight.battleGap.toFixed(1)}</p>
+                            </article>
+                            <article className="rounded-lg border bg-[hsl(var(--surface-1))] px-2.5 py-2">
+                              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Dominio principal</p>
+                              <p className="text-xs font-semibold">
+                                {duelInsight.dominantDimension?.label ?? duelInsight.dominantMetric?.meta.label ?? "Sin dominio"}
+                              </p>
+                              <p className="text-[11px] text-[hsl(var(--text-subtle))]">
+                                {duelInsight.dominantDimension
+                                  ? `Brecha ${duelInsight.dominantDimension.gap.toFixed(1)}`
+                                  : "Sin brecha marcada"}
+                              </p>
+                            </article>
+                          </div>
+                        ) : null}
+
+                        {duelKeyMetricRows.length > 0 ? (
+                          <div className="overflow-hidden rounded-lg border bg-[hsl(var(--surface-1))]">
+                            {duelKeyMetricRows.map((row, index) => {
+                              const leftWinsMetric = row.winnerId === row.leftPlayer.playerId;
+                              const rightWinsMetric = row.winnerId === row.rightPlayer.playerId;
+                              const leftTone = leftWinsMetric ? "text-[#60a5fa]" : "text-[hsl(var(--text-subtle))]";
+                              const rightTone = rightWinsMetric ? "text-[#f87171]" : "text-[hsl(var(--text-subtle))]";
 
                               return (
-                                <article
-                                  key={`duel-dimension-${dimension.key}`}
-                                  className="rounded-lg border bg-[hsl(var(--surface-1))] px-2.5 py-2"
+                                <div
+                                  key={`duel-summary-row-${row.metric}`}
+                                  className={`grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 py-2 ${
+                                    index < duelKeyMetricRows.length - 1 ? "border-b border-[hsl(var(--border)/0.7)]" : ""
+                                  }`}
                                 >
-                                  <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">
-                                    {dimension.label}
+                                  <p className={`truncate text-right text-xs font-semibold tabular-nums ${leftTone}`}>
+                                    {row.meta.format(row.leftValue)}
                                   </p>
-                                  <p className={`mt-1 text-sm font-semibold ${winnerTone}`}>
-                                    {dimension.winnerId === null
-                                      ? "Empate"
-                                      : leftWinsDimension
-                                        ? abbreviateLeaderboardName(duelResult.players[0]?.name ?? "", 12)
-                                        : abbreviateLeaderboardName(duelResult.players[1]?.name ?? "", 12)}
-                                  </p>
-                                  <div className="mt-1.5 relative h-2 overflow-hidden rounded-full bg-[hsl(var(--surface-2))]">
-                                    <span
-                                      className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#1d4ed8] to-[#60a5fa] transition-all duration-700"
-                                      style={{ width: `${dimension.leftScore}%` }}
-                                    />
-                                    <span
-                                      className="absolute inset-y-0 right-0 bg-gradient-to-l from-[#b91c1c] to-[#f87171] transition-all duration-700"
-                                      style={{ width: `${dimension.rightScore}%` }}
-                                    />
-                                    <span className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-[hsl(var(--border))]" />
+                                  <div className="text-center">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+                                      {row.meta.label}
+                                    </p>
+                                    <p className="text-[10px] text-[hsl(var(--text-subtle))]">
+                                      {row.meta.higherIsBetter ? "más alto" : "más bajo"}
+                                    </p>
                                   </div>
-                                  <p className="mt-1 text-[11px] text-[hsl(var(--text-subtle))] tabular-nums">
-                                    Brecha {dimension.gap.toFixed(1)}
+                                  <p className={`truncate text-xs font-semibold tabular-nums ${rightTone}`}>
+                                    {row.meta.format(row.rightValue)}
                                   </p>
-                                </article>
+                                </div>
                               );
                             })}
                           </div>
+                        ) : null}
 
-                          {duelCoachTake ? (
-                            <p className="rounded-md border bg-[hsl(var(--surface-1))] px-2.5 py-2 text-xs text-[hsl(var(--muted-foreground))]">
-                              {duelCoachTake}
-                            </p>
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </article>
-
-                    <div className="space-y-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]">
-                        Toca una métrica para ver lectura inteligente
-                      </p>
-                      <div className="flex gap-1.5 overflow-x-auto pb-1">
-                        {duelRows.map((row) => {
-                          const active = duelFocusedRow?.metric === row.metric;
-                          return (
-                            <button
-                              key={`duel-chip-${row.metric}`}
-                              type="button"
-                              onClick={() => setDuelMetricFocus(row.metric)}
-                              className={`inline-flex min-h-[34px] shrink-0 items-center rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
-                                active
-                                  ? "border-[hsl(var(--primary)/0.42)] bg-[hsl(var(--primary)/0.12)] text-[hsl(var(--primary))]"
-                                  : "bg-[hsl(var(--surface-1))] text-[hsl(var(--text-subtle))]"
-                              }`}
-                            >
-                              {row.meta.label}
-                            </button>
-                          );
-                        })}
+                        {duelAdvantagesByPlayer ? (
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <article className="rounded-lg border bg-[hsl(var(--surface-1))] px-2.5 py-2">
+                              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+                                Fortalezas {abbreviateLeaderboardName(duelResult.players[0]?.name ?? "Jugador A", 14)}
+                              </p>
+                              <p className="text-xs font-semibold">
+                                {duelAdvantagesByPlayer.left.length > 0
+                                  ? duelAdvantagesByPlayer.left.map((row) => row.meta.label).join(" · ")
+                                  : "Sin ventaja clara en métricas clave"}
+                              </p>
+                            </article>
+                            <article className="rounded-lg border bg-[hsl(var(--surface-1))] px-2.5 py-2">
+                              <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+                                Fortalezas {abbreviateLeaderboardName(duelResult.players[1]?.name ?? "Jugador B", 14)}
+                              </p>
+                              <p className="text-xs font-semibold">
+                                {duelAdvantagesByPlayer.right.length > 0
+                                  ? duelAdvantagesByPlayer.right.map((row) => row.meta.label).join(" · ")
+                                  : "Sin ventaja clara en métricas clave"}
+                              </p>
+                            </article>
+                          </div>
+                        ) : null}
                       </div>
-
-                      {duelFocusedRow ? (
-                        <article className="rounded-lg border bg-[hsl(var(--surface-1))] p-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-sm font-semibold">{duelFocusedRow.meta.label}</p>
-                            <span className="text-[11px] text-[hsl(var(--text-subtle))]">
-                              {duelFocusedRow.meta.higherIsBetter ? "Más alto gana" : "Más bajo gana"}
-                            </span>
-                          </div>
-                          <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-xs">
-                            <p className="truncate text-right font-semibold tabular-nums">
-                              {duelFocusedRow.meta.format(duelFocusedRow.leftValue)}
-                            </p>
-                            <span className="text-[hsl(var(--text-subtle))]">vs</span>
-                            <p className="truncate font-semibold tabular-nums">
-                              {duelFocusedRow.meta.format(duelFocusedRow.rightValue)}
-                            </p>
-                          </div>
-                          <div className="mt-2 relative flex h-2.5 overflow-hidden rounded-full bg-[hsl(var(--surface-2))]">
-                            <span
-                              className="bg-gradient-to-r from-[#1d4ed8] to-[#60a5fa] transition-all duration-700"
-                              style={{ width: `${duelFocusedRow.ratio.leftRatio}%` }}
-                            />
-                            <span
-                              className="bg-gradient-to-r from-[#f87171] to-[#b91c1c] transition-all duration-700"
-                              style={{ width: `${duelFocusedRow.ratio.rightRatio}%` }}
-                            />
-                            <span className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-[hsl(var(--border))]" />
-                          </div>
-                          <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">{duelFocusedNarrative}</p>
-                        </article>
-                      ) : null}
-
-                      {duelRows.map((row) => {
-                        const winnerName =
-                          row.winnerId === null
-                            ? "Empate"
-                            : row.winnerId === row.leftPlayer.playerId
-                            ? row.leftPlayer.name
-                            : row.rightPlayer.name;
-                        const winnerIconTone =
-                          row.winnerId === null
-                            ? "text-[hsl(var(--text-subtle))]"
-                            : row.winnerId === row.leftPlayer.playerId
-                              ? "text-[#2563eb]"
-                              : "text-[#dc2626]";
-
-                        return (
-                          <article
-                            key={`duel-metric-${row.metric}`}
-                            className="rounded-lg border bg-[hsl(var(--surface-2)/0.65)] p-3"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-sm font-semibold">{row.meta.label}</p>
-                              <span className="inline-flex items-center gap-1 rounded-md border bg-[hsl(var(--surface-1))] px-2 py-0.5 text-[11px]">
-                                <BoltIcon className={`h-3 w-3 ${winnerIconTone}`} />
-                                {winnerName}
-                              </span>
-                            </div>
-
-                            <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-xs">
-                              <p className="truncate text-right font-semibold tabular-nums">{row.meta.format(row.leftValue)}</p>
-                              <span className="text-[hsl(var(--text-subtle))]">vs</span>
-                              <p className="truncate font-semibold tabular-nums">{row.meta.format(row.rightValue)}</p>
-                            </div>
-
-                            <div className="mt-2 relative flex h-2.5 overflow-hidden rounded-full bg-[hsl(var(--surface-1))]">
-                              <span
-                                className="bg-gradient-to-r from-[#1d4ed8] to-[#60a5fa] transition-all duration-700"
-                                style={{ width: `${row.ratio.leftRatio}%` }}
-                              />
-                              <span
-                                className="bg-gradient-to-r from-[#f87171] to-[#b91c1c] transition-all duration-700"
-                                style={{ width: `${row.ratio.rightRatio}%` }}
-                              />
-                              <span className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-[hsl(var(--border))]" />
-                            </div>
-
-                            <p className="mt-2 text-[11px] text-[hsl(var(--text-subtle))]">
-                              Brecha: <span className="font-semibold">{row.meta.format(row.valueGap)}</span>
-                            </p>
-                          </article>
-                        );
-                      })}
-                    </div>
+                    </article>
                   </div>
                 ) : null}
               </div>
