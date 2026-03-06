@@ -22,6 +22,13 @@ export type BattleMetric =
   | "fg_pct"
   | "topg";
 
+export type BattleDimensionKey =
+  | "scoring"
+  | "creation"
+  | "defense"
+  | "control"
+  | "impact";
+
 export type PlayerStatsLine = {
   playerId: number;
   name: string;
@@ -299,4 +306,9 @@ export type BattleSummary = {
   overallWinnerName: string | null;
   categoryWins: Record<number, number>;
   perMetricLeader: Record<BattleMetric, number[]>;
+  metricScoreByPlayer: Record<number, number>;
+  impactScoreByPlayer: Record<number, number>;
+  battleIndexByPlayer: Record<number, number>;
+  dimensionScoresByPlayer: Record<number, Record<BattleDimensionKey, number>>;
+  dimensionWinners: Record<BattleDimensionKey, number | null>;
 };
