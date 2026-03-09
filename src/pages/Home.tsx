@@ -8,7 +8,7 @@ import {
   TrophyIcon,
   UserGroupIcon,
 } from "@heroicons/react/24/solid";
-import { DocumentTextIcon } from "@heroicons/react/24/outline";
+import { DocumentTextIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 
 import PageShell from "../components/ui/PageShell";
 import SectionCard from "../components/ui/SectionCard";
@@ -25,11 +25,18 @@ import {
   getTournamentResultsSummary,
   getTournamentSettings,
 } from "../services/tournamentAnalytics";
+import {
+  buildChallengeBoardRows,
+  listTournamentChallenges,
+  regenerateTournamentChallenges,
+} from "../services/tournamentChallenges";
 import type {
+  ChallengeBoardRow,
+  TournamentChallengeStatus,
+  TournamentPlayerChallenge,
   PlayerStatsLine,
   TournamentResultMatchOverview,
   TournamentResultSummary,
-  ViewerFollowState,
 } from "../types/tournament-analytics";
 import { TOURNAMENT_RULES_PDF_URL } from "../constants/tournamentRules";
 import { abbreviateLeaderboardName } from "../utils/player-display";
@@ -39,12 +46,10 @@ import {
   type IdealFiveProjection,
 } from "../utils/ideal-five";
 import {
-  loadViewerFollows,
+  getViewerSelectedPlayerForTournament,
   loadViewerSelectedTournamentId,
-  saveViewerFollows,
+  saveViewerSelectedPlayerForTournament,
   saveViewerSelectedTournamentId,
-  toggleViewerPlayerFollow,
-  toggleViewerTeamFollow,
 } from "../utils/viewer-preferences";
 
 type TeamStandingSummary = {
@@ -347,6 +352,51 @@ const formatMatchScoreLine = (match: TournamentResultMatchOverview) => {
 
 const formatUpcomingMatchLabel = (match: UpcomingTournamentMatch) =>
   `${formatHomeDateTime(match.matchDate, match.matchTime)}`;
+
+const CHALLENGE_STATUS_OPTIONS: Array<{
+  value: TournamentChallengeStatus | "all";
+  label: string;
+}> = [
+  { value: "all", label: "Todos" },
+  { value: "pending", label: "Pendientes" },
+  { value: "completed", label: "Cumplidos" },
+  { value: "elite", label: "Elite" },
+  { value: "failed", label: "Fallados" },
+  { value: "not_evaluated", label: "N/J" },
+];
+
+const HOME_DAILY_CONTEXT_ENABLED = false;
+const HOME_CHALLENGES_IN_HOME_ENABLED = false;
+
+const challengeStatusLabel = (status: TournamentChallengeStatus) => {
+  if (status === "completed") return "Cumplido";
+  if (status === "elite") return "Elite";
+  if (status === "failed") return "Fallado";
+  if (status === "not_evaluated") return "N/J";
+  return "Pendiente";
+};
+
+const challengeStatusBadgeVariant = (
+  status: TournamentChallengeStatus
+): "default" | "primary" | "success" | "warning" | "danger" => {
+  if (status === "elite") return "success";
+  if (status === "completed") return "primary";
+  if (status === "failed") return "danger";
+  if (status === "not_evaluated") return "warning";
+  return "default";
+};
+
+const normalizeSearchValue = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+const formatChallengeMetricValue = (value: number | null) => {
+  if (value === null || Number.isNaN(value)) return "--";
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+};
 
 const withinNextDays = (dateValue: string | null, days: number) => {
   const parsed = parseIsoDateLocal(dateValue);
@@ -1714,37 +1764,161 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
   const [dailySpotlight, setDailySpotlight] = useState<DailyTournamentSpotlight | null>(null);
   const [dailySpotlightOpen, setDailySpotlightOpen] = useState(false);
   const [dailySpotlightUnread, setDailySpotlightUnread] = useState(false);
-  const [viewerFollows, setViewerFollows] = useState<ViewerFollowState>(() =>
-    loadViewerFollows()
+  const [challengeRows, setChallengeRows] = useState<TournamentPlayerChallenge[]>([]);
+  const [challengesLoading, setChallengesLoading] = useState(false);
+  const [challengeErrorMessage, setChallengeErrorMessage] = useState<string | null>(null);
+  const [selectedChallengePlayerId, setSelectedChallengePlayerId] = useState<number | null>(null);
+  const [challengeSearch, setChallengeSearch] = useState("");
+  const [challengeStatusFilter, setChallengeStatusFilter] = useState<TournamentChallengeStatus | "all">("all");
+  const [regeneratingChallenges, setRegeneratingChallenges] = useState(false);
+
+  useEffect(() => {
+    if (!HOME_CHALLENGES_IN_HOME_ENABLED || !insight) {
+      setChallengeRows([]);
+      setSelectedChallengePlayerId(null);
+      return;
+    }
+
+    const savedPlayerId = getViewerSelectedPlayerForTournament(insight.tournamentId);
+    setSelectedChallengePlayerId(savedPlayerId);
+  }, [insight]);
+
+  useEffect(() => {
+    if (!HOME_CHALLENGES_IN_HOME_ENABLED || !insight) return;
+
+    let cancelled = false;
+
+    const loadChallenges = async (options?: { silent?: boolean }) => {
+      const silent = Boolean(options?.silent);
+      if (!silent) setChallengesLoading(true);
+
+      try {
+        const rows = await listTournamentChallenges(insight.tournamentId);
+        if (cancelled) return;
+        setChallengeRows(rows);
+        setChallengeErrorMessage(null);
+      } catch (error) {
+        if (cancelled) return;
+        setChallengeErrorMessage(
+          error instanceof Error ? error.message : "No se pudieron cargar los retos del torneo."
+        );
+      } finally {
+        if (!cancelled && !silent) setChallengesLoading(false);
+      }
+    };
+
+    void loadChallenges();
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void loadChallenges({ silent: true });
+    }, 60000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [insight]);
+
+  const challengeBoardRows = useMemo<ChallengeBoardRow[]>(
+    () => buildChallengeBoardRows(challengeRows),
+    [challengeRows]
+  );
+  const filteredChallengeBoardRows = useMemo(() => {
+    const normalizedSearch = normalizeSearchValue(challengeSearch);
+
+    return challengeBoardRows.filter((row) => {
+      if (
+        challengeStatusFilter !== "all" &&
+        row.challengeStatus !== challengeStatusFilter
+      ) {
+        return false;
+      }
+
+      if (!normalizedSearch) return true;
+
+      const byPlayer = normalizeSearchValue(row.playerName);
+      const byTeam = normalizeSearchValue(row.teamName ?? "");
+      return byPlayer.includes(normalizedSearch) || byTeam.includes(normalizedSearch);
+    });
+  }, [challengeBoardRows, challengeSearch, challengeStatusFilter]);
+
+  const challengePlayerOptions = useMemo(
+    () =>
+      challengeBoardRows
+        .slice()
+        .sort((a, b) => a.playerName.localeCompare(b.playerName, "es", { sensitivity: "base" })),
+    [challengeBoardRows]
   );
 
   useEffect(() => {
-    setViewerFollows(loadViewerFollows());
-  }, []);
+    if (!insight) return;
+    if (challengePlayerOptions.length === 0) return;
 
-  const followedTeamsSet = useMemo(
-    () => new Set(viewerFollows.teams.map((team) => team.toLowerCase())),
-    [viewerFollows.teams]
-  );
-  const followedPlayersSet = useMemo(
-    () => new Set(viewerFollows.players),
-    [viewerFollows.players]
+    if (
+      selectedChallengePlayerId &&
+      challengePlayerOptions.some((row) => row.playerId === selectedChallengePlayerId)
+    ) {
+      return;
+    }
+
+    const firstPlayerId = challengePlayerOptions[0].playerId;
+    setSelectedChallengePlayerId(firstPlayerId);
+    saveViewerSelectedPlayerForTournament(insight.tournamentId, firstPlayerId);
+  }, [insight, selectedChallengePlayerId, challengePlayerOptions]);
+
+  const selectedPlayerChallenges = useMemo(() => {
+    if (!selectedChallengePlayerId) return [] as TournamentPlayerChallenge[];
+    return challengeRows
+      .filter((row) => row.playerId === selectedChallengePlayerId)
+      .sort((a, b) =>
+        getScheduleSortKey(a.challengeDate, a.challengeTime, "asc").localeCompare(
+          getScheduleSortKey(b.challengeDate, b.challengeTime, "asc")
+        )
+      );
+  }, [challengeRows, selectedChallengePlayerId]);
+
+  const selectedPlayerNextChallenge = useMemo(
+    () => selectedPlayerChallenges.find((row) => row.status === "pending") ?? null,
+    [selectedPlayerChallenges]
   );
 
-  const handleToggleTeamFollow = (teamName: string) => {
-    setViewerFollows((current) => {
-      const next = toggleViewerTeamFollow(current, teamName);
-      saveViewerFollows(next);
-      return next;
-    });
+  const selectedPlayerLatestSettledChallenge = useMemo(() => {
+    const settled = selectedPlayerChallenges
+      .filter((row) => row.settled)
+      .sort((a, b) =>
+        getScheduleSortKey(b.challengeDate, b.challengeTime, "desc").localeCompare(
+          getScheduleSortKey(a.challengeDate, a.challengeTime, "desc")
+        )
+      );
+    return settled[0] ?? null;
+  }, [selectedPlayerChallenges]);
+
+  const handleChangeSelectedChallengePlayer = (playerId: number) => {
+    if (!insight) return;
+    if (!Number.isFinite(playerId) || playerId <= 0) return;
+    setSelectedChallengePlayerId(playerId);
+    saveViewerSelectedPlayerForTournament(insight.tournamentId, playerId);
   };
 
-  const handleTogglePlayerFollow = (playerId: number) => {
-    setViewerFollows((current) => {
-      const next = toggleViewerPlayerFollow(current, playerId);
-      saveViewerFollows(next);
-      return next;
-    });
+  const handleRegenerateChallenges = async () => {
+    if (!insight || mode !== "admin") return;
+    setRegeneratingChallenges(true);
+    setChallengeErrorMessage(null);
+
+    try {
+      await regenerateTournamentChallenges(insight.tournamentId);
+      const refreshed = await listTournamentChallenges(insight.tournamentId);
+      setChallengeRows(refreshed);
+    } catch (error) {
+      setChallengeErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "No se pudieron regenerar los retos del torneo."
+      );
+    } finally {
+      setRegeneratingChallenges(false);
+    }
   };
 
   const heroStats = insight
@@ -1760,6 +1934,13 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
       ];
 
   useEffect(() => {
+    if (!HOME_DAILY_CONTEXT_ENABLED) {
+      setDailySpotlight(null);
+      setDailySpotlightOpen(false);
+      setDailySpotlightUnread(false);
+      return;
+    }
+
     if (!insight) {
       setDailySpotlight(null);
       setDailySpotlightOpen(false);
@@ -1828,28 +2009,12 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
   const viewerMode = mode === "viewer";
   const topScorers = insight.topScorers.slice(0, 6);
   const topTeams = insight.topTeams.slice(0, 6);
-  const followedUpcomingMatches = insight.upcomingMatches
-    .filter(
-      (match) =>
-        followedTeamsSet.has(match.teamA.toLowerCase()) ||
-        followedTeamsSet.has(match.teamB.toLowerCase())
-    )
-    .slice(0, 6);
-  const followedRecentResults = insight.latestResults
-    .filter(
-      (match) =>
-        followedTeamsSet.has(match.teamA.toLowerCase()) ||
-        followedTeamsSet.has(match.teamB.toLowerCase())
-    )
-    .slice(0, 4);
-  const followedPlayerLines = insight.playerLines
-    .filter((line) => followedPlayersSet.has(line.playerId))
-    .sort((a, b) => b.valuationPerGame - a.valuationPerGame)
-    .slice(0, 6);
-  const radarEmpty =
-    viewerFollows.teams.length === 0 && viewerFollows.players.length === 0;
-  const quickTeamSuggestions = topTeams.slice(0, 4);
-  const quickPlayerSuggestions = topScorers.slice(0, 4);
+  const selectedChallengeBoardRow =
+    challengeBoardRows.find((row) => row.playerId === selectedChallengePlayerId) ??
+    null;
+  const myChallengeEmpty =
+    selectedPlayerNextChallenge === null &&
+    selectedPlayerLatestSettledChallenge === null;
   const idealFive = insight.idealFive;
   const idealFiveRoleOrder = ["PG", "SG", "SF", "PF", "C"];
   const idealFiveLineup = idealFive
@@ -2185,11 +2350,11 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
         </div>
       </section>
 
-      {viewerMode ? (
-        <section className="grid gap-3 lg:grid-cols-[1.05fr_0.95fr]">
+      {HOME_CHALLENGES_IN_HOME_ENABLED ? (
+        <section className="grid gap-3 lg:grid-cols-[1.06fr_0.94fr]">
           <SectionCard
-            title="Contexto diario"
-            description="Tu torneo activo y tus seguimientos se guardan automáticamente."
+            title="Mi reto del próximo juego"
+            description="Elige tu jugador y mira su reto oficial guardado en base de datos."
           >
             <div className="space-y-3">
               <label className="space-y-1">
@@ -2209,210 +2374,210 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
                 </AppSelect>
               </label>
 
-              <div className="space-y-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
-                  Equipos seguidos
-                </p>
-                {viewerFollows.teams.length === 0 ? (
-                  <p className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-3 py-2 text-xs text-[hsl(var(--muted-foreground))]">
-                    No sigues equipos todavía. Agrega algunos para activar el radar.
-                  </p>
-                ) : (
-                  <div className="soft-scrollbar flex gap-2 overflow-x-auto pb-1">
-                    {viewerFollows.teams.map((teamName) => (
-                      <button
-                        key={teamName}
-                        type="button"
-                        onClick={() => handleToggleTeamFollow(teamName)}
-                        className="whitespace-nowrap rounded-full border border-[hsl(var(--primary)/0.3)] bg-[hsl(var(--primary)/0.1)] px-3 py-1.5 text-xs font-semibold text-[hsl(var(--primary))]"
-                      >
-                        Siguiendo · {teamName}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <label className="space-y-1">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+                  Soy este jugador
+                </span>
+                <AppSelect
+                  value={selectedChallengePlayerId ? String(selectedChallengePlayerId) : ""}
+                  onChange={(event) =>
+                    handleChangeSelectedChallengePlayer(Number(event.target.value))
+                  }
+                  className="input-base h-11"
+                >
+                  {challengePlayerOptions.length === 0 ? (
+                    <option value="">Sin jugadores con retos</option>
+                  ) : null}
+                  {challengePlayerOptions.map((row) => (
+                    <option key={row.playerId} value={row.playerId}>
+                      {row.playerName}
+                      {row.teamName ? ` · ${row.teamName}` : ""}
+                    </option>
+                  ))}
+                </AppSelect>
+              </label>
 
-              <div className="space-y-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
-                  Jugadores seguidos
+              {challengesLoading ? (
+                <p className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-3 py-2 text-sm text-[hsl(var(--muted-foreground))]">
+                  Cargando retos...
                 </p>
-                {viewerFollows.players.length === 0 ? (
-                  <p className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-3 py-2 text-xs text-[hsl(var(--muted-foreground))]">
-                    Todavía no sigues jugadores. Usa "Seguir" en el ranking para personalizar.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {insight.playerLines
-                      .filter((line) => followedPlayersSet.has(line.playerId))
-                      .slice(0, 8)
-                      .map((line) => (
-                        <button
-                          key={line.playerId}
-                          type="button"
-                          onClick={() => handleTogglePlayerFollow(line.playerId)}
-                          className="rounded-full border border-[hsl(var(--success)/0.34)] bg-[hsl(var(--success)/0.14)] px-3 py-1.5 text-xs font-semibold text-[hsl(var(--success))]"
+              ) : challengeErrorMessage ? (
+                <p className="rounded-[10px] border border-[hsl(var(--destructive)/0.34)] bg-[hsl(var(--destructive)/0.1)] px-3 py-2 text-sm text-[hsl(var(--destructive))]">
+                  {challengeErrorMessage}
+                </p>
+              ) : myChallengeEmpty ? (
+                <p className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-3 py-2 text-sm text-[hsl(var(--muted-foreground))]">
+                  Este jugador aún no tiene retos listos. Asegura participantes en `match_players`.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {selectedPlayerNextChallenge ? (
+                    <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Badge variant="primary">Reto pendiente</Badge>
+                        <p className="text-xs text-[hsl(var(--text-subtle))]">
+                          {formatHomeDateTime(
+                            selectedPlayerNextChallenge.challengeDate,
+                            selectedPlayerNextChallenge.challengeTime
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="mt-2 grid gap-2 grid-cols-1 sm:grid-cols-3">
+                        {selectedPlayerNextChallenge.targets.map((target, index) => (
+                          <article
+                            key={`${selectedPlayerNextChallenge.id}-${target.metric}-${index}`}
+                            className="rounded-[8px] border bg-[hsl(var(--surface-2)/0.5)] px-2.5 py-2"
+                          >
+                            <p className="text-[10px] uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+                              {target.label}
+                            </p>
+                            <p className="text-sm font-semibold tabular-nums">
+                              {target.op === "lte" ? "≤ " : "≥ "}
+                              {formatChallengeMetricValue(target.target)}
+                            </p>
+                          </article>
+                        ))}
+                      </div>
+                    </article>
+                  ) : null}
+
+                  {selectedPlayerLatestSettledChallenge ? (
+                    <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Badge
+                          variant={challengeStatusBadgeVariant(selectedPlayerLatestSettledChallenge.status)}
                         >
-                          {abbreviateLeaderboardName(line.name, 20)}
-                        </button>
-                      ))}
-                  </div>
-                )}
-              </div>
+                          Último: {challengeStatusLabel(selectedPlayerLatestSettledChallenge.status)}
+                        </Badge>
+                        <p className="text-xs text-[hsl(var(--text-subtle))]">
+                          Aciertos {selectedPlayerLatestSettledChallenge.successCount}/3
+                        </p>
+                      </div>
+                      <div className="mt-2 grid gap-2 grid-cols-1 sm:grid-cols-3">
+                        {selectedPlayerLatestSettledChallenge.targets.map((target, index) => (
+                          <article
+                            key={`${selectedPlayerLatestSettledChallenge.id}-${target.metric}-${index}`}
+                            className={`rounded-[8px] border px-2.5 py-2 ${
+                              target.hit === true
+                                ? "border-[hsl(var(--success)/0.34)] bg-[hsl(var(--success)/0.11)]"
+                                : target.hit === false
+                                  ? "border-[hsl(var(--destructive)/0.34)] bg-[hsl(var(--destructive)/0.09)]"
+                                  : "border-[hsl(var(--border))] bg-[hsl(var(--surface-2)/0.5)]"
+                            }`}
+                          >
+                            <p className="text-[10px] uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+                              {target.label}
+                            </p>
+                            <p className="text-sm font-semibold tabular-nums">
+                              {formatChallengeMetricValue(target.actual)} / {formatChallengeMetricValue(target.target)}
+                            </p>
+                          </article>
+                        ))}
+                      </div>
+                    </article>
+                  ) : null}
+                </div>
+              )}
+
+              {selectedChallengeBoardRow ? (
+                <p className="text-xs text-[hsl(var(--text-subtle))]">
+                  Racha actual: <span className="font-semibold">{selectedChallengeBoardRow.streak}</span> · Tendencia:{" "}
+                  <span className="font-semibold">
+                    {selectedChallengeBoardRow.trend === "up"
+                      ? "Subiendo"
+                      : selectedChallengeBoardRow.trend === "down"
+                        ? "Bajando"
+                        : "Estable"}
+                  </span>
+                </p>
+              ) : null}
             </div>
           </SectionCard>
 
           <SectionCard
-            title="Mi radar"
-            description="Próximos partidos y rendimiento de lo que realmente te importa."
+            title="Tablero de retos"
+            description="Vista inteligente de todos los jugadores del torneo activo."
+            actions={
+              mode === "admin" ? (
+                <button
+                  type="button"
+                  className="btn-secondary min-h-[34px] px-2.5 py-1 text-xs"
+                  onClick={handleRegenerateChallenges}
+                  disabled={regeneratingChallenges}
+                >
+                  <ArrowPathIcon className={regeneratingChallenges ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+                  {regeneratingChallenges ? "Regenerando..." : "Regenerar retos"}
+                </button>
+              ) : null
+            }
           >
-            {radarEmpty ? (
-              <div className="space-y-3">
+            <div className="space-y-2.5">
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <label className="relative block">
+                  <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-subtle))]" />
+                  <input
+                    value={challengeSearch}
+                    onChange={(event) => setChallengeSearch(event.target.value)}
+                    placeholder="Buscar jugador o equipo"
+                    className="input-base h-10 pl-9"
+                  />
+                </label>
+                <AppSelect
+                  value={challengeStatusFilter}
+                  onChange={(event) =>
+                    setChallengeStatusFilter(
+                      event.target.value as TournamentChallengeStatus | "all"
+                    )
+                  }
+                  className="input-base h-10 sm:min-w-[170px]"
+                >
+                  {CHALLENGE_STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </AppSelect>
+              </div>
+
+              {filteredChallengeBoardRows.length === 0 ? (
                 <p className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-3 py-2 text-sm text-[hsl(var(--muted-foreground))]">
-                  Sigue equipos y jugadores para activar alertas personales y lectura rápida.
+                  No hay jugadores que coincidan con esos filtros.
                 </p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
-                      Sugerencias de equipos
-                    </p>
-                    <div className="mt-2 space-y-1.5">
-                      {quickTeamSuggestions.length > 0 ? (
-                        quickTeamSuggestions.map((team) => (
-                          <button
-                            key={team.teamId}
-                            type="button"
-                            onClick={() => handleToggleTeamFollow(team.name)}
-                            className="flex w-full items-center justify-between rounded-[8px] border px-2.5 py-1.5 text-left text-xs"
-                          >
-                            <span className="truncate font-semibold">{team.name}</span>
-                            <span className="text-[hsl(var(--text-subtle))]">Seguir</span>
-                          </button>
-                        ))
-                      ) : (
-                        <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                          Sin equipos para sugerir ahora.
-                        </p>
-                      )}
-                    </div>
-                  </article>
-
-                  <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
-                      Sugerencias de jugadores
-                    </p>
-                    <div className="mt-2 space-y-1.5">
-                      {quickPlayerSuggestions.length > 0 ? (
-                        quickPlayerSuggestions.map((player) => (
-                          <button
-                            key={player.playerId}
-                            type="button"
-                            onClick={() => handleTogglePlayerFollow(player.playerId)}
-                            className="flex w-full items-center justify-between rounded-[8px] border px-2.5 py-1.5 text-left text-xs"
-                          >
-                            <span className="truncate font-semibold">
-                              {abbreviateLeaderboardName(player.name, 20)}
-                            </span>
-                            <span className="text-[hsl(var(--text-subtle))]">Seguir</span>
-                          </button>
-                        ))
-                      ) : (
-                        <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                          Sin jugadores para sugerir ahora.
-                        </p>
-                      )}
-                    </div>
-                  </article>
+              ) : (
+                <div className="space-y-2">
+                  {filteredChallengeBoardRows.slice(0, 16).map((row) => (
+                    <article
+                      key={row.playerId}
+                      className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-3 py-2.5"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold">{row.playerName}</p>
+                          <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
+                            {row.teamName ?? "Sin equipo"} · {row.nextMatchLabel}
+                          </p>
+                        </div>
+                        <Badge variant={challengeStatusBadgeVariant(row.challengeStatus)}>
+                          {challengeStatusLabel(row.challengeStatus)}
+                        </Badge>
+                      </div>
+                      <div className="mt-2 grid grid-cols-3 gap-1.5 text-xs">
+                        <span className="rounded-[8px] border bg-[hsl(var(--surface-2)/0.5)] px-2 py-1 text-center tabular-nums">
+                          {row.successCount}/3
+                        </span>
+                        <span className="rounded-[8px] border bg-[hsl(var(--surface-2)/0.5)] px-2 py-1 text-center tabular-nums">
+                          Racha {row.streak}
+                        </span>
+                        <span className="rounded-[8px] border bg-[hsl(var(--surface-2)/0.5)] px-2 py-1 text-center">
+                          {row.trend === "up" ? "↑" : row.trend === "down" ? "↓" : "→"}
+                        </span>
+                      </div>
+                    </article>
+                  ))}
                 </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
-                      Próximos de tus equipos
-                    </p>
-                    {followedUpcomingMatches.length > 0 ? (
-                      <ul className="mt-2 space-y-1.5">
-                        {followedUpcomingMatches.map((match) => (
-                          <li key={match.matchId} className="text-xs">
-                            <p className="font-semibold">
-                              {match.teamA} <span className="text-[hsl(var(--text-subtle))]">vs</span> {match.teamB}
-                            </p>
-                            <p className="text-[hsl(var(--muted-foreground))]">
-                              {formatUpcomingMatchLabel(match)}
-                            </p>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">
-                        Tus equipos no tienen juegos próximos en este momento.
-                      </p>
-                    )}
-                  </article>
-
-                  <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
-                      Últimos cierres seguidos
-                    </p>
-                    {followedRecentResults.length > 0 ? (
-                      <ul className="mt-2 space-y-1.5">
-                        {followedRecentResults.map((match) => (
-                          <li key={match.matchId} className="text-xs">
-                            <p className="font-semibold">
-                              {abbreviateLeaderboardName(`${match.teamA} vs ${match.teamB}`, 28)}
-                            </p>
-                            <p className="font-semibold tabular-nums">
-                              {formatMatchScoreLine(match)}
-                            </p>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">
-                        Sin cierres recientes de los equipos que sigues.
-                      </p>
-                    )}
-                  </article>
-                </div>
-
-                <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
-                    Rendimiento de tus jugadores
-                  </p>
-                  {followedPlayerLines.length > 0 ? (
-                    <ul className="mt-2 space-y-1.5">
-                      {followedPlayerLines.map((line) => (
-                        <li
-                          key={line.playerId}
-                          className="flex items-center justify-between gap-2 rounded-[8px] border bg-[hsl(var(--surface-2)/0.55)] px-2.5 py-2 text-xs"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate font-semibold">
-                              {abbreviateLeaderboardName(line.name, 24)}
-                            </p>
-                            <p className="truncate text-[hsl(var(--muted-foreground))]">
-                              {line.teamName ?? "Sin equipo"} · {line.gamesPlayed} PJ
-                            </p>
-                          </div>
-                          <div className="text-right tabular-nums">
-                            <p>{line.perGame.ppg.toFixed(1)} PPP</p>
-                            <p className="text-[hsl(var(--muted-foreground))]">
-                              VAL {line.valuationPerGame.toFixed(1)}
-                            </p>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">
-                      Tus jugadores seguidos todavía no tienen muestra suficiente.
-                    </p>
-                  )}
-                </article>
-              </div>
-            )}
+              )}
+            </div>
           </SectionCard>
         </section>
       ) : null}
@@ -2504,7 +2669,7 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
       </section>
 
       <section className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
-        <SectionCard title="Radar semanal" description="Calendario y cierres clave en una sola vista.">
+        <SectionCard title="Agenda semanal" description="Calendario y cierres clave en una sola vista.">
           <div className="space-y-2.5">
             <div className="flex flex-wrap gap-2">
               <Badge variant={insight.todayPendingMatchesCount > 0 ? "warning" : "default"}>
@@ -2579,19 +2744,6 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
                       </p>
                       <div className="flex shrink-0 items-center gap-2">
                         <span className="font-semibold tabular-nums">{player.totalPoints} pts</span>
-                        {viewerMode ? (
-                          <button
-                            type="button"
-                            onClick={() => handleTogglePlayerFollow(player.playerId)}
-                            className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                              followedPlayersSet.has(player.playerId)
-                                ? "border-[hsl(var(--success)/0.36)] bg-[hsl(var(--success)/0.12)] text-[hsl(var(--success))]"
-                                : "border-[hsl(var(--border))] text-[hsl(var(--text-subtle))]"
-                            }`}
-                          >
-                            {followedPlayersSet.has(player.playerId) ? "Siguiendo" : "Seguir"}
-                          </button>
-                        ) : null}
                       </div>
                     </li>
                   ))}
@@ -2617,21 +2769,6 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
                         <span className="font-semibold tabular-nums">
                           {team.pg}-{team.pp}
                         </span>
-                        {viewerMode ? (
-                          <button
-                            type="button"
-                            onClick={() => handleToggleTeamFollow(team.name)}
-                            className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                              followedTeamsSet.has(team.name.toLowerCase())
-                                ? "border-[hsl(var(--primary)/0.34)] bg-[hsl(var(--primary)/0.12)] text-[hsl(var(--primary))]"
-                                : "border-[hsl(var(--border))] text-[hsl(var(--text-subtle))]"
-                            }`}
-                          >
-                            {followedTeamsSet.has(team.name.toLowerCase())
-                              ? "Siguiendo"
-                              : "Seguir"}
-                          </button>
-                        ) : null}
                       </div>
                     </li>
                   ))}
@@ -2774,101 +2911,105 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
         </div>
       </SectionCard>
 
-      <ModalShell
-        isOpen={Boolean(dailySpotlightOpen && dailySpotlight)}
-        onClose={handleCloseDailySpotlight}
-        title="Nunaico del día"
-        subtitle="Dosis de chercha deportiva para arrancar la jornada."
-        maxWidthClassName="sm:max-w-xl"
-        actions={
-          <button type="button" className="btn-primary" onClick={handleCloseDailySpotlight}>
-            Ta' claro
-          </button>
-        }
-      >
-        {dailySpotlight ? (
-          <article className={`rounded-[12px] border p-3.5 sm:p-4 ${spotlightToneClass}`}>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={dailySpotlight.accent === "warning" ? "warning" : dailySpotlight.accent === "success" ? "success" : "primary"}>
-                {dailySpotlight.badge}
-              </Badge>
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
-                <SparklesIcon className="h-3.5 w-3.5" />
-                1 joyita por día
-              </span>
-            </div>
+      {HOME_DAILY_CONTEXT_ENABLED ? (
+        <>
+          <ModalShell
+            isOpen={Boolean(dailySpotlightOpen && dailySpotlight)}
+            onClose={handleCloseDailySpotlight}
+            title="Nunaico del día"
+            subtitle="Dosis de chercha deportiva para arrancar la jornada."
+            maxWidthClassName="sm:max-w-xl"
+            actions={
+              <button type="button" className="btn-primary" onClick={handleCloseDailySpotlight}>
+                Ta' claro
+              </button>
+            }
+          >
+            {dailySpotlight ? (
+              <article className={`rounded-[12px] border p-3.5 sm:p-4 ${spotlightToneClass}`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={dailySpotlight.accent === "warning" ? "warning" : dailySpotlight.accent === "success" ? "success" : "primary"}>
+                    {dailySpotlight.badge}
+                  </Badge>
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+                    <SparklesIcon className="h-3.5 w-3.5" />
+                    1 joyita por día
+                  </span>
+                </div>
 
-            <div className="mt-3 flex items-start gap-3">
-              {dailySpotlight.photo ? (
-                <img
-                  src={dailySpotlight.photo}
-                  alt={dailySpotlight.photoAlt}
-                  className="h-14 w-14 shrink-0 rounded-full border border-[hsl(var(--border)/0.82)] object-cover"
-                />
-              ) : (
-                <span className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] text-[hsl(var(--text-subtle))]">
-                  <TrophyIcon className="h-7 w-7" />
-                </span>
-              )}
+                <div className="mt-3 flex items-start gap-3">
+                  {dailySpotlight.photo ? (
+                    <img
+                      src={dailySpotlight.photo}
+                      alt={dailySpotlight.photoAlt}
+                      className="h-14 w-14 shrink-0 rounded-full border border-[hsl(var(--border)/0.82)] object-cover"
+                    />
+                  ) : (
+                    <span className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] text-[hsl(var(--text-subtle))]">
+                      <TrophyIcon className="h-7 w-7" />
+                    </span>
+                  )}
 
-              <div className="min-w-0">
-                <p className="text-base font-bold leading-tight sm:text-lg">{dailySpotlight.title}</p>
-                <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">{dailySpotlight.description}</p>
-              </div>
-            </div>
+                  <div className="min-w-0">
+                    <p className="text-base font-bold leading-tight sm:text-lg">{dailySpotlight.title}</p>
+                    <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">{dailySpotlight.description}</p>
+                  </div>
+                </div>
 
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-2.5 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">
-                  {dailySpotlight.statLeftLabel}
-                </p>
-                <p className="text-sm font-semibold tabular-nums">{dailySpotlight.statLeftValue}</p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-2.5 py-2">
+                    <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+                      {dailySpotlight.statLeftLabel}
+                    </p>
+                    <p className="text-sm font-semibold tabular-nums">{dailySpotlight.statLeftValue}</p>
+                  </article>
+                  <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-2.5 py-2">
+                    <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+                      {dailySpotlight.statRightLabel}
+                    </p>
+                    <p className="text-sm font-semibold tabular-nums">{dailySpotlight.statRightValue}</p>
+                  </article>
+                </div>
               </article>
-              <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-2.5 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">
-                  {dailySpotlight.statRightLabel}
-                </p>
-                <p className="text-sm font-semibold tabular-nums">{dailySpotlight.statRightValue}</p>
-              </article>
-            </div>
-          </article>
-        ) : null}
-      </ModalShell>
-
-      {dailySpotlight && !dailySpotlightOpen ? (
-        <button
-          type="button"
-          onClick={handleOpenDailySpotlightFromBubble}
-          className={`fixed bottom-24 right-3 z-40 inline-flex items-center justify-center rounded-full border border-[hsl(var(--border)/0.72)] bg-[hsl(var(--surface-1)/0.96)] p-1.5 shadow-[0_16px_40px_hsl(var(--bg)/0.45)] transition-transform duration-200 hover:scale-[1.04] sm:bottom-6 sm:right-6 ${
-            dailySpotlightUnread ? "animate-pulse" : ""
-          }`}
-          aria-label="Abrir nunaico del día"
-        >
-          {dailySpotlightUnread ? (
-            <span className="pointer-events-none absolute -inset-1 rounded-full bg-[hsl(var(--danger)/0.22)] animate-ping" />
-          ) : null}
-
-          <span className="relative z-10 inline-flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-[hsl(var(--border)/0.8)] bg-[hsl(var(--surface-2))]">
-            {dailySpotlight.photo ? (
-              <img
-                src={dailySpotlight.photo}
-                alt={dailySpotlight.photoAlt}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <TrophyIcon className="h-6 w-6 text-[hsl(var(--text-subtle))]" />
-            )}
-
-            {dailySpotlightUnread ? (
-              <span className="absolute -right-1 -top-1 inline-flex h-6 w-6 items-center justify-center">
-                <span className="absolute inline-flex h-6 w-6 rounded-full bg-[hsl(var(--danger)/0.44)] animate-ping" />
-                <span className="relative inline-flex h-6 min-w-6 items-center justify-center rounded-full border-2 border-[hsl(var(--surface-1))] bg-[hsl(var(--danger))] px-1 text-[12px] font-black leading-none text-white shadow-[0_8px_18px_hsl(var(--danger)/0.45)]">
-                  1
-                </span>
-              </span>
             ) : null}
-          </span>
-        </button>
+          </ModalShell>
+
+          {dailySpotlight && !dailySpotlightOpen ? (
+            <button
+              type="button"
+              onClick={handleOpenDailySpotlightFromBubble}
+              className={`fixed bottom-24 right-3 z-40 inline-flex items-center justify-center rounded-full border border-[hsl(var(--border)/0.72)] bg-[hsl(var(--surface-1)/0.96)] p-1.5 shadow-[0_16px_40px_hsl(var(--bg)/0.45)] transition-transform duration-200 hover:scale-[1.04] sm:bottom-6 sm:right-6 ${
+                dailySpotlightUnread ? "animate-pulse" : ""
+              }`}
+              aria-label="Abrir nunaico del día"
+            >
+              {dailySpotlightUnread ? (
+                <span className="pointer-events-none absolute -inset-1 rounded-full bg-[hsl(var(--danger)/0.22)] animate-ping" />
+              ) : null}
+
+              <span className="relative z-10 inline-flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-[hsl(var(--border)/0.8)] bg-[hsl(var(--surface-2))]">
+                {dailySpotlight.photo ? (
+                  <img
+                    src={dailySpotlight.photo}
+                    alt={dailySpotlight.photoAlt}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <TrophyIcon className="h-6 w-6 text-[hsl(var(--text-subtle))]" />
+                )}
+
+                {dailySpotlightUnread ? (
+                  <span className="absolute -right-1 -top-1 inline-flex h-6 w-6 items-center justify-center">
+                    <span className="absolute inline-flex h-6 w-6 rounded-full bg-[hsl(var(--danger)/0.44)] animate-ping" />
+                    <span className="relative inline-flex h-6 min-w-6 items-center justify-center rounded-full border-2 border-[hsl(var(--surface-1))] bg-[hsl(var(--danger))] px-1 text-[12px] font-black leading-none text-white shadow-[0_8px_18px_hsl(var(--danger)/0.45)]">
+                      1
+                    </span>
+                  </span>
+                ) : null}
+              </span>
+            </button>
+          ) : null}
+        </>
       ) : null}
     </div>
   );

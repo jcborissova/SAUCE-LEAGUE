@@ -40,7 +40,6 @@ import {
   saveViewerFollows,
   saveViewerMatchFiltersForTournament,
   toggleViewerPlayerFollow,
-  toggleViewerTeamFollow,
 } from "../../utils/viewer-preferences";
 import {
   parseTournamentViewQuery,
@@ -100,7 +99,6 @@ const TournamentViewPage: React.FC = () => {
     teams: [],
     players: [],
   });
-  const [teamOptions, setTeamOptions] = useState<string[]>([]);
 
   const [tournamentName, setTournamentName] = useState("Sauce League");
   const [tournamentLoading, setTournamentLoading] = useState(false);
@@ -135,10 +133,15 @@ const TournamentViewPage: React.FC = () => {
   useEffect(() => {
     const parsed = parseTournamentViewQuery(location.search);
     const params = new URLSearchParams(location.search);
+    const legacyChallengesTab = params.get("tab") === "challenges";
 
-    setActiveTab(parsed.tab);
+    setActiveTab(legacyChallengesTab ? "stats" : parsed.tab);
     setMatchesSubtab(parsed.matchesTab);
-    setStatsSubtab(parsed.statsTab);
+    setStatsSubtab(
+      legacyChallengesTab && !params.has("statsTab")
+        ? "analytics"
+        : parsed.statsTab
+    );
 
     if (params.has("matchId")) {
       const parsedMatchId = Number(params.get("matchId"));
@@ -256,42 +259,6 @@ const TournamentViewPage: React.FC = () => {
   }, [hasValidTournamentId, tournamentId]);
 
   useEffect(() => {
-    if (!tournamentId || !hasValidTournamentId || tournamentFound !== true) return;
-
-    let cancelled = false;
-
-    const loadTeamOptions = async () => {
-      const { data, error } = await supabase
-        .from("teams")
-        .select("name")
-        .eq("tournament_id", tournamentId)
-        .order("name", { ascending: true });
-
-      if (cancelled) return;
-      if (error || !data) {
-        setTeamOptions([]);
-        return;
-      }
-
-      setTeamOptions(
-        Array.from(
-          new Set(
-            data
-              .map((row) => String(row.name ?? "").trim())
-              .filter((name) => name.length > 0)
-          )
-        )
-      );
-    };
-
-    loadTeamOptions();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [hasValidTournamentId, tournamentFound, tournamentId]);
-
-  useEffect(() => {
     setTeams([]);
     setTeamsLoaded(false);
     setTeamsLoading(false);
@@ -375,14 +342,6 @@ const TournamentViewPage: React.FC = () => {
   );
   const resolvedRulesPdfUrl = rulesPdfUrl || TOURNAMENT_RULES_PDF_URL;
 
-  const toggleTeamFollow = (teamName: string) => {
-    setViewerFollows((prev) => {
-      const next = toggleViewerTeamFollow(prev, teamName);
-      saveViewerFollows(next);
-      return next;
-    });
-  };
-
   const togglePlayerFollow = (playerId: number) => {
     setViewerFollows((prev) => {
       const next = toggleViewerPlayerFollow(prev, playerId);
@@ -444,63 +403,49 @@ const TournamentViewPage: React.FC = () => {
                 </h1>
               </div>
 
-              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <button
                   type="button"
                   onClick={handleShareView}
-                  className="btn-secondary min-h-[42px] w-full sm:w-auto"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] text-[hsl(var(--foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--surface-2))] sm:h-[40px] sm:w-auto sm:px-3"
+                  title="Compartir vista"
+                  aria-label="Compartir vista"
                 >
                   <ArrowUpOnSquareIcon className="h-4 w-4" />
-                  Compartir vista
+                  <span className="sr-only sm:not-sr-only sm:ml-2 sm:text-sm sm:font-semibold">
+                    Compartir
+                  </span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setRulesOpen(true)}
-                  className="btn-secondary min-h-[42px] w-full sm:w-auto"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] text-[hsl(var(--foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--surface-2))] sm:h-[40px] sm:w-auto sm:px-3"
+                  title="Reglamento"
+                  aria-label="Abrir reglamento"
                 >
                   <DocumentTextIcon className="h-4 w-4" />
-                  Reglamento
+                  <span className="sr-only sm:not-sr-only sm:ml-2 sm:text-sm sm:font-semibold">
+                    Reglas
+                  </span>
                 </button>
                 <Link
                   to="/tournaments"
-                  className="inline-flex min-h-[42px] w-full items-center justify-center gap-2 rounded-[6px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] px-4 text-sm font-semibold text-[hsl(var(--foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--surface-2))] sm:w-auto"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] text-[hsl(var(--foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--surface-2))] sm:h-[40px] sm:w-auto sm:px-3"
+                  title="Volver a torneos"
+                  aria-label="Volver a torneos"
                 >
                   <ArrowLeftIcon className="h-4 w-4" />
-                  Volver
+                  <span className="sr-only sm:not-sr-only sm:ml-2 sm:text-sm sm:font-semibold">
+                    Volver
+                  </span>
                 </Link>
               </div>
             </div>
           </div>
 
-          {teamOptions.length > 0 ? (
-            <div className="border-t border-[hsl(var(--border)/0.82)] px-3 py-2 sm:px-4">
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
-                Seguir equipos
-              </p>
-              <div className="soft-scrollbar flex gap-2 overflow-x-auto pb-1">
-                {teamOptions.map((teamName) => {
-                  const following = viewerFollows.teams.includes(teamName);
-                  return (
-                    <button
-                      key={teamName}
-                      type="button"
-                      onClick={() => toggleTeamFollow(teamName)}
-                      className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                        following
-                          ? "border-[hsl(var(--primary)/0.4)] bg-[hsl(var(--primary)/0.12)] text-[hsl(var(--primary))]"
-                          : "border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] text-[hsl(var(--text-subtle))]"
-                      }`}
-                    >
-                      {following ? "Siguiendo" : "Seguir"} · {teamName}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-
           <nav
-            className="grid w-full grid-cols-4 border-t border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))]"
+            className="grid w-full border-t border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))]"
+            style={{ gridTemplateColumns: `repeat(${MAIN_TABS.length}, minmax(0, 1fr))` }}
             aria-label="Secciones de torneo"
           >
             {MAIN_TABS.map((tab) => {

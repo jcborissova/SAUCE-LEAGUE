@@ -8,6 +8,8 @@ import type {
 export const VIEWER_SELECTED_TOURNAMENT_KEY = "sauce-league:viewer:selected-tournament:v1";
 export const VIEWER_FOLLOWS_KEY = "sauce-league:viewer:follows:v1";
 export const VIEWER_MATCH_FILTERS_KEY = "sauce-league:viewer:match-filters:v1";
+export const VIEWER_SELECTED_PLAYER_BY_TOURNAMENT_KEY =
+  "sauce-league:viewer:selected-player-by-tournament:v1";
 
 export type ViewerResultsFilters = ViewerMatchFilters & {
   date: string | null;
@@ -76,6 +78,56 @@ export const saveViewerSelectedTournamentId = (tournamentId: string) => {
   const value = tournamentId.trim();
   if (!value) return;
   writeLocalStorage(VIEWER_SELECTED_TOURNAMENT_KEY, value);
+};
+
+export const loadViewerSelectedPlayerByTournament = (): Record<string, number> => {
+  const raw = readLocalStorage(VIEWER_SELECTED_PLAYER_BY_TOURNAMENT_KEY);
+  if (!raw) return {};
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return {};
+
+    const byTournament: Record<string, number> = {};
+    Object.entries(parsed as Record<string, unknown>).forEach(([tournamentId, value]) => {
+      const safeTournamentId = tournamentId.trim();
+      const playerId = Number(value);
+      if (!safeTournamentId) return;
+      if (!Number.isFinite(playerId) || playerId <= 0) return;
+      byTournament[safeTournamentId] = Math.floor(playerId);
+    });
+
+    return byTournament;
+  } catch {
+    return {};
+  }
+};
+
+export const getViewerSelectedPlayerForTournament = (tournamentId: string): number | null => {
+  const safeTournamentId = tournamentId.trim();
+  if (!safeTournamentId) return null;
+  const byTournament = loadViewerSelectedPlayerByTournament();
+  return byTournament[safeTournamentId] ?? null;
+};
+
+export const saveViewerSelectedPlayerForTournament = (
+  tournamentId: string,
+  playerId: number | null
+) => {
+  const safeTournamentId = tournamentId.trim();
+  if (!safeTournamentId) return;
+
+  const byTournament = loadViewerSelectedPlayerByTournament();
+  if (playerId === null || !Number.isFinite(playerId) || playerId <= 0) {
+    delete byTournament[safeTournamentId];
+  } else {
+    byTournament[safeTournamentId] = Math.floor(playerId);
+  }
+
+  writeLocalStorage(
+    VIEWER_SELECTED_PLAYER_BY_TOURNAMENT_KEY,
+    JSON.stringify(byTournament)
+  );
 };
 
 export const loadViewerFollows = (): ViewerFollowState => {
