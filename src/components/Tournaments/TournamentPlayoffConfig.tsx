@@ -66,6 +66,7 @@ const TournamentPlayoffConfig: React.FC<Props> = ({ tournamentId }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [confirmGenerateOpen, setConfirmGenerateOpen] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
   const [editor, setEditor] = useState<PlayoffEditorState>(defaultEditorState);
   const [rulesPdfUrl, setRulesPdfUrl] = useState<string | null>(null);
@@ -135,6 +136,7 @@ const TournamentPlayoffConfig: React.FC<Props> = ({ tournamentId }) => {
         rulesPdfUrl,
       });
       toast.success("Configuración de playoffs guardada.");
+      setConfirmGenerateOpen(false);
       setRefreshToken((value) => value + 1);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No se pudo guardar la configuración.");
@@ -144,14 +146,11 @@ const TournamentPlayoffConfig: React.FC<Props> = ({ tournamentId }) => {
   };
 
   const handleGenerate = async () => {
-    if (!window.confirm("Se crearán series y partidos de playoffs usando la siembra final. ¿Deseas continuar?")) {
-      return;
-    }
-
     setGenerating(true);
     try {
       await generatePlayoffs(tournamentId);
       toast.success("Playoffs generados correctamente.");
+      setConfirmGenerateOpen(false);
       setRefreshToken((value) => value + 1);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No se pudieron generar los playoffs.");
@@ -290,14 +289,41 @@ const TournamentPlayoffConfig: React.FC<Props> = ({ tournamentId }) => {
           </button>
           <button
             type="button"
-            onClick={handleGenerate}
+            onClick={() => setConfirmGenerateOpen(true)}
             disabled={generating || !editor.enabled || editor.seasonType === "regular_only"}
             className="btn-primary w-full sm:w-auto disabled:opacity-60"
           >
-            {generating ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <BoltIcon className="w-4 h-4" />}
+            <BoltIcon className="w-4 h-4" />
             Generar Playoffs
           </button>
         </div>
+
+        {confirmGenerateOpen ? (
+          <div className="space-y-3 border border-[hsl(var(--warning)/0.36)] bg-[hsl(var(--warning)/0.08)] p-3 sm:p-4">
+            <p className="text-sm text-[hsl(var(--foreground))]">
+              Se crearán series y partidos de playoffs usando la siembra final del torneo.
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setConfirmGenerateOpen(false)}
+                className="btn-secondary w-full sm:w-auto"
+                disabled={generating}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={generating}
+                className="btn-primary w-full sm:w-auto disabled:opacity-60"
+              >
+                {generating ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <BoltIcon className="w-4 h-4" />}
+                Confirmar generación
+              </button>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <TournamentPlayoffOverview key={refreshToken} tournamentId={tournamentId} />

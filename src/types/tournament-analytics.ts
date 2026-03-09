@@ -242,6 +242,102 @@ export type TournamentResultSummary = {
   avgPoints: number;
 };
 
+export type ViewerFollowState = {
+  teams: string[];
+  players: number[];
+};
+
+export type ViewerMatchStatusFilter = "all" | "pending" | "completed";
+export type ViewerMatchWindowFilter = "all" | "today" | "next7";
+
+export type ViewerMatchFilters = {
+  team: string | null;
+  status: ViewerMatchStatusFilter;
+  window: ViewerMatchWindowFilter;
+};
+
+export type TournamentActivityType =
+  | "match_result_updated"
+  | "match_stats_updated"
+  | "playoff_series_updated"
+  | "leader_of_day";
+
+export type TournamentActivityItem = {
+  id: number;
+  tournamentId: string;
+  type: TournamentActivityType;
+  createdAt: string;
+  payload: Record<string, unknown>;
+};
+
+export type TournamentChallengeStatus =
+  | "pending"
+  | "completed"
+  | "elite"
+  | "failed"
+  | "not_evaluated";
+
+export type ChallengeMetric =
+  | "points"
+  | "rebounds"
+  | "assists"
+  | "steals"
+  | "blocks"
+  | "turnovers_max"
+  | "fouls_max"
+  | "fg_pct"
+  | "ft_pct"
+  | "tp_pct"
+  | "tpm"
+  | "valuation";
+
+export type ChallengeTarget = {
+  metric: ChallengeMetric;
+  label: string;
+  op: "gte" | "lte";
+  target: number;
+  actual: number | null;
+  hit: boolean | null;
+};
+
+export type TournamentPlayerChallenge = {
+  id: number;
+  tournamentId: string;
+  matchId: number;
+  playerId: number;
+  playerName: string;
+  teamName: string | null;
+  teamSide: "A" | "B" | "U" | null;
+  challengeDate: string | null;
+  challengeTime: string | null;
+  archetype: "scorer" | "creator" | "two_way" | "rim_protector" | "all_around";
+  targets: ChallengeTarget[];
+  baseline: Record<string, unknown>;
+  actuals: Record<string, unknown>;
+  successCount: number;
+  status: TournamentChallengeStatus;
+  settled: boolean;
+  settledAt: string | null;
+  locked: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ChallengeBoardTrend = "up" | "steady" | "down";
+
+export type ChallengeBoardRow = {
+  playerId: number;
+  playerName: string;
+  teamName: string | null;
+  nextMatchId: number | null;
+  nextMatchLabel: string;
+  challengeStatus: TournamentChallengeStatus;
+  successCount: number;
+  streak: number;
+  trend: ChallengeBoardTrend;
+  latestChallenge: TournamentPlayerChallenge | null;
+};
+
 export type TournamentAnalyticsPhase = Exclude<TournamentPhaseFilter, "all">;
 
 export type TournamentAnalyticsPlayerGame = {

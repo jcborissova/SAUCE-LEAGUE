@@ -43,7 +43,7 @@ type PlayerAnalyticsModalProps = {
 type TabKey = "summary" | "games";
 
 const metricCardClassName =
-  "rounded-[10px] border bg-[hsl(var(--surface-1))] px-2.5 py-2 shadow-[0_1px_0_hsl(var(--border)/0.24)]";
+  "player-analytics-metric-enter rounded-[10px] border border-[hsl(var(--border)/0.84)] bg-[linear-gradient(180deg,hsl(var(--surface-1)),hsl(var(--surface-2)/0.58))] px-2.5 py-2 shadow-[inset_0_1px_0_hsl(var(--surface-1)/0.86),0_12px_22px_-18px_hsl(var(--background)/0.8)]";
 
 const BasketballBallIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true">
@@ -102,6 +102,14 @@ const badgeTierToneByTier: Record<"HOF" | "Gold" | "Silver" | "Bronze", string> 
   Gold: "border-[hsl(var(--warning)/0.34)] bg-[hsl(var(--warning)/0.1)] text-[hsl(var(--warning))]",
   Silver: "border-[hsl(var(--primary)/0.3)] bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]",
   Bronze: "border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] text-[hsl(var(--text-subtle))]",
+};
+
+const stampToneByGrade: Record<"S" | "A" | "B" | "C" | "D", string> = {
+  S: "border-[hsl(var(--success)/0.72)] text-[hsl(var(--success))] bg-[hsl(var(--success)/0.08)]",
+  A: "border-[hsl(var(--primary)/0.72)] text-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.08)]",
+  B: "border-[hsl(var(--warning)/0.72)] text-[hsl(var(--warning))] bg-[hsl(var(--warning)/0.1)]",
+  C: "border-[hsl(var(--foreground)/0.46)] text-[hsl(var(--foreground)/0.9)] bg-[hsl(var(--surface-2)/0.82)]",
+  D: "border-[hsl(var(--destructive)/0.7)] text-[hsl(var(--destructive))] bg-[hsl(var(--destructive)/0.08)]",
 };
 
 const badgeIconByKey: Record<
@@ -312,6 +320,70 @@ const PlayerAnalyticsModal: React.FC<PlayerAnalyticsModalProps> = ({
   const photoDownloadName = buildPhotoDownloadName(detail?.line.name ?? "jugador");
   const visibleInsightBadges = insight ? insight.badges.slice(0, 3) : [];
   const hiddenInsightBadgeCount = insight ? Math.max(0, insight.badges.length - visibleInsightBadges.length) : 0;
+  const tierStamp = useMemo(() => {
+    if (!insight) return null;
+    return {
+      label: insight.grade,
+      toneClass: stampToneByGrade[insight.grade],
+    };
+  }, [insight]);
+  const valuationTone = useMemo(() => {
+    const value = detail?.line.valuationPerGame ?? 0;
+
+    if (value >= 18) {
+      return {
+        label: "Excelente",
+        className:
+          "border-[hsl(var(--success)/0.52)] bg-[linear-gradient(180deg,hsl(var(--success)/0.16),hsl(var(--success)/0.08))] text-[hsl(var(--success))]",
+      };
+    }
+
+    if (value >= 12) {
+      return {
+        label: "Buena",
+        className:
+          "border-[hsl(var(--primary)/0.5)] bg-[linear-gradient(180deg,hsl(var(--primary)/0.16),hsl(var(--primary)/0.08))] text-[hsl(var(--primary))]",
+      };
+    }
+
+    if (value >= 8) {
+      return {
+        label: "Regular",
+        className:
+          "border-[hsl(var(--warning)/0.54)] bg-[linear-gradient(180deg,hsl(var(--warning)/0.16),hsl(var(--warning)/0.08))] text-[hsl(var(--warning))]",
+      };
+    }
+
+    return {
+      label: "Baja",
+      className:
+        "border-[hsl(var(--destructive)/0.52)] bg-[linear-gradient(180deg,hsl(var(--destructive)/0.16),hsl(var(--destructive)/0.08))] text-[hsl(var(--destructive))]",
+    };
+  }, [detail?.line.valuationPerGame]);
+  const heroMetrics = useMemo(
+    () => [
+      { key: "PPJ", label: "PPJ", value: detail?.line.perGame.ppg.toFixed(1) ?? "0.0" },
+      { key: "REB", label: "REB", value: detail?.line.perGame.rpg.toFixed(1) ?? "0.0" },
+      { key: "AST", label: "AST", value: detail?.line.perGame.apg.toFixed(1) ?? "0.0" },
+      { key: "ROB", label: "ROB", value: detail?.line.perGame.spg.toFixed(1) ?? "0.0" },
+      { key: "TAP", label: "TAP", value: detail?.line.perGame.bpg.toFixed(1) ?? "0.0" },
+      { key: "PERD", label: "PERD", value: detail?.line.perGame.topg.toFixed(1) ?? "0.0" },
+      {
+        key: "VAL",
+        label: "VAL",
+        value: detail?.line.valuationPerGame.toFixed(2) ?? "0.00",
+      },
+    ],
+    [
+      detail?.line.perGame.apg,
+      detail?.line.perGame.bpg,
+      detail?.line.perGame.ppg,
+      detail?.line.perGame.rpg,
+      detail?.line.perGame.spg,
+      detail?.line.perGame.topg,
+      detail?.line.valuationPerGame,
+    ]
+  );
 
   return (
     <>
@@ -320,8 +392,8 @@ const PlayerAnalyticsModal: React.FC<PlayerAnalyticsModalProps> = ({
         onClose={onClose}
         title={modalTitle}
         subtitle={modalSubtitle}
-        maxWidthClassName="sm:max-w-6xl"
-        overlayClassName="!z-[90]"
+        maxWidthClassName="sm:max-w-7xl"
+        overlayClassName="!z-[90] bg-black/64"
         actions={
           <button type="button" className="btn-secondary" onClick={onClose}>
             Cerrar
@@ -345,178 +417,297 @@ const PlayerAnalyticsModal: React.FC<PlayerAnalyticsModalProps> = ({
 
         {!loading && !errorMessage && detail && summary ? (
           <div className="space-y-4">
-            <section className="app-card p-3 sm:p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  {playerPhotoUrl ? (
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setPhotoLightboxOpen(true)}
-                        className="group relative h-12 w-12 overflow-hidden rounded-full border"
-                        aria-label="Ampliar foto del jugador"
-                        title="Ampliar foto"
-                      >
-                        <img src={playerPhotoUrl} alt={detail.line.name} className="h-full w-full object-cover" />
-                        <span className="absolute inset-0 inline-flex items-center justify-center bg-black/30 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                          <MagnifyingGlassPlusIcon className="h-4 w-4" />
-                        </span>
-                      </button>
-                      <a
-                        href={playerPhotoUrl}
-                        download={photoDownloadName}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="absolute -bottom-1 -right-1 inline-flex h-6 w-6 items-center justify-center rounded-full border bg-[hsl(var(--surface-1))] text-[hsl(var(--text-strong))] shadow-[0_1px_6px_hsl(var(--background)/0.34)]"
-                        aria-label="Descargar foto del jugador"
-                        title="Descargar foto"
-                      >
-                        <ArrowDownTrayIcon className="h-3.5 w-3.5" />
-                      </a>
-                    </div>
-                  ) : (
-                    <span className="inline-flex h-12 w-12 items-center justify-center rounded-full border bg-[hsl(var(--surface-2))] text-sm font-semibold">
-                      {initialsFromName(detail.line.name)}
-                    </span>
-                  )}
-                  <div>
-                    <p className="text-sm text-[hsl(var(--muted-foreground))]">{detail.line.teamName ?? "Sin equipo"}</p>
-                    <p className="text-xs text-[hsl(var(--text-subtle))]">{detail.line.gamesPlayed} juegos analizados</p>
-                  </div>
+            <section className="relative overflow-hidden rounded-[14px] border border-[hsl(var(--border)/0.86)] bg-[hsl(var(--surface-1))] shadow-[0_24px_38px_-28px_hsl(var(--background)/0.85)]">
+              <div className="pointer-events-none absolute inset-0 player-card-texture opacity-35" />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_22%,hsl(var(--primary)/0.14),transparent_48%),radial-gradient(circle_at_86%_14%,hsl(var(--warning)/0.12),transparent_34%)]" />
+              {tierStamp ? (
+                <div
+                  className={`player-tier-stamp player-tier-stamp-enter ${tierStamp.toneClass}`.trim()}
+                  aria-hidden="true"
+                >
+                  <span className="player-tier-stamp-label">Tier</span>
+                  <span className="player-tier-stamp-value">{tierStamp.label}</span>
                 </div>
+              ) : null}
 
-                <div className="flex flex-wrap gap-2 text-xs">
-                  {insight ? (
-                    <Badge variant={insight.gradeTone} className="px-3 py-1.5 text-sm">
-                      Nivel {insight.grade}
-                    </Badge>
-                  ) : null}
-                  <span className="rounded-full border bg-[hsl(var(--surface-2))] px-2.5 py-1 font-semibold">
-                    VAL/PJ {detail.line.valuationPerGame.toFixed(2)}
-                  </span>
-                  <span className="rounded-full border bg-[hsl(var(--surface-2))] px-2.5 py-1 font-semibold">
-                    PRA PJ {summary.praPerGame.toFixed(1)}
-                  </span>
-                  {detail.mvpRow ? (
-                    <span className="rounded-full border bg-[hsl(var(--surface-2))] px-2.5 py-1 font-semibold">
-                      MVP score {detail.mvpRow.finalScore.toFixed(3)}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-
-              {insight ? (
-                <div className={`mt-3 rounded-[10px] border p-3 ${insightToneClassByVariant[insight.gradeTone]}`.trim()}>
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]">
-                      Perfil inteligente (fase actual)
-                    </p>
-                    <p className="text-sm font-semibold text-[hsl(var(--text-strong))]">
-                      Nivel {insight.grade} · {insight.score.toFixed(1)}/100
-                    </p>
-                    <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                      Confianza {insight.confidence} · {insight.confidenceNote}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {insight.styleTags.map((tag) => (
-                    <Badge key={tag}>{tag}</Badge>
-                  ))}
-                </div>
-
-                {visibleInsightBadges.length > 0 ? (
-                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    {visibleInsightBadges.map((badge) => {
-                      const Icon = badgeIconByKey[badge.icon];
-                      return (
-                        <article
-                          key={`${badge.name}-${badge.tier}`}
-                          className={`rounded-[10px] border px-2.5 py-2 ${badgeCardToneByTier[badge.tier]}`.trim()}
+              <div className="relative space-y-4 p-3 sm:p-4 lg:p-5">
+                <div className="grid gap-4 lg:grid-cols-[auto_1fr]">
+                  <div className="mx-auto sm:mx-0">
+                    {playerPhotoUrl ? (
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setPhotoLightboxOpen(true)}
+                          className="group player-analytics-photo-enter relative h-36 w-28 overflow-hidden rounded-[12px] border-2 border-[hsl(var(--border)/0.88)] bg-[hsl(var(--surface-2))] shadow-[0_18px_26px_-20px_hsl(var(--background)/0.95)] sm:h-44 sm:w-32"
+                          aria-label="Ampliar foto del jugador"
+                          title="Ampliar foto"
                         >
-                          <div className="flex items-center justify-between gap-2">
-                            <span
-                              className={`inline-flex h-8 w-8 items-center justify-center rounded-[8px] border bg-[hsl(var(--surface-2)/0.78)] ${badgeIconToneByTier[badge.tier]}`.trim()}
+                          <img
+                            src={playerPhotoUrl}
+                            alt={detail.line.name}
+                            className="h-full w-full object-cover object-[center_18%]"
+                          />
+                          <span className="absolute inset-0 inline-flex items-center justify-center bg-black/32 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                            <MagnifyingGlassPlusIcon className="h-6 w-6" />
+                          </span>
+                        </button>
+                        <a
+                          href={playerPhotoUrl}
+                          download={photoDownloadName}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="absolute bottom-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-[8px] border border-white/45 bg-black/40 text-white shadow-[0_10px_18px_-12px_hsl(var(--background)/0.95)] backdrop-blur-sm"
+                          aria-label="Descargar foto del jugador"
+                          title="Descargar foto"
+                        >
+                          <ArrowDownTrayIcon className="h-4 w-4" />
+                        </a>
+                      </div>
+                    ) : (
+                      <span className="player-analytics-photo-enter inline-flex h-36 w-28 items-center justify-center rounded-[12px] border-2 border-[hsl(var(--border)/0.88)] bg-[linear-gradient(180deg,hsl(var(--surface-2)),hsl(var(--surface-3)/0.8))] text-2xl font-black text-[hsl(var(--text-subtle))] shadow-[0_18px_26px_-20px_hsl(var(--background)/0.95)] sm:h-44 sm:w-32">
+                        {initialsFromName(detail.line.name)}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="player-analytics-copy-enter min-w-0 space-y-3">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+                          Tarjeta profesional
+                        </p>
+                        <span className="rounded-full border border-[hsl(var(--border)/0.86)] bg-[hsl(var(--surface-1))] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+                          ID {detail.line.playerId}
+                        </span>
+                      </div>
+                      <p className="truncate text-lg font-black tracking-tight sm:text-xl" title={detail.line.name}>
+                        {detail.line.name}
+                      </p>
+                      <p className="truncate text-sm text-[hsl(var(--muted-foreground))]">
+                        {detail.line.teamName ?? "Sin equipo"} · {phaseLabel(detail.phase)}
+                      </p>
+                      <p className="text-xs text-[hsl(var(--text-subtle))]">
+                        {detail.line.gamesPlayed} juegos analizados · {detail.line.totals.points} puntos acumulados
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <article className="rounded-[8px] border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1)/0.9)] px-2.5 py-1.5">
+                        <p className="text-[10px] uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">Equipo</p>
+                        <p className="truncate text-xs font-semibold">{detail.line.teamName ?? "Sin equipo"}</p>
+                      </article>
+                      <article className="rounded-[8px] border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1)/0.9)] px-2.5 py-1.5">
+                        <p className="text-[10px] uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">Fase</p>
+                        <p className="truncate text-xs font-semibold">{phaseLabel(detail.phase)}</p>
+                      </article>
+                      <article className="rounded-[8px] border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1)/0.9)] px-2.5 py-1.5">
+                        <p className="text-[10px] uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">PJ</p>
+                        <p className="text-xs font-semibold tabular-nums">{detail.line.gamesPlayed}</p>
+                      </article>
+                      <article className="rounded-[8px] border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1)/0.9)] px-2.5 py-1.5">
+                        <p className="text-[10px] uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">PTS Total</p>
+                        <p className="text-xs font-semibold tabular-nums">{detail.line.totals.points}</p>
+                      </article>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      {insight ? (
+                        <Badge variant={insight.gradeTone} className="px-3 py-1.5 text-sm font-bold">
+                          Nivel {insight.grade}
+                        </Badge>
+                      ) : null}
+                      <span className="rounded-[8px] border border-[hsl(var(--border)/0.84)] bg-[hsl(var(--surface-1))] px-2.5 py-1 font-semibold">
+                        VAL/PJ {detail.line.valuationPerGame.toFixed(2)}
+                      </span>
+                      <span className="rounded-[8px] border border-[hsl(var(--border)/0.84)] bg-[hsl(var(--surface-1))] px-2.5 py-1 font-semibold">
+                        PRA/PJ {summary.praPerGame.toFixed(1)}
+                      </span>
+                      {detail.mvpRow ? (
+                        <span className="rounded-[8px] border border-[hsl(var(--border)/0.84)] bg-[hsl(var(--surface-1))] px-2.5 py-1 font-semibold">
+                          MVP {detail.mvpRow.finalScore.toFixed(3)}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {playerPhotoUrl ? (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPhotoLightboxOpen(true)}
+                          className="btn-secondary min-h-[34px] px-3 py-1.5 text-xs"
+                        >
+                          <MagnifyingGlassPlusIcon className="h-4 w-4" />
+                          Ver foto grande
+                        </button>
+                        <a
+                          href={playerPhotoUrl}
+                          download={photoDownloadName}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn-secondary min-h-[34px] px-3 py-1.5 text-xs"
+                        >
+                          <ArrowDownTrayIcon className="h-4 w-4" />
+                          Descargar foto
+                        </a>
+                      </div>
+                    ) : null}
+                  </div>
+
+                </div>
+
+                <aside className="grid grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-7">
+                  {heroMetrics.map((metric, index) => {
+                    const isVal = metric.key === "VAL";
+                    const toneClass = isVal ? valuationTone.className : "";
+                    const spanClass = isVal
+                      ? "col-span-3 sm:col-span-4 xl:col-span-1"
+                      : "col-span-1";
+
+                    return (
+                      <article
+                        key={metric.key}
+                        className={`player-analytics-metric-enter rounded-[10px] border border-[hsl(var(--border)/0.86)] bg-[hsl(var(--surface-1))] px-2.5 py-2.5 text-center shadow-[0_10px_20px_-16px_hsl(var(--background)/0.95)] ${spanClass} ${toneClass}`.trim()}
+                        style={{ animationDelay: `${80 + index * 55}ms` }}
+                      >
+                        <p
+                          className={`text-[10px] font-semibold uppercase tracking-[0.12em] ${
+                            isVal
+                              ? "text-current/80"
+                              : "text-[hsl(var(--text-subtle))]"
+                          }`.trim()}
+                        >
+                          {metric.label}
+                        </p>
+                        <p className="mt-1 text-lg font-black tabular-nums sm:text-xl">
+                          {metric.value}
+                        </p>
+                        {isVal ? (
+                          <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-current/80">
+                            Valoración {valuationTone.label}
+                          </p>
+                        ) : null}
+                      </article>
+                    );
+                  })}
+                </aside>
+
+                {insight ? (
+                  <div className={`rounded-[12px] border p-3 sm:p-3.5 ${insightToneClassByVariant[insight.gradeTone]}`.trim()}>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+                          Perfil inteligente (fase actual)
+                        </p>
+                        <p className="text-sm font-semibold text-[hsl(var(--text-strong))]">
+                          Nivel {insight.grade} · {insight.score.toFixed(1)}/100
+                        </p>
+                        <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                          Confianza {insight.confidence} · {insight.confidenceNote}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {insight.styleTags.map((tag) => (
+                        <Badge key={tag}>{tag}</Badge>
+                      ))}
+                    </div>
+
+                    {visibleInsightBadges.length > 0 ? (
+                      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        {visibleInsightBadges.map((badge) => {
+                          const Icon = badgeIconByKey[badge.icon];
+                          return (
+                            <article
+                              key={`${badge.name}-${badge.tier}`}
+                              className={`rounded-[10px] border px-2.5 py-2 ${badgeCardToneByTier[badge.tier]}`.trim()}
                             >
-                              <Icon className="h-4 w-4" />
-                            </span>
-                            <span
-                              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide ${badgeTierToneByTier[badge.tier]}`.trim()}
-                            >
-                              {badge.tier}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-xs font-semibold text-[hsl(var(--text-strong))]">{badge.name}</p>
-                          <p className="text-[11px] text-[hsl(var(--muted-foreground))]">{badge.note}</p>
-                        </article>
-                      );
-                    })}
+                              <div className="flex items-center justify-between gap-2">
+                                <span
+                                  className={`inline-flex h-8 w-8 items-center justify-center rounded-[8px] border bg-[hsl(var(--surface-2)/0.78)] ${badgeIconToneByTier[badge.tier]}`.trim()}
+                                >
+                                  <Icon className="h-4 w-4" />
+                                </span>
+                                <span
+                                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide ${badgeTierToneByTier[badge.tier]}`.trim()}
+                                >
+                                  {badge.tier}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-xs font-semibold text-[hsl(var(--text-strong))]">
+                                {badge.name}
+                              </p>
+                              <p className="text-[11px] text-[hsl(var(--muted-foreground))]">
+                                {badge.note}
+                              </p>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+
+                    {hiddenInsightBadgeCount > 0 ? (
+                      <p className="mt-2 text-[11px] text-[hsl(var(--text-subtle))]">
+                        +{hiddenInsightBadgeCount} badge{hiddenInsightBadgeCount > 1 ? "s" : ""} adicional
+                        {hiddenInsightBadgeCount > 1 ? "es" : ""} en análisis interno.
+                      </p>
+                    ) : null}
+
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-2.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+                          Lo más duro
+                        </p>
+                        <p className="mt-1 text-xs text-[hsl(var(--text-strong))]">
+                          {insight.strengths.length > 0
+                            ? insight.strengths
+                                .slice(0, 2)
+                                .map((item) => `${item.label}: ${item.value}`)
+                                .join(" • ")
+                            : "Aporte equilibrado en varias áreas del juego."}
+                        </p>
+                      </div>
+
+                      <div className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-2.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+                          Para subir de nivel
+                        </p>
+                        <p className="mt-1 text-xs text-[hsl(var(--text-strong))]">
+                          {insight.watchouts.length > 0
+                            ? `${insight.watchouts[0].label}: ${insight.watchouts[0].value}`
+                            : "Mantener la consistencia partido a partido."}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 ) : null}
 
-                {hiddenInsightBadgeCount > 0 ? (
-                  <p className="mt-2 text-[11px] text-[hsl(var(--text-subtle))]">
-                    +{hiddenInsightBadgeCount} badge{hiddenInsightBadgeCount > 1 ? "s" : ""} adicional
-                    {hiddenInsightBadgeCount > 1 ? "es" : ""} en análisis interno.
-                  </p>
-                ) : null}
-
-                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <div className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-2.5">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]">
-                      Lo más duro
-                    </p>
-                    <p className="mt-1 text-xs text-[hsl(var(--text-strong))]">
-                      {insight.strengths.length > 0
-                        ? insight.strengths
-                            .slice(0, 2)
-                            .map((item) => `${item.label}: ${item.value}`)
-                            .join(" • ")
-                        : "Aporte equilibrado en varias áreas del juego."}
-                    </p>
-                  </div>
-
-                  <div className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-2.5">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))]">
-                      Para subir de nivel
-                    </p>
-                    <p className="mt-1 text-xs text-[hsl(var(--text-strong))]">
-                      {insight.watchouts.length > 0
-                        ? `${insight.watchouts[0].label}: ${insight.watchouts[0].value}`
-                        : "Mantener la consistencia partido a partido."}
-                    </p>
-                  </div>
+                <div className="inline-flex w-full rounded-[10px] border border-[hsl(var(--border)/0.86)] bg-[hsl(var(--surface-2)/0.82)] p-1 sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("summary")}
+                    className={`min-h-[34px] flex-1 rounded-[8px] px-3 py-1.5 text-xs font-semibold transition sm:flex-none ${
+                      activeTab === "summary"
+                        ? "bg-[hsl(var(--foreground))] text-[hsl(var(--background))]"
+                        : "text-[hsl(var(--text-subtle))] hover:text-[hsl(var(--text-strong))]"
+                    }`}
+                  >
+                    Resumen
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("games")}
+                    className={`min-h-[34px] flex-1 rounded-[8px] px-3 py-1.5 text-xs font-semibold transition sm:flex-none ${
+                      activeTab === "games"
+                        ? "bg-[hsl(var(--foreground))] text-[hsl(var(--background))]"
+                        : "text-[hsl(var(--text-subtle))] hover:text-[hsl(var(--text-strong))]"
+                    }`}
+                  >
+                    Por partido
+                  </button>
                 </div>
               </div>
-            ) : null}
-
-              <div className="mt-3 inline-flex rounded-xl border bg-[hsl(var(--surface-2))] p-1">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("summary")}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                  activeTab === "summary"
-                    ? "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]"
-                    : "text-[hsl(var(--text-subtle))] hover:text-[hsl(var(--text-strong))]"
-                }`}
-              >
-                Resumen
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("games")}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                  activeTab === "games"
-                    ? "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]"
-                    : "text-[hsl(var(--text-subtle))] hover:text-[hsl(var(--text-strong))]"
-                }`}
-              >
-                Por partido
-              </button>
-            </div>
-          </section>
+            </section>
 
             {activeTab === "summary" ? (
             <section className="space-y-3">

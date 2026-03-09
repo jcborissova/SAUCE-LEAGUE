@@ -6,7 +6,6 @@ import { ArrowPathIcon, EyeIcon, Cog6ToothIcon, TrashIcon } from "@heroicons/rea
 import { Link } from "react-router-dom";
 
 import ConfirmModal from "../../components/ConfirmModal";
-import TournamentConfigPage from "../../components/Tournaments/TournamentConfigPage";
 import ModalShell from "../../components/ui/ModalShell";
 import Field from "../../components/ui/Field";
 import PageShell from "../../components/ui/PageShell";
@@ -30,7 +29,6 @@ const TournamentsPage: React.FC = () => {
   const [newTournament, setNewTournament] = useState({ name: "", startdate: "", description: "" });
   const [showConfirm, setShowConfirm] = useState(false);
   const [tournamentToDelete, setTournamentToDelete] = useState<Tournament | null>(null);
-  const [tournamentToConfigure, setTournamentToConfigure] = useState<string | null>(null);
   const { role } = useRole();
 
   useEffect(() => {
@@ -126,10 +124,10 @@ const TournamentsPage: React.FC = () => {
                     </Link>
                     {role === "admin" ? (
                       <>
-                        <button onClick={() => setTournamentToConfigure(t.id)} className="btn-primary w-full sm:w-auto">
+                        <Link to={`/tournaments/config/${t.id}`} className="btn-primary w-full sm:w-auto">
                           <Cog6ToothIcon className="h-4 w-4" />
                           Configurar
-                        </button>
+                        </Link>
                         <button
                           onClick={() => {
                             setTournamentToDelete(t);
@@ -210,14 +208,6 @@ const TournamentsPage: React.FC = () => {
           setTournamentToDelete(null);
         }}
       />
-
-      {tournamentToConfigure ? (
-        <TournamentConfigPage
-          isOpen={!!tournamentToConfigure}
-          onClose={() => setTournamentToConfigure(null)}
-          tournamentId={tournamentToConfigure}
-        />
-      ) : null}
     </PageShell>
   );
 };
