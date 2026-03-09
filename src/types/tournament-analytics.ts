@@ -242,6 +242,34 @@ export type TournamentResultSummary = {
   avgPoints: number;
 };
 
+export type ViewerFollowState = {
+  teams: string[];
+  players: number[];
+};
+
+export type ViewerMatchStatusFilter = "all" | "pending" | "completed";
+export type ViewerMatchWindowFilter = "all" | "today" | "next7";
+
+export type ViewerMatchFilters = {
+  team: string | null;
+  status: ViewerMatchStatusFilter;
+  window: ViewerMatchWindowFilter;
+};
+
+export type TournamentActivityType =
+  | "match_result_updated"
+  | "match_stats_updated"
+  | "playoff_series_updated"
+  | "leader_of_day";
+
+export type TournamentActivityItem = {
+  id: number;
+  tournamentId: string;
+  type: TournamentActivityType;
+  createdAt: string;
+  payload: Record<string, unknown>;
+};
+
 export type TournamentAnalyticsPhase = Exclude<TournamentPhaseFilter, "all">;
 
 export type TournamentAnalyticsPlayerGame = {

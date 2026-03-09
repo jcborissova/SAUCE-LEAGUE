@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
 import { ArrowLeftIcon, ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/outline";
 import { ArrowPathIcon } from "@heroicons/react/24/solid";
 import LoadingSpinner from "../LoadingSpinner";
+import AppSelect from "../ui/AppSelect";
 import {
   getTournamentResultsOverview,
   getTournamentResultsSummary,
@@ -10,11 +11,29 @@ import {
   groupBoxscoreBySide,
 } from "../../services/tournamentAnalytics";
 import type { TournamentResultBoxscoreRow, TournamentResultMatchOverview } from "../../types/tournament-analytics";
+import type { ViewerResultsFilters } from "../../utils/viewer-preferences";
 
 type MatchBoxscoreState = {
   loading: boolean;
   errorMessage: string | null;
   rows: TournamentResultBoxscoreRow[] | null;
+};
+
+type Props = {
+  tournamentId: string;
+  embedded?: boolean;
+  initialFilters?: ViewerResultsFilters;
+  onFiltersChange?: (filters: ViewerResultsFilters) => void;
+  initialMatchId?: number | null;
+  onMatchOpenChange?: (matchId: number | null) => void;
+};
+
+const DEFAULT_RESULTS_FILTERS: ViewerResultsFilters = {
+  team: null,
+  status: "all",
+  window: "all",
+  date: null,
+  hasScore: "all",
 };
 
 const formatDateLabel = (value: string | null) => {
@@ -30,39 +49,109 @@ const computePra = (row: TournamentResultBoxscoreRow) =>
 
 const formatPra = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1));
 
+const normalizeResultsFilters = (filters?: ViewerResultsFilters): ViewerResultsFilters => ({
+  team: filters?.team?.trim() ? filters.team.trim() : null,
+  status: filters?.status === "pending" || filters?.status === "completed" ? filters.status : "all",
+  window: filters?.window === "today" || filters?.window === "next7" ? filters.window : "all",
+  date: filters?.date?.trim() ? filters.date.trim() : null,
+  hasScore: filters?.hasScore === "with_score" ? "with_score" : "all",
+});
+
+const sameResultsFilters = (a: ViewerResultsFilters, b: ViewerResultsFilters): boolean =>
+  a.team === b.team &&
+  a.status === b.status &&
+  a.window === b.window &&
+  a.date === b.date &&
+  a.hasScore === b.hasScore;
+
+const getTodayIsoLocal = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const toDateFromIso = (value: string | null) => {
+  if (!value) return null;
+  const parts = value.split("-").map(Number);
+  if (parts.length !== 3) return null;
+  const [year, month, day] = parts;
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
+
+const isWithinDays = (value: string | null, days: number) => {
+  const date = toDateFromIso(value);
+  if (!date) return false;
+  const today = toDateFromIso(getTodayIsoLocal());
+  if (!today) return false;
+  const diffMs = date.getTime() - today.getTime();
+  const diffDays = diffMs / 86400000;
+  return diffDays >= 0 && diffDays <= days;
+};
+
 const TournamentResultsView = ({
   tournamentId,
   embedded = false,
-}: {
-  tournamentId: string;
-  embedded?: boolean;
-}) => {
+  initialFilters,
+  onFiltersChange,
+  initialMatchId = null,
+  onMatchOpenChange,
+}: Props) => {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [matches, setMatches] = useState<TournamentResultMatchOverview[]>([]);
   const [expandedMatchId, setExpandedMatchId] = useState<number | null>(null);
   const [detailMatch, setDetailMatch] = useState<TournamentResultMatchOverview | null>(null);
   const [boxscoreByMatch, setBoxscoreByMatch] = useState<Record<number, MatchBoxscoreState>>({});
+  const [filters, setFilters] = useState<ViewerResultsFilters>(() =>
+    normalizeResultsFilters(initialFilters ?? DEFAULT_RESULTS_FILTERS)
+  );
+
+  const loadResults = useCallback(async () => {
+    setLoading(true);
+    setErrorMessage(null);
+
+    try {
+      const rows = await getTournamentResultsOverview(tournamentId);
+      setMatches(rows);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "No se pudieron cargar los resultados del torneo."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [tournamentId]);
 
   useEffect(() => {
-    const loadResults = async () => {
-      setLoading(true);
-      setErrorMessage(null);
-
-      try {
-        const rows = await getTournamentResultsOverview(tournamentId);
-        setMatches(rows);
-      } catch (error) {
-        setErrorMessage(
-          error instanceof Error ? error.message : "No se pudieron cargar los resultados del torneo."
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadResults();
-  }, [tournamentId]);
+  }, [loadResults]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      loadResults();
+    }, 60000);
+
+    return () => window.clearInterval(intervalId);
+  }, [loadResults]);
+
+  useEffect(() => {
+    const next = normalizeResultsFilters(initialFilters ?? DEFAULT_RESULTS_FILTERS);
+    setFilters((current) => (sameResultsFilters(current, next) ? current : next));
+  }, [
+    initialFilters?.team,
+    initialFilters?.status,
+    initialFilters?.window,
+    initialFilters?.date,
+    initialFilters?.hasScore,
+  ]);
+
+  useEffect(() => {
+    onFiltersChange?.(filters);
+  }, [filters, onFiltersChange]);
 
   useEffect(() => {
     if (!detailMatch) return;
@@ -81,49 +170,115 @@ const TournamentResultsView = ({
     };
   }, [detailMatch]);
 
-  const ensureBoxscore = async (matchId: number) => {
-    const current = boxscoreByMatch[matchId];
-    if (current?.loading || current?.rows) return;
+  useEffect(() => {
+    onMatchOpenChange?.(detailMatch?.matchId ?? null);
+  }, [detailMatch?.matchId, onMatchOpenChange]);
 
-    setBoxscoreByMatch((prev) => ({
-      ...prev,
-      [matchId]: { loading: true, errorMessage: null, rows: null },
-    }));
+  const ensureBoxscore = useCallback(
+    async (matchId: number) => {
+      const current = boxscoreByMatch[matchId];
+      if (current?.loading || current?.rows) return;
 
-    try {
-      const rows = await getMatchBoxscore(tournamentId, matchId);
       setBoxscoreByMatch((prev) => ({
         ...prev,
-        [matchId]: { loading: false, errorMessage: null, rows },
+        [matchId]: { loading: true, errorMessage: null, rows: null },
       }));
-    } catch (error) {
-      setBoxscoreByMatch((prev) => ({
-        ...prev,
-        [matchId]: {
-          loading: false,
-          errorMessage: error instanceof Error ? error.message : "No se pudo cargar el detalle del juego.",
-          rows: null,
-        },
-      }));
-    }
-  };
+
+      try {
+        const rows = await getMatchBoxscore(tournamentId, matchId);
+        setBoxscoreByMatch((prev) => ({
+          ...prev,
+          [matchId]: { loading: false, errorMessage: null, rows },
+        }));
+      } catch (error) {
+        setBoxscoreByMatch((prev) => ({
+          ...prev,
+          [matchId]: {
+            loading: false,
+            errorMessage: error instanceof Error ? error.message : "No se pudo cargar el detalle del juego.",
+            rows: null,
+          },
+        }));
+      }
+    },
+    [boxscoreByMatch, tournamentId]
+  );
+
+  useEffect(() => {
+    if (!initialMatchId || initialMatchId <= 0 || matches.length === 0) return;
+    const targetMatch = matches.find((match) => match.matchId === initialMatchId);
+    if (!targetMatch) return;
+
+    setExpandedMatchId(targetMatch.matchId);
+    setDetailMatch(targetMatch);
+    void ensureBoxscore(targetMatch.matchId);
+  }, [initialMatchId, matches, ensureBoxscore]);
 
   const handleToggleInline = (match: TournamentResultMatchOverview) => {
     setExpandedMatchId((prev) => (prev === match.matchId ? null : match.matchId));
-    ensureBoxscore(match.matchId);
+    void ensureBoxscore(match.matchId);
   };
 
   const handleOpenDetail = (match: TournamentResultMatchOverview) => {
     setDetailMatch(match);
-    ensureBoxscore(match.matchId);
+    void ensureBoxscore(match.matchId);
   };
 
   const summary = useMemo(() => getTournamentResultsSummary(matches), [matches]);
 
+  const teams = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          matches
+            .flatMap((match) => [match.teamA, match.teamB])
+            .map((team) => team.trim())
+            .filter((team) => team.length > 0)
+        )
+      ).sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" })),
+    [matches]
+  );
+
+  const filteredMatches = useMemo(() => {
+    const today = getTodayIsoLocal();
+
+    return matches.filter((match) => {
+      if (filters.team && match.teamA !== filters.team && match.teamB !== filters.team) {
+        return false;
+      }
+
+      if (filters.status === "completed" && !match.winnerTeam) {
+        return false;
+      }
+
+      if (filters.status === "pending" && Boolean(match.winnerTeam)) {
+        return false;
+      }
+
+      if (filters.date && match.matchDate !== filters.date) {
+        return false;
+      }
+
+      if (filters.hasScore === "with_score" && !match.hasStats) {
+        return false;
+      }
+
+      if (filters.window === "today" && match.matchDate !== today) {
+        return false;
+      }
+
+      if (filters.window === "next7" && !isWithinDays(match.matchDate, 7)) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [filters, matches]);
+
   const groupedResults = useMemo(() => {
     const grouped = new Map<string, TournamentResultMatchOverview[]>();
 
-    matches.forEach((match) => {
+    filteredMatches.forEach((match) => {
       const key = match.matchDate ?? "__sin_fecha__";
       const rows = grouped.get(key) ?? [];
       rows.push(match);
@@ -141,7 +296,7 @@ const TournamentResultsView = ({
         label: formatDateLabel(key === "__sin_fecha__" ? null : key),
         rows: rows.sort((a, b) => formatTime(b.matchTime).localeCompare(formatTime(a.matchTime))),
       }));
-  }, [matches]);
+  }, [filteredMatches]);
 
   return (
     <section className="space-y-4">
@@ -173,6 +328,63 @@ const TournamentResultsView = ({
         </div>
       </div>
 
+      <div className="grid grid-cols-1 gap-2 rounded-lg border bg-[hsl(var(--surface-1))] p-2 sm:grid-cols-2 lg:grid-cols-5 sm:p-3">
+        <AppSelect
+          value={filters.team ?? ""}
+          onChange={(event) => setFilters((prev) => ({ ...prev, team: event.target.value || null }))}
+          className="input-base h-10"
+        >
+          <option value="">Todos los equipos</option>
+          {teams.map((team) => (
+            <option key={team} value={team}>
+              {team}
+            </option>
+          ))}
+        </AppSelect>
+
+        <AppSelect
+          value={filters.status}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, status: event.target.value as ViewerResultsFilters["status"] }))
+          }
+          className="input-base h-10"
+        >
+          <option value="all">Todos</option>
+          <option value="pending">Pendientes</option>
+          <option value="completed">Finalizados</option>
+        </AppSelect>
+
+        <AppSelect
+          value={filters.window}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, window: event.target.value as ViewerResultsFilters["window"] }))
+          }
+          className="input-base h-10"
+        >
+          <option value="all">Toda fecha</option>
+          <option value="today">Solo hoy</option>
+          <option value="next7">Próximos 7 días</option>
+        </AppSelect>
+
+        <input
+          type="date"
+          value={filters.date ?? ""}
+          onChange={(event) => setFilters((prev) => ({ ...prev, date: event.target.value || null }))}
+          className="input-base h-10"
+        />
+
+        <AppSelect
+          value={filters.hasScore}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, hasScore: event.target.value as ViewerResultsFilters["hasScore"] }))
+          }
+          className="input-base h-10"
+        >
+          <option value="all">Con y sin marcador</option>
+          <option value="with_score">Solo con marcador</option>
+        </AppSelect>
+      </div>
+
       {errorMessage ? (
         <div className="rounded-md border border-[hsl(var(--destructive)/0.35)] bg-[hsl(var(--destructive)/0.08)] px-3 py-2 text-sm text-[hsl(var(--destructive))]">
           {errorMessage}
@@ -183,7 +395,7 @@ const TournamentResultsView = ({
         <LoadingSpinner label="Cargando resultados" />
       ) : groupedResults.length === 0 ? (
         <div className="app-card p-6 text-center text-sm text-[hsl(var(--text-subtle))]">
-          No hay resultados cargados todavía.
+          No hay resultados para estos filtros.
         </div>
       ) : (
         <div className="space-y-4">
@@ -316,7 +528,7 @@ const TournamentResultsView = ({
           match={detailMatch}
           boxscoreState={boxscoreByMatch[detailMatch.matchId]}
           onBack={() => setDetailMatch(null)}
-          onReload={() => ensureBoxscore(detailMatch.matchId)}
+          onReload={() => void ensureBoxscore(detailMatch.matchId)}
         />
       ) : null}
     </section>
@@ -412,7 +624,6 @@ const TeamBoxscoreTable = ({ title, rows }: { title: string; rows: TournamentRes
         <p className="px-3 py-3 text-sm text-[hsl(var(--text-subtle))]">Sin estadísticas registradas.</p>
       ) : (
         <>
-          {/* Mobile card layout */}
           <div className="divide-y md:hidden">
             {rows.map((row) => (
               <div key={`mob-${title}-${row.playerId}`} className="px-3 py-2.5">
@@ -442,7 +653,6 @@ const TeamBoxscoreTable = ({ title, rows }: { title: string; rows: TournamentRes
             ))}
           </div>
 
-          {/* Desktop table layout */}
           <div className="soft-scrollbar hidden overflow-x-auto md:block">
             <table className="w-full min-w-[980px] text-sm">
               <thead className="text-xs uppercase tracking-wide text-[hsl(var(--text-subtle))]">

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowPathIcon,
@@ -15,6 +15,8 @@ import SectionCard from "../components/ui/SectionCard";
 import StatPill from "../components/ui/StatPill";
 import Badge from "../components/ui/Badge";
 import ModalShell from "../components/ui/ModalShell";
+import AppSelect from "../components/ui/AppSelect";
+import TournamentActivityTimeline from "../components/Tournaments/TournamentActivityTimeline";
 import { useRole } from "../contexts/RoleContext";
 import { supabase } from "../lib/supabase";
 import {
@@ -27,6 +29,7 @@ import type {
   PlayerStatsLine,
   TournamentResultMatchOverview,
   TournamentResultSummary,
+  ViewerFollowState,
 } from "../types/tournament-analytics";
 import { TOURNAMENT_RULES_PDF_URL } from "../constants/tournamentRules";
 import { abbreviateLeaderboardName } from "../utils/player-display";
@@ -35,6 +38,14 @@ import {
   buildIdealFiveProjection,
   type IdealFiveProjection,
 } from "../utils/ideal-five";
+import {
+  loadViewerFollows,
+  loadViewerSelectedTournamentId,
+  saveViewerFollows,
+  saveViewerSelectedTournamentId,
+  toggleViewerPlayerFollow,
+  toggleViewerTeamFollow,
+} from "../utils/viewer-preferences";
 
 type TeamStandingSummary = {
   teamId: number;
@@ -88,15 +99,25 @@ type TournamentHomeInsight = {
   idealFive: IdealFiveProjection | null;
 };
 
+type TournamentHomeOption = {
+  id: string;
+  name: string;
+};
+
 type TournamentHomeFeedState = {
   insight: TournamentHomeInsight | null;
   loading: boolean;
   errorMessage: string | null;
+  tournaments: TournamentHomeOption[];
+  selectedTournamentId: string | null;
+  setSelectedTournamentId: (tournamentId: string) => void;
   refresh: () => void;
 };
 
 type DailyTournamentSpotlight = {
   id: string;
+  subjectKey: string;
+  topicKey: string;
   badge: string;
   title: string;
   description: string;
@@ -117,9 +138,22 @@ type DailyTournamentSpotlightVariant = {
   accent?: DailyTournamentSpotlight["accent"];
 };
 
+type DailySpotlightHistoryEntry = {
+  dateIso: string;
+  subjectKey: string;
+  topicKey: string;
+  candidateId: string;
+};
+
 const DAILY_SPOTLIGHT_AUTO_PREFIX = "sauce-league:home:nunaico:auto:v1";
 const DAILY_SPOTLIGHT_READ_PREFIX = "sauce-league:home:nunaico:read:v1";
 const DAILY_SPOTLIGHT_USER_SEED_KEY = "sauce-league:home:nunaico:user-seed:v1";
+const DAILY_SPOTLIGHT_HISTORY_PREFIX = "sauce-league:home:nunaico:history:v2";
+const DAILY_SPOTLIGHT_PICK_PREFIX = "sauce-league:home:nunaico:pick:v2";
+const DAILY_SPOTLIGHT_HISTORY_MAX_ENTRIES = 90;
+const DAILY_SPOTLIGHT_HISTORY_WINDOW_DAYS = 45;
+const DAILY_SPOTLIGHT_TOPIC_COOLDOWN_DAYS = 2;
+const DAILY_SPOTLIGHT_SUBJECT_COOLDOWN_DAYS = 12;
 
 const toIsoDateParts = (value: string) => {
   const [year, month, day] = value.split("-").map(Number);
@@ -302,6 +336,9 @@ const hasScoredResult = (match: TournamentResultMatchOverview) =>
   Number.isFinite(match.teamBPoints) &&
   (match.teamAPoints > 0 || match.teamBPoints > 0);
 
+const getMatchMargin = (match: TournamentResultMatchOverview) =>
+  hasScoredResult(match) ? Math.abs(match.teamAPoints - match.teamBPoints) : null;
+
 const formatMatchScoreLine = (match: TournamentResultMatchOverview) => {
   if (hasScoredResult(match)) return `${match.teamAPoints} - ${match.teamBPoints}`;
   if (match.winnerTeam) return `Ganó ${match.winnerTeam}`;
@@ -431,6 +468,161 @@ const buildDailySpotlightReadKey = (
   dateIso: string
 ) => `${DAILY_SPOTLIGHT_READ_PREFIX}:${mode}:${tournamentId}:${dateIso}`;
 
+const buildDailySpotlightHistoryKey = (
+  tournamentId: string,
+  mode: "viewer" | "admin"
+) => `${DAILY_SPOTLIGHT_HISTORY_PREFIX}:${mode}:${tournamentId}`;
+
+const buildDailySpotlightPickKey = (
+  tournamentId: string,
+  mode: "viewer" | "admin",
+  dateIso: string
+) => `${DAILY_SPOTLIGHT_PICK_PREFIX}:${mode}:${tournamentId}:${dateIso}`;
+
+const getIsoDayDiff = (fromIso: string, toIso: string): number | null => {
+  const fromDate = parseIsoDateLocal(fromIso);
+  const toDate = parseIsoDateLocal(toIso);
+  if (!fromDate || !toDate) return null;
+  return Math.round((toDate.getTime() - fromDate.getTime()) / 86400000);
+};
+
+const getTopicKeyFromSubject = (subjectKey: string): string => {
+  const [topicKey] = subjectKey.split("-");
+  return topicKey && topicKey.trim().length > 0 ? topicKey : "general";
+};
+
+const appendSpotlightStatContext = (
+  description: string,
+  statLeftLabel: string,
+  statLeftValue: string,
+  statRightLabel: string,
+  statRightValue: string
+): string => {
+  if (description.includes(statLeftLabel) || description.includes(statRightLabel)) {
+    return description;
+  }
+
+  return `${description} ${statLeftLabel}: ${statLeftValue} · ${statRightLabel}: ${statRightValue}.`;
+};
+
+const SPOTLIGHT_FLAVOR_LINES: Record<DailyTournamentSpotlight["accent"], string[]> = {
+  primary: [
+    "Boletín del camerino: está metido en el guion del día.",
+    "Sin vender humo: el rival debería ir calentando excusas.",
+    "Reporte callejero: hoy toca respetar esa vibra.",
+  ],
+  success: [
+    "Traducción rápida: si le das una rendija, te cobra con intereses.",
+    "Dato no pedido: ese flow está llegando en premium.",
+    "Parte oficial: hoy anda con permiso para hacer daño deportivo.",
+  ],
+  warning: [
+    "Informe sin filtro: hoy toca resetear fundamentos con humildad.",
+    "Diagnóstico de cancha: hay talento, pero la brújula está pidiendo batería.",
+    "Mensaje con cariño: menos invento, más ejecución limpia.",
+  ],
+};
+
+const appendSpotlightFlavorContext = (
+  description: string,
+  candidateId: string,
+  accent: DailyTournamentSpotlight["accent"]
+): string => {
+  const options = SPOTLIGHT_FLAVOR_LINES[accent];
+  if (!options || options.length === 0) return description;
+
+  const pickIndex = hashString(`${candidateId}:flavor`) % options.length;
+  return `${description} ${options[pickIndex]}`;
+};
+
+const readDailySpotlightHistory = (
+  tournamentId: string,
+  mode: "viewer" | "admin",
+  todayIso: string
+): DailySpotlightHistoryEntry[] => {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const raw = window.localStorage.getItem(buildDailySpotlightHistoryKey(tournamentId, mode));
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .map((entry) => {
+        if (!entry || typeof entry !== "object") return null;
+        const data = entry as Partial<DailySpotlightHistoryEntry>;
+        const dateIso = typeof data.dateIso === "string" ? data.dateIso : "";
+        const subjectKey = typeof data.subjectKey === "string" ? data.subjectKey : "";
+        const topicKey = typeof data.topicKey === "string" ? data.topicKey : getTopicKeyFromSubject(subjectKey);
+        const candidateId = typeof data.candidateId === "string" ? data.candidateId : "";
+        if (!toIsoDateParts(dateIso) || !subjectKey || !candidateId) return null;
+
+        const daysAgo = getIsoDayDiff(dateIso, todayIso);
+        if (daysAgo === null || daysAgo < 0 || daysAgo > DAILY_SPOTLIGHT_HISTORY_WINDOW_DAYS) return null;
+
+        return {
+          dateIso,
+          subjectKey,
+          topicKey,
+          candidateId,
+        };
+      })
+      .filter((entry): entry is DailySpotlightHistoryEntry => Boolean(entry))
+      .sort((entryA, entryB) => entryB.dateIso.localeCompare(entryA.dateIso))
+      .slice(0, DAILY_SPOTLIGHT_HISTORY_MAX_ENTRIES);
+  } catch {
+    return [];
+  }
+};
+
+const saveDailySpotlightSelection = (
+  tournamentId: string,
+  mode: "viewer" | "admin",
+  dateIso: string,
+  spotlight: DailyTournamentSpotlight,
+  historyEntries: DailySpotlightHistoryEntry[]
+) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(buildDailySpotlightPickKey(tournamentId, mode, dateIso), spotlight.id);
+
+    const nextHistory: DailySpotlightHistoryEntry[] = [
+      {
+        dateIso,
+        subjectKey: spotlight.subjectKey,
+        topicKey: spotlight.topicKey,
+        candidateId: spotlight.id,
+      },
+      ...historyEntries.filter((entry) => entry.dateIso !== dateIso),
+    ].slice(0, DAILY_SPOTLIGHT_HISTORY_MAX_ENTRIES);
+
+    window.localStorage.setItem(
+      buildDailySpotlightHistoryKey(tournamentId, mode),
+      JSON.stringify(nextHistory)
+    );
+  } catch {
+    // noop
+  }
+};
+
+const readSavedDailySpotlightPick = (
+  tournamentId: string,
+  mode: "viewer" | "admin",
+  dateIso: string
+): string | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const pickId = window.localStorage.getItem(buildDailySpotlightPickKey(tournamentId, mode, dateIso));
+    if (!pickId || pickId.trim().length === 0) return null;
+    return pickId;
+  } catch {
+    return null;
+  }
+};
+
 const getDailySpotlightUserSeed = (): string => {
   if (typeof window === "undefined") return "server";
 
@@ -449,32 +641,135 @@ const getDailySpotlightUserSeed = (): string => {
 const pushDailySpotlightVariants = (
   candidates: DailyTournamentSpotlight[],
   idPrefix: string,
-  base: Omit<DailyTournamentSpotlight, "id" | "title" | "description">,
+  base: Omit<DailyTournamentSpotlight, "id" | "title" | "description" | "subjectKey" | "topicKey">,
   variants: DailyTournamentSpotlightVariant[]
 ) => {
+  const topicKey = getTopicKeyFromSubject(idPrefix);
   variants.forEach((variant) => {
+    const resolvedAccent = variant.accent ?? base.accent;
+    const candidateId = `${idPrefix}-${variant.idSuffix}`;
+    const withStats = appendSpotlightStatContext(
+      variant.description,
+      base.statLeftLabel,
+      base.statLeftValue,
+      base.statRightLabel,
+      base.statRightValue
+    );
+
     candidates.push({
       ...base,
-      id: `${idPrefix}-${variant.idSuffix}`,
+      id: candidateId,
+      subjectKey: idPrefix,
+      topicKey,
       title: variant.title,
-      description: variant.description,
+      description: appendSpotlightFlavorContext(withStats, candidateId, resolvedAccent),
       badge: variant.badge ?? base.badge,
-      accent: variant.accent ?? base.accent,
+      accent: resolvedAccent,
     });
   });
 };
 
 const selectDailySpotlight = (
   candidates: DailyTournamentSpotlight[],
-  seedSource: string
+  seedSource: string,
+  todayIso: string,
+  historyEntries: DailySpotlightHistoryEntry[]
 ): DailyTournamentSpotlight | null => {
   if (candidates.length === 0) return null;
 
-  const ranked = [...candidates].sort((candidateA, candidateB) => {
-    const scoreA = hashString(`${seedSource}:${candidateA.id}`);
-    const scoreB = hashString(`${seedSource}:${candidateB.id}`);
-    return scoreA - scoreB;
+  const historyByTopic = new Map<string, DailySpotlightHistoryEntry[]>();
+  const historyBySubject = new Map<string, DailySpotlightHistoryEntry[]>();
+  const historyByCandidate = new Map<string, DailySpotlightHistoryEntry[]>();
+
+  historyEntries.forEach((entry) => {
+    const topicEntries = historyByTopic.get(entry.topicKey) ?? [];
+    topicEntries.push(entry);
+    historyByTopic.set(entry.topicKey, topicEntries);
+
+    const subjectEntries = historyBySubject.get(entry.subjectKey) ?? [];
+    subjectEntries.push(entry);
+    historyBySubject.set(entry.subjectKey, subjectEntries);
+
+    const candidateEntries = historyByCandidate.get(entry.candidateId) ?? [];
+    candidateEntries.push(entry);
+    historyByCandidate.set(entry.candidateId, candidateEntries);
   });
+
+  const getDaysSince = (dateIso: string) => getIsoDayDiff(dateIso, todayIso);
+
+  const isWithinCooldown = (dateIso: string, cooldownDays: number) => {
+    const daysSince = getDaysSince(dateIso);
+    return daysSince !== null && daysSince >= 0 && daysSince <= cooldownDays;
+  };
+
+  const pickFreshKey = (
+    keys: string[],
+    getEntries: (key: string) => DailySpotlightHistoryEntry[],
+    namespace: string
+  ): string | null => {
+    if (keys.length === 0) return null;
+
+    const ranked = [...keys].sort((keyA, keyB) => {
+      const entriesA = getEntries(keyA);
+      const entriesB = getEntries(keyB);
+      const usesA = entriesA.length;
+      const usesB = entriesB.length;
+
+      if (usesA !== usesB) return usesA - usesB;
+
+      const lastA = entriesA[0]?.dateIso ?? "0000-01-01";
+      const lastB = entriesB[0]?.dateIso ?? "0000-01-01";
+      if (lastA !== lastB) return lastA.localeCompare(lastB);
+
+      const scoreA = hashString(`${seedSource}:${namespace}:${keyA}`);
+      const scoreB = hashString(`${seedSource}:${namespace}:${keyB}`);
+      return scoreA - scoreB;
+    });
+
+    return ranked[0] ?? null;
+  };
+
+  const topicKeys = Array.from(new Set(candidates.map((candidate) => candidate.topicKey)));
+  const freshTopicKeys = topicKeys.filter((topicKey) =>
+    !(historyByTopic.get(topicKey) ?? []).some((entry) =>
+      isWithinCooldown(entry.dateIso, DAILY_SPOTLIGHT_TOPIC_COOLDOWN_DAYS)
+    )
+  );
+  const chosenTopic = pickFreshKey(
+    freshTopicKeys.length > 0 ? freshTopicKeys : topicKeys,
+    (topicKey) => historyByTopic.get(topicKey) ?? [],
+    "topic"
+  );
+  if (!chosenTopic) return null;
+
+  const topicCandidates = candidates.filter((candidate) => candidate.topicKey === chosenTopic);
+  const subjectKeys = Array.from(new Set(topicCandidates.map((candidate) => candidate.subjectKey)));
+  const freshSubjectKeys = subjectKeys.filter((subjectKey) =>
+    !(historyBySubject.get(subjectKey) ?? []).some((entry) =>
+      isWithinCooldown(entry.dateIso, DAILY_SPOTLIGHT_SUBJECT_COOLDOWN_DAYS)
+    )
+  );
+  const chosenSubject = pickFreshKey(
+    freshSubjectKeys.length > 0 ? freshSubjectKeys : subjectKeys,
+    (subjectKey) => historyBySubject.get(subjectKey) ?? [],
+    "subject"
+  );
+  if (!chosenSubject) return null;
+
+  const subjectCandidates = topicCandidates.filter((candidate) => candidate.subjectKey === chosenSubject);
+  const freshCandidates = subjectCandidates.filter((candidate) =>
+    !(historyByCandidate.get(candidate.id) ?? []).some((entry) =>
+      isWithinCooldown(entry.dateIso, DAILY_SPOTLIGHT_SUBJECT_COOLDOWN_DAYS)
+    )
+  );
+
+  const ranked = [...(freshCandidates.length > 0 ? freshCandidates : subjectCandidates)].sort(
+    (candidateA, candidateB) => {
+      const scoreA = hashString(`${seedSource}:variant:${candidateA.id}`);
+      const scoreB = hashString(`${seedSource}:variant:${candidateB.id}`);
+      return scoreA - scoreB;
+    }
+  );
 
   return ranked[0] ?? null;
 };
@@ -485,6 +780,8 @@ const buildDailySpotlight = (
   userSeed: string
 ): DailyTournamentSpotlight | null => {
   const candidates: DailyTournamentSpotlight[] = [];
+  const todayIso = getTodayIsoLocal();
+  const historyEntries = readDailySpotlightHistory(insight.tournamentId, mode, todayIso);
   const leader = insight.leader;
   const bestTeam = insight.bestTeam;
   const latestResult = insight.latestResult;
@@ -493,39 +790,44 @@ const buildDailySpotlight = (
   const topScoringLines = regularLines
     .slice()
     .sort((lineA, lineB) => lineB.perGame.ppg - lineA.perGame.ppg)
-    .slice(0, 5);
+    .slice(0, 12);
   const topReboundLines = regularLines
     .slice()
     .sort((lineA, lineB) => lineB.perGame.rpg - lineA.perGame.rpg)
-    .slice(0, 4);
+    .slice(0, 10);
   const top3ptLines = regularLines
     .filter((line) => line.totals.tpa >= 8)
     .slice()
     .sort((lineA, lineB) => lineB.tpPct - lineA.tpPct)
-    .slice(0, 4);
+    .slice(0, 8);
   const low3ptLines = regularLines
     .filter((line) => line.totals.tpa >= 8)
     .slice()
     .sort((lineA, lineB) => lineA.tpPct - lineB.tpPct)
-    .slice(0, 4);
+    .slice(0, 8);
   const topFtLines = regularLines
     .filter((line) => line.totals.fta >= 8)
     .slice()
     .sort((lineA, lineB) => lineB.ftPct - lineA.ftPct)
-    .slice(0, 4);
+    .slice(0, 8);
   const lowFtLines = regularLines
     .filter((line) => line.totals.fta >= 8)
     .slice()
     .sort((lineA, lineB) => lineA.ftPct - lineB.ftPct)
-    .slice(0, 4);
+    .slice(0, 8);
   const topImpactLines = regularLines
     .slice()
     .sort((lineA, lineB) => lineB.perGame.plusMinus - lineA.perGame.plusMinus)
-    .slice(0, 4);
+    .slice(0, 8);
   const lowImpactLines = regularLines
     .slice()
     .sort((lineA, lineB) => lineA.perGame.plusMinus - lineB.perGame.plusMinus)
-    .slice(0, 4);
+    .slice(0, 8);
+  const breakoutPool = regularLines
+    .slice()
+    .sort((lineA, lineB) => lineB.valuationPerGame - lineA.valuationPerGame);
+  const breakoutLines = (breakoutPool.slice(5, 20).length > 0 ? breakoutPool.slice(5, 20) : breakoutPool.slice(0, 12))
+    .slice(0, 10);
 
   if (leader) {
     pushDailySpotlightVariants(
@@ -604,7 +906,7 @@ const buildDailySpotlight = (
   regularLines
     .slice()
     .sort((a, b) => b.perGame.apg - a.perGame.apg)
-    .slice(0, 5)
+    .slice(0, 10)
     .forEach((line) => {
       pushDailySpotlightVariants(
         candidates,
@@ -703,7 +1005,7 @@ const buildDailySpotlight = (
       (a, b) =>
         b.perGame.spg + b.perGame.bpg - (a.perGame.spg + a.perGame.bpg)
     )
-    .slice(0, 5)
+    .slice(0, 10)
     .forEach((line) => {
       pushDailySpotlightVariants(
         candidates,
@@ -742,7 +1044,7 @@ const buildDailySpotlight = (
     .filter((line) => line.totals.fga >= 18)
     .slice()
     .sort((a, b) => b.fgPct - a.fgPct)
-    .slice(0, 5)
+    .slice(0, 10)
     .forEach((line) => {
       pushDailySpotlightVariants(
         candidates,
@@ -867,7 +1169,7 @@ const buildDailySpotlight = (
   regularLines
     .slice()
     .sort((a, b) => b.perGame.topg - a.perGame.topg)
-    .slice(0, 5)
+    .slice(0, 10)
     .forEach((line) => {
       pushDailySpotlightVariants(
         candidates,
@@ -910,7 +1212,7 @@ const buildDailySpotlight = (
   regularLines
     .slice()
     .sort((a, b) => b.perGame.fpg - a.perGame.fpg)
-    .slice(0, 5)
+    .slice(0, 10)
     .forEach((line) => {
       pushDailySpotlightVariants(
         candidates,
@@ -949,7 +1251,7 @@ const buildDailySpotlight = (
     .filter((line) => line.totals.fga >= 18)
     .slice()
     .sort((a, b) => a.fgPct - b.fgPct)
-    .slice(0, 5)
+    .slice(0, 10)
     .forEach((line) => {
       pushDailySpotlightVariants(
         candidates,
@@ -1076,6 +1378,35 @@ const buildDailySpotlight = (
     );
   });
 
+  breakoutLines.forEach((line) => {
+    pushDailySpotlightVariants(
+      candidates,
+      `breakout-${line.playerId}`,
+      {
+        badge: "Radar abierto",
+        accent: "primary",
+        photo: line.photo ?? null,
+        photoAlt: line.name,
+        statLeftLabel: "VAL/PJ",
+        statLeftValue: line.valuationPerGame.toFixed(1),
+        statRightLabel: "PPP",
+        statRightValue: line.perGame.ppg.toFixed(1),
+      },
+      [
+        {
+          idSuffix: "subiendo",
+          title: `${abbreviateLeaderboardName(line.name, 24)} viene subiendo`,
+          description: `No siempre sale en titulares, pero su producción ya está pidiendo más foco.`,
+        },
+        {
+          idSuffix: "consistencia",
+          title: `${abbreviateLeaderboardName(line.name, 24)} está aportando constante`,
+          description: `Su línea por juego se mantiene pareja y eso ayuda a sostener el rendimiento del equipo.`,
+        },
+      ]
+    );
+  });
+
   if (latestResult) {
     const hasScore =
       Number.isFinite(latestResult.teamAPoints) &&
@@ -1164,9 +1495,17 @@ const buildDailySpotlight = (
     );
   }
 
+  const savedPickId = readSavedDailySpotlightPick(insight.tournamentId, mode, todayIso);
+  if (savedPickId) {
+    const savedCandidate = candidates.find((candidate) => candidate.id === savedPickId);
+    if (savedCandidate) return savedCandidate;
+  }
+
   return selectDailySpotlight(
     candidates,
-    `${insight.tournamentId}:${mode}:${getTodayIsoLocal()}:${userSeed}:${candidates.length}`
+    `${insight.tournamentId}:${mode}:${todayIso}:${userSeed}:${candidates.length}`,
+    todayIso,
+    historyEntries
   );
 };
 
@@ -1184,7 +1523,18 @@ const useTournamentHomeFeed = (): TournamentHomeFeedState => {
   const [insight, setInsight] = useState<TournamentHomeInsight | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [tournaments, setTournaments] = useState<TournamentHomeOption[]>([]);
+  const [selectedTournamentId, setSelectedTournamentIdState] = useState<string | null>(() =>
+    loadViewerSelectedTournamentId()
+  );
   const [refreshTick, setRefreshTick] = useState(0);
+
+  const setSelectedTournamentId = (tournamentId: string) => {
+    const normalized = tournamentId.trim();
+    if (!normalized) return;
+    setSelectedTournamentIdState(normalized);
+    saveViewerSelectedTournamentId(normalized);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -1194,22 +1544,42 @@ const useTournamentHomeFeed = (): TournamentHomeFeedState => {
       setErrorMessage(null);
 
       try {
-        const { data: tournaments, error } = await supabase
+        const { data, error } = await supabase
           .from("tournaments")
           .select("id, name")
           .order("created_at", { ascending: false })
-          .limit(1);
+          .limit(40);
 
         if (error) throw new Error(error.message);
 
-        const currentTournament = tournaments?.[0];
+        const availableTournaments = (data ?? []).map((row) => ({
+          id: String(row.id),
+          name: String(row.name ?? "Torneo activo"),
+        }));
+
+        if (!cancelled) {
+          setTournaments(availableTournaments);
+        }
+
+        const currentTournament =
+          availableTournaments.find((row) => row.id === selectedTournamentId) ??
+          availableTournaments[0];
+
         if (!currentTournament) {
-          if (!cancelled) setInsight(null);
+          if (!cancelled) {
+            setInsight(null);
+            setSelectedTournamentIdState(null);
+          }
           return;
         }
 
-        const tournamentId = String(currentTournament.id);
-        const tournamentName = String(currentTournament.name ?? "Torneo activo");
+        const tournamentId = currentTournament.id;
+        const tournamentName = currentTournament.name;
+
+        if (selectedTournamentId !== tournamentId) {
+          if (!cancelled) setSelectedTournamentIdState(tournamentId);
+          saveViewerSelectedTournamentId(tournamentId);
+        }
 
         const [
           scorersResult,
@@ -1252,11 +1622,14 @@ const useTournamentHomeFeed = (): TournamentHomeFeedState => {
           rulesPdfUrl,
         });
 
-        if (!cancelled) setInsight(nextInsight);
+        if (!cancelled) {
+          setInsight(nextInsight);
+        }
       } catch (error) {
         if (!cancelled) {
           setErrorMessage(error instanceof Error ? error.message : "No se pudo cargar el home del torneo.");
           setInsight(null);
+          setTournaments([]);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -1268,12 +1641,15 @@ const useTournamentHomeFeed = (): TournamentHomeFeedState => {
     return () => {
       cancelled = true;
     };
-  }, [refreshTick]);
+  }, [refreshTick, selectedTournamentId]);
 
   return {
     insight,
     loading,
     errorMessage,
+    tournaments,
+    selectedTournamentId,
+    setSelectedTournamentId,
     refresh: () => setRefreshTick((value) => value + 1),
   };
 };
@@ -1326,10 +1702,50 @@ const TournamentHomeEmpty = () => (
 );
 
 const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
-  const { insight, loading, errorMessage, refresh } = useTournamentHomeFeed();
+  const {
+    insight,
+    loading,
+    errorMessage,
+    tournaments,
+    selectedTournamentId,
+    setSelectedTournamentId,
+    refresh,
+  } = useTournamentHomeFeed();
   const [dailySpotlight, setDailySpotlight] = useState<DailyTournamentSpotlight | null>(null);
   const [dailySpotlightOpen, setDailySpotlightOpen] = useState(false);
   const [dailySpotlightUnread, setDailySpotlightUnread] = useState(false);
+  const [viewerFollows, setViewerFollows] = useState<ViewerFollowState>(() =>
+    loadViewerFollows()
+  );
+
+  useEffect(() => {
+    setViewerFollows(loadViewerFollows());
+  }, []);
+
+  const followedTeamsSet = useMemo(
+    () => new Set(viewerFollows.teams.map((team) => team.toLowerCase())),
+    [viewerFollows.teams]
+  );
+  const followedPlayersSet = useMemo(
+    () => new Set(viewerFollows.players),
+    [viewerFollows.players]
+  );
+
+  const handleToggleTeamFollow = (teamName: string) => {
+    setViewerFollows((current) => {
+      const next = toggleViewerTeamFollow(current, teamName);
+      saveViewerFollows(next);
+      return next;
+    });
+  };
+
+  const handleTogglePlayerFollow = (playerId: number) => {
+    setViewerFollows((current) => {
+      const next = toggleViewerPlayerFollow(current, playerId);
+      saveViewerFollows(next);
+      return next;
+    });
+  };
 
   const heroStats = insight
     ? [
@@ -1368,6 +1784,9 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
     let unread = true;
 
     try {
+      const historyEntries = readDailySpotlightHistory(insight.tournamentId, mode, todayIso);
+      saveDailySpotlightSelection(insight.tournamentId, mode, todayIso, spotlight, historyEntries);
+
       const alreadyAutoShown = window.localStorage.getItem(autoShownKey) === "1";
       const alreadyRead = window.localStorage.getItem(readKey) === "1";
 
@@ -1407,8 +1826,30 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
   if (!insight) return <TournamentHomeEmpty />;
 
   const viewerMode = mode === "viewer";
-  const topScorers = insight.topScorers.slice(0, 5);
-  const topTeams = insight.topTeams.slice(0, 4);
+  const topScorers = insight.topScorers.slice(0, 6);
+  const topTeams = insight.topTeams.slice(0, 6);
+  const followedUpcomingMatches = insight.upcomingMatches
+    .filter(
+      (match) =>
+        followedTeamsSet.has(match.teamA.toLowerCase()) ||
+        followedTeamsSet.has(match.teamB.toLowerCase())
+    )
+    .slice(0, 6);
+  const followedRecentResults = insight.latestResults
+    .filter(
+      (match) =>
+        followedTeamsSet.has(match.teamA.toLowerCase()) ||
+        followedTeamsSet.has(match.teamB.toLowerCase())
+    )
+    .slice(0, 4);
+  const followedPlayerLines = insight.playerLines
+    .filter((line) => followedPlayersSet.has(line.playerId))
+    .sort((a, b) => b.valuationPerGame - a.valuationPerGame)
+    .slice(0, 6);
+  const radarEmpty =
+    viewerFollows.teams.length === 0 && viewerFollows.players.length === 0;
+  const quickTeamSuggestions = topTeams.slice(0, 4);
+  const quickPlayerSuggestions = topScorers.slice(0, 4);
   const idealFive = insight.idealFive;
   const idealFiveRoleOrder = ["PG", "SG", "SF", "PF", "C"];
   const idealFiveLineup = idealFive
@@ -1434,6 +1875,219 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
 
     return "La liga está en movimiento: cada jornada aprieta más la tabla.";
   })();
+  const regularFunLines = insight.playerLines.filter((line) => line.gamesPlayed >= 2);
+  const hotScorerLine = regularFunLines
+    .slice()
+    .sort((lineA, lineB) => lineB.perGame.ppg - lineA.perGame.ppg)[0] ?? null;
+  const sniperLine = regularFunLines
+    .filter((line) => line.totals.tpa >= 8)
+    .slice()
+    .sort((lineA, lineB) => lineB.tpPct - lineA.tpPct)[0] ?? null;
+  const riskyHandleLine = regularFunLines
+    .slice()
+    .sort((lineA, lineB) => lineB.perGame.topg - lineA.perGame.topg)[0] ?? null;
+  const coldShooterLine = regularFunLines
+    .filter((line) => line.totals.fga >= 18)
+    .slice()
+    .sort((lineA, lineB) => lineA.fgPct - lineB.fgPct)[0] ?? null;
+  const funCornerCards: Array<{
+    id: string;
+    badge: string;
+    variant: "primary" | "success" | "warning" | "danger";
+    title: string;
+    description: string;
+  }> = [
+    hotScorerLine
+      ? {
+          id: "hot-hand",
+          badge: "Microondas",
+          variant: "success",
+          title: `${abbreviateLeaderboardName(hotScorerLine.name, 24)} está cocinando sin receta`,
+          description: `${hotScorerLine.perGame.ppg.toFixed(1)} PPP y la defensa rival pidiendo tiempo para respirar.`,
+        }
+      : {
+          id: "hot-hand-fallback",
+          badge: "Microondas",
+          variant: "success",
+          title: "El horno está precalentando",
+          description: "Todavía faltan datos sólidos, pero se viene candela en la tabla.",
+        },
+    sniperLine
+      ? {
+          id: "sniper",
+          badge: "Francotirador",
+          variant: "primary",
+          title: `${abbreviateLeaderboardName(sniperLine.name, 24)} está tirando con GPS`,
+          description: `${sniperLine.tpPct.toFixed(1)}% en triples. Si lo dejan solo, después no aceptamos quejas.`,
+        }
+      : {
+          id: "sniper-fallback",
+          badge: "Francotirador",
+          variant: "primary",
+          title: "La mira de tres está en calentamiento",
+          description: "Aún no hay volumen suficiente desde afuera para coronar un sniper oficial.",
+        },
+    riskyHandleLine
+      ? {
+          id: "risky-handle",
+          badge: "Balón enjabonado",
+          variant: "warning",
+          title: `${abbreviateLeaderboardName(riskyHandleLine.name, 24)} anda dribleando con jabón`,
+          description: `${riskyHandleLine.perGame.topg.toFixed(1)} pérdidas por juego. Hoy toca modo simple y sin novela.`,
+        }
+      : coldShooterLine
+        ? {
+            id: "cold-shooter",
+            badge: "Aro tímido",
+            variant: "danger",
+            title: `${abbreviateLeaderboardName(coldShooterLine.name, 24)} está peleado con el aro`,
+            description: `${coldShooterLine.fgPct.toFixed(1)}% de campo. Esto se arregla con calma y mejores tiros.`,
+          }
+        : {
+            id: "risky-fallback",
+            badge: "Sin multa",
+            variant: "warning",
+            title: "Hoy no hay multa por manejo de balón",
+            description: "No salió un candidato claro para tirar pulla técnica por pérdidas.",
+          },
+  ];
+  const foulTroubleLine = regularFunLines
+    .slice()
+    .sort((lineA, lineB) => lineB.perGame.fpg - lineA.perGame.fpg)[0] ?? null;
+  const assistKingLine = regularFunLines
+    .slice()
+    .sort((lineA, lineB) => lineB.perGame.apg - lineA.perGame.apg)[0] ?? null;
+  const silentMvpLine = regularFunLines
+    .filter((line) => line.playerId !== hotScorerLine?.playerId)
+    .slice()
+    .sort((lineA, lineB) => lineB.valuationPerGame - lineA.valuationPerGame)[0] ?? null;
+  const latestScoredResults = insight.latestResults.filter(hasScoredResult);
+  const closeGameCount = latestScoredResults.filter((match) => {
+    const margin = getMatchMargin(match);
+    return margin !== null && margin <= 6;
+  }).length;
+  const blowoutCount = latestScoredResults.filter((match) => {
+    const margin = getMatchMargin(match);
+    return margin !== null && margin >= 15;
+  }).length;
+  const hypeScore = Math.max(
+    35,
+    Math.min(
+      98,
+      Math.round(
+        44 +
+          insight.todayPendingMatchesCount * 11 +
+          insight.next7DaysPendingMatchesCount * 2.5 +
+          closeGameCount * 8 -
+          blowoutCount * 3 +
+          (insight.statsCoveragePct >= 70 ? 7 : insight.statsCoveragePct >= 45 ? 2 : -5)
+      )
+    )
+  );
+  const hypeVariant: "success" | "primary" | "warning" =
+    hypeScore >= 80 ? "success" : hypeScore >= 62 ? "primary" : "warning";
+  const hypeLabel =
+    hypeScore >= 88
+      ? "Nivel candela"
+      : hypeScore >= 74
+        ? "Picante serio"
+        : hypeScore >= 62
+          ? "Encendiendo"
+          : "Bajo observación";
+  const standingsByName = new Map(
+    insight.topTeams.map((team) => [team.name.toLowerCase(), team])
+  );
+  const matchupRadar = insight.upcomingMatches.slice(0, 5).map((match) => {
+    const teamAStanding = standingsByName.get(match.teamA.toLowerCase()) ?? null;
+    const teamBStanding = standingsByName.get(match.teamB.toLowerCase()) ?? null;
+    const teamAWin = teamAStanding?.winPct ?? 0.5;
+    const teamBWin = teamBStanding?.winPct ?? 0.5;
+    const balanceScore = 1 - Math.min(1, Math.abs(teamAWin - teamBWin));
+    const qualityScore = (teamAWin + teamBWin) / 2;
+    const urgencyScore = match.matchDate === getTodayIsoLocal() ? 1 : withinNextDays(match.matchDate, 2) ? 0.8 : 0.5;
+    const hype = Math.round(balanceScore * 46 + qualityScore * 36 + urgencyScore * 18);
+
+    return {
+      match,
+      hype,
+      teamARecord: teamAStanding ? `${teamAStanding.pg}-${teamAStanding.pp}` : "--",
+      teamBRecord: teamBStanding ? `${teamBStanding.pg}-${teamBStanding.pp}` : "--",
+      balanceScore,
+    };
+  });
+  const featuredMatchup = matchupRadar
+    .slice()
+    .sort((entryA, entryB) => entryB.hype - entryA.hype)[0] ?? null;
+  const lockerRoomAwards: Array<{
+    id: string;
+    badge: string;
+    variant: "primary" | "success" | "warning" | "danger";
+    title: string;
+    description: string;
+  }> = [
+    hotScorerLine
+      ? {
+          id: "award-microondas",
+          badge: "Premio microondas",
+          variant: "success",
+          title: abbreviateLeaderboardName(hotScorerLine.name, 24),
+          description: `${hotScorerLine.perGame.ppg.toFixed(1)} PPP. El scouting rival está sudando.`,
+        }
+      : {
+          id: "award-microondas-fallback",
+          badge: "Premio microondas",
+          variant: "success",
+          title: "En búsqueda de artillero",
+          description: "Aún no hay volumen suficiente para repartir este premio.",
+        },
+    assistKingLine
+      ? {
+          id: "award-cerebro",
+          badge: "Premio cerebro",
+          variant: "primary",
+          title: abbreviateLeaderboardName(assistKingLine.name, 24),
+          description: `${assistKingLine.perGame.apg.toFixed(1)} APP. Reparte más que grupo de Navidad.`,
+        }
+      : {
+          id: "award-cerebro-fallback",
+          badge: "Premio cerebro",
+          variant: "primary",
+          title: "Cerebro en construcción",
+          description: "Todavía no hay líder de asistencias con muestra robusta.",
+        },
+    silentMvpLine
+      ? {
+          id: "award-silencioso",
+          badge: "MVP silencioso",
+          variant: "primary",
+          title: abbreviateLeaderboardName(silentMvpLine.name, 24),
+          description: `${silentMvpLine.valuationPerGame.toFixed(1)} VAL/PJ. Hace daño sin pedir cámara.`,
+        }
+      : {
+          id: "award-silencioso-fallback",
+          badge: "MVP silencioso",
+          variant: "primary",
+          title: "Radar esperando señal",
+          description: "Sin datos suficientes para identificar MVP silencioso por ahora.",
+        },
+    riskyHandleLine || foulTroubleLine
+      ? {
+          id: "award-ajuste",
+          badge: "Premio 'bájale dos'",
+          variant: "warning",
+          title: abbreviateLeaderboardName((riskyHandleLine ?? foulTroubleLine)?.name ?? "Jugador", 24),
+          description: riskyHandleLine
+            ? `${riskyHandleLine.perGame.topg.toFixed(1)} pérdidas por juego. Hoy toca jugar sobrio.`
+            : `${(foulTroubleLine as PlayerStatsLine).perGame.fpg.toFixed(1)} faltas por juego. Defensa, sí; karate, no.`,
+        }
+      : {
+          id: "award-ajuste-fallback",
+          badge: "Premio 'bájale dos'",
+          variant: "warning",
+          title: "No hubo multa hoy",
+          description: "La data no encontró un candidato claro para pulla técnica.",
+        },
+  ];
   const spotlightToneClass =
     dailySpotlight?.accent === "warning"
       ? "border-[hsl(var(--warning)/0.42)] bg-[hsl(var(--warning)/0.12)]"
@@ -1531,6 +2185,324 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
         </div>
       </section>
 
+      {viewerMode ? (
+        <section className="grid gap-3 lg:grid-cols-[1.05fr_0.95fr]">
+          <SectionCard
+            title="Contexto diario"
+            description="Tu torneo activo y tus seguimientos se guardan automáticamente."
+          >
+            <div className="space-y-3">
+              <label className="space-y-1">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+                  Torneo activo
+                </span>
+                <AppSelect
+                  value={selectedTournamentId ?? insight.tournamentId}
+                  onChange={(event) => setSelectedTournamentId(event.target.value)}
+                  className="input-base h-11"
+                >
+                  {tournaments.map((tournament) => (
+                    <option key={tournament.id} value={tournament.id}>
+                      {tournament.name}
+                    </option>
+                  ))}
+                </AppSelect>
+              </label>
+
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+                  Equipos seguidos
+                </p>
+                {viewerFollows.teams.length === 0 ? (
+                  <p className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-3 py-2 text-xs text-[hsl(var(--muted-foreground))]">
+                    No sigues equipos todavía. Agrega algunos para activar el radar.
+                  </p>
+                ) : (
+                  <div className="soft-scrollbar flex gap-2 overflow-x-auto pb-1">
+                    {viewerFollows.teams.map((teamName) => (
+                      <button
+                        key={teamName}
+                        type="button"
+                        onClick={() => handleToggleTeamFollow(teamName)}
+                        className="whitespace-nowrap rounded-full border border-[hsl(var(--primary)/0.3)] bg-[hsl(var(--primary)/0.1)] px-3 py-1.5 text-xs font-semibold text-[hsl(var(--primary))]"
+                      >
+                        Siguiendo · {teamName}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+                  Jugadores seguidos
+                </p>
+                {viewerFollows.players.length === 0 ? (
+                  <p className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-3 py-2 text-xs text-[hsl(var(--muted-foreground))]">
+                    Todavía no sigues jugadores. Usa "Seguir" en el ranking para personalizar.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {insight.playerLines
+                      .filter((line) => followedPlayersSet.has(line.playerId))
+                      .slice(0, 8)
+                      .map((line) => (
+                        <button
+                          key={line.playerId}
+                          type="button"
+                          onClick={() => handleTogglePlayerFollow(line.playerId)}
+                          className="rounded-full border border-[hsl(var(--success)/0.34)] bg-[hsl(var(--success)/0.14)] px-3 py-1.5 text-xs font-semibold text-[hsl(var(--success))]"
+                        >
+                          {abbreviateLeaderboardName(line.name, 20)}
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            title="Mi radar"
+            description="Próximos partidos y rendimiento de lo que realmente te importa."
+          >
+            {radarEmpty ? (
+              <div className="space-y-3">
+                <p className="rounded-[10px] border bg-[hsl(var(--surface-1))] px-3 py-2 text-sm text-[hsl(var(--muted-foreground))]">
+                  Sigue equipos y jugadores para activar alertas personales y lectura rápida.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+                      Sugerencias de equipos
+                    </p>
+                    <div className="mt-2 space-y-1.5">
+                      {quickTeamSuggestions.length > 0 ? (
+                        quickTeamSuggestions.map((team) => (
+                          <button
+                            key={team.teamId}
+                            type="button"
+                            onClick={() => handleToggleTeamFollow(team.name)}
+                            className="flex w-full items-center justify-between rounded-[8px] border px-2.5 py-1.5 text-left text-xs"
+                          >
+                            <span className="truncate font-semibold">{team.name}</span>
+                            <span className="text-[hsl(var(--text-subtle))]">Seguir</span>
+                          </button>
+                        ))
+                      ) : (
+                        <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                          Sin equipos para sugerir ahora.
+                        </p>
+                      )}
+                    </div>
+                  </article>
+
+                  <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+                      Sugerencias de jugadores
+                    </p>
+                    <div className="mt-2 space-y-1.5">
+                      {quickPlayerSuggestions.length > 0 ? (
+                        quickPlayerSuggestions.map((player) => (
+                          <button
+                            key={player.playerId}
+                            type="button"
+                            onClick={() => handleTogglePlayerFollow(player.playerId)}
+                            className="flex w-full items-center justify-between rounded-[8px] border px-2.5 py-1.5 text-left text-xs"
+                          >
+                            <span className="truncate font-semibold">
+                              {abbreviateLeaderboardName(player.name, 20)}
+                            </span>
+                            <span className="text-[hsl(var(--text-subtle))]">Seguir</span>
+                          </button>
+                        ))
+                      ) : (
+                        <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                          Sin jugadores para sugerir ahora.
+                        </p>
+                      )}
+                    </div>
+                  </article>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+                      Próximos de tus equipos
+                    </p>
+                    {followedUpcomingMatches.length > 0 ? (
+                      <ul className="mt-2 space-y-1.5">
+                        {followedUpcomingMatches.map((match) => (
+                          <li key={match.matchId} className="text-xs">
+                            <p className="font-semibold">
+                              {match.teamA} <span className="text-[hsl(var(--text-subtle))]">vs</span> {match.teamB}
+                            </p>
+                            <p className="text-[hsl(var(--muted-foreground))]">
+                              {formatUpcomingMatchLabel(match)}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">
+                        Tus equipos no tienen juegos próximos en este momento.
+                      </p>
+                    )}
+                  </article>
+
+                  <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+                      Últimos cierres seguidos
+                    </p>
+                    {followedRecentResults.length > 0 ? (
+                      <ul className="mt-2 space-y-1.5">
+                        {followedRecentResults.map((match) => (
+                          <li key={match.matchId} className="text-xs">
+                            <p className="font-semibold">
+                              {abbreviateLeaderboardName(`${match.teamA} vs ${match.teamB}`, 28)}
+                            </p>
+                            <p className="font-semibold tabular-nums">
+                              {formatMatchScoreLine(match)}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">
+                        Sin cierres recientes de los equipos que sigues.
+                      </p>
+                    )}
+                  </article>
+                </div>
+
+                <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+                    Rendimiento de tus jugadores
+                  </p>
+                  {followedPlayerLines.length > 0 ? (
+                    <ul className="mt-2 space-y-1.5">
+                      {followedPlayerLines.map((line) => (
+                        <li
+                          key={line.playerId}
+                          className="flex items-center justify-between gap-2 rounded-[8px] border bg-[hsl(var(--surface-2)/0.55)] px-2.5 py-2 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold">
+                              {abbreviateLeaderboardName(line.name, 24)}
+                            </p>
+                            <p className="truncate text-[hsl(var(--muted-foreground))]">
+                              {line.teamName ?? "Sin equipo"} · {line.gamesPlayed} PJ
+                            </p>
+                          </div>
+                          <div className="text-right tabular-nums">
+                            <p>{line.perGame.ppg.toFixed(1)} PPP</p>
+                            <p className="text-[hsl(var(--muted-foreground))]">
+                              VAL {line.valuationPerGame.toFixed(1)}
+                            </p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">
+                      Tus jugadores seguidos todavía no tienen muestra suficiente.
+                    </p>
+                  )}
+                </article>
+              </div>
+            )}
+          </SectionCard>
+        </section>
+      ) : null}
+
+      <section className="grid gap-3 lg:grid-cols-[1.05fr_0.95fr]">
+        <SectionCard
+          title="Showtime Control"
+          description="Termómetro real del torneo y duelo recomendado para no parpadear."
+        >
+          <div className="space-y-3">
+            <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+                  Índice de candela
+                </p>
+                <Badge variant={hypeVariant}>{hypeLabel}</Badge>
+              </div>
+              <div className="mt-2 flex items-end justify-between gap-3">
+                <p className="text-3xl font-black leading-none tabular-nums">{hypeScore}</p>
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                  Cierres cerrados: {closeGameCount} · Palizas recientes: {blowoutCount}
+                </p>
+              </div>
+              <div className="mt-3 h-2.5 overflow-hidden rounded-full border bg-[hsl(var(--surface-2))]">
+                <div
+                  className={`h-full transition-all duration-700 ${
+                    hypeVariant === "success"
+                      ? "bg-[hsl(var(--success))]"
+                      : hypeVariant === "primary"
+                        ? "bg-[hsl(var(--primary))]"
+                        : "bg-[hsl(var(--warning))]"
+                  }`}
+                  style={{ width: `${hypeScore}%` }}
+                />
+              </div>
+            </article>
+
+            <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+                Duelo recomendado
+              </p>
+              {featuredMatchup ? (
+                <div className="mt-2 space-y-1.5">
+                  <p className="text-sm font-bold">
+                    {featuredMatchup.match.teamA} <span className="text-[hsl(var(--text-subtle))]">vs</span> {featuredMatchup.match.teamB}
+                  </p>
+                  <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                    {formatUpcomingMatchLabel(featuredMatchup.match)}
+                  </p>
+                  <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                    Récords: {featuredMatchup.match.teamA} ({featuredMatchup.teamARecord}) · {featuredMatchup.match.teamB} ({featuredMatchup.teamBRecord})
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <Badge variant="primary">Heat {featuredMatchup.hype}</Badge>
+                    <Badge variant={featuredMatchup.balanceScore >= 0.8 ? "success" : featuredMatchup.balanceScore >= 0.6 ? "primary" : "warning"}>
+                      {featuredMatchup.balanceScore >= 0.8
+                        ? "Choque parejo"
+                        : featuredMatchup.balanceScore >= 0.6
+                          ? "Ventaja corta"
+                          : "Duelo con favorito"}
+                    </Badge>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">
+                  Sin juegos pendientes para recomendar ahora mismo.
+                </p>
+              )}
+            </article>
+          </div>
+        </SectionCard>
+
+        <SectionCard
+          title="Premios Del Camerino"
+          description="Ranking con chercha sana: mérito real y pulla deportiva."
+        >
+          <div className="grid gap-2 sm:grid-cols-2">
+            {lockerRoomAwards.map((award) => (
+              <article key={award.id} className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Badge variant={award.variant}>{award.badge}</Badge>
+                </div>
+                <p className="mt-2 text-sm font-bold">{award.title}</p>
+                <p className="mt-1 text-xs leading-relaxed text-[hsl(var(--muted-foreground))]">{award.description}</p>
+              </article>
+            ))}
+          </div>
+        </SectionCard>
+      </section>
+
       <section className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
         <SectionCard title="Radar semanal" description="Calendario y cierres clave en una sola vista.">
           <div className="space-y-2.5">
@@ -1602,10 +2574,25 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
                 <ul className="space-y-1.5">
                   {topScorers.slice(0, 4).map((player, index) => (
                     <li key={player.playerId} className="flex items-center justify-between gap-2 text-xs">
-                      <p className="truncate font-semibold" title={player.name}>
+                      <p className="min-w-0 truncate font-semibold" title={player.name}>
                         #{index + 1} {abbreviateLeaderboardName(player.name, 18)}
                       </p>
-                      <span className="shrink-0 font-semibold tabular-nums">{player.totalPoints} pts</span>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="font-semibold tabular-nums">{player.totalPoints} pts</span>
+                        {viewerMode ? (
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePlayerFollow(player.playerId)}
+                            className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                              followedPlayersSet.has(player.playerId)
+                                ? "border-[hsl(var(--success)/0.36)] bg-[hsl(var(--success)/0.12)] text-[hsl(var(--success))]"
+                                : "border-[hsl(var(--border))] text-[hsl(var(--text-subtle))]"
+                            }`}
+                          >
+                            {followedPlayersSet.has(player.playerId) ? "Siguiendo" : "Seguir"}
+                          </button>
+                        ) : null}
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -1623,10 +2610,29 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
                 <ul className="space-y-1.5">
                   {topTeams.slice(0, 4).map((team, index) => (
                     <li key={team.teamId} className="flex items-center justify-between gap-2 text-xs">
-                      <p className="truncate font-semibold" title={team.name}>
+                      <p className="min-w-0 truncate font-semibold" title={team.name}>
                         #{index + 1} {abbreviateLeaderboardName(team.name, 18)}
                       </p>
-                      <span className="shrink-0 font-semibold tabular-nums">{team.pg}-{team.pp}</span>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="font-semibold tabular-nums">
+                          {team.pg}-{team.pp}
+                        </span>
+                        {viewerMode ? (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleTeamFollow(team.name)}
+                            className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                              followedTeamsSet.has(team.name.toLowerCase())
+                                ? "border-[hsl(var(--primary)/0.34)] bg-[hsl(var(--primary)/0.12)] text-[hsl(var(--primary))]"
+                                : "border-[hsl(var(--border))] text-[hsl(var(--text-subtle))]"
+                            }`}
+                          >
+                            {followedTeamsSet.has(team.name.toLowerCase())
+                              ? "Siguiendo"
+                              : "Seguir"}
+                          </button>
+                        ) : null}
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -1637,6 +2643,26 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
           </div>
         </SectionCard>
       </section>
+
+      <SectionCard
+        title="Zona de chercha"
+        description="Bulla sana del día: jocosidad + datos reales, sin inventar cuentos."
+      >
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {funCornerCards.map((card) => (
+            <article key={card.id} className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+              <div className="flex items-center justify-between gap-2">
+                <Badge variant={card.variant}>{card.badge}</Badge>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+                  Sin filtro
+                </span>
+              </div>
+              <p className="mt-2 text-sm font-semibold">{card.title}</p>
+              <p className="mt-1 text-xs leading-relaxed text-[hsl(var(--muted-foreground))]">{card.description}</p>
+            </article>
+          ))}
+        </div>
+      </SectionCard>
 
       <SectionCard
         title="Quinteto ideal inteligente"
@@ -1690,6 +2716,11 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
           </p>
         )}
       </SectionCard>
+
+      <TournamentActivityTimeline
+        tournamentId={insight.tournamentId}
+        title="Últimos movimientos"
+      />
 
       <SectionCard title="Accesos rápidos" description="Ir directo a las pantallas clave.">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -1747,11 +2778,11 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
         isOpen={Boolean(dailySpotlightOpen && dailySpotlight)}
         onClose={handleCloseDailySpotlight}
         title="Nunaico del día"
-        subtitle="Dosis rápida del torneo para arrancar la jornada."
+        subtitle="Dosis de chercha deportiva para arrancar la jornada."
         maxWidthClassName="sm:max-w-xl"
         actions={
           <button type="button" className="btn-primary" onClick={handleCloseDailySpotlight}>
-            Entendido
+            Ta' claro
           </button>
         }
       >
@@ -1763,7 +2794,7 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
               </Badge>
               <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
                 <SparklesIcon className="h-3.5 w-3.5" />
-                1 vez por día
+                1 joyita por día
               </span>
             </div>
 

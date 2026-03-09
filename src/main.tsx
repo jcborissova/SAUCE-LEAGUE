@@ -12,6 +12,7 @@ import Home from "./pages/Home";
 import NotFound from "./pages/NotFound";
 import Tournaments from "./pages/tournaments";
 import TournamentViewPage from "./components/Tournaments/TournamentViewPage";
+import TournamentConfigPage from "./components/Tournaments/TournamentConfigPage";
 import AdminAccess from "./pages/AdminAccess";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -32,6 +33,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
               <Route path="matches" element={<ProtectedRoute><Matches /></ProtectedRoute>} />
               <Route path="tournaments" element={<Tournaments />} /> {/* esta puede ser pública */}
               <Route path="tournaments/view/:id" element={<TournamentViewPage />} />
+              <Route path="tournaments/config/:id" element={<ProtectedRoute><TournamentConfigPage /></ProtectedRoute>} />
               <Route path="404" element={<NotFound />} />
               <Route path="*" element={<NotFound />} />
             </Route>

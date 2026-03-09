@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MatchResultForm from "./MatchResultForm";
 import { TrophyIcon, PencilSquareIcon } from "@heroicons/react/24/solid";
 import { supabase } from "../../lib/supabase";
@@ -36,6 +36,7 @@ type MatchConfigRow = {
 const TournamentResultsConfig: React.FC<Props> = ({ tournamentId }) => {
   const [matches, setMatches] = useState<MatchConfigRow[]>([]);
   const [selectedMatch, setSelectedMatch] = useState<number | null>(null);
+  const editorRef = useRef<HTMLDivElement | null>(null);
 
   const fetchMatches = useCallback(async () => {
     const maxAttempts = 3;
@@ -102,6 +103,11 @@ const TournamentResultsConfig: React.FC<Props> = ({ tournamentId }) => {
     fetchMatches();
   }, [fetchMatches]);
 
+  useEffect(() => {
+    if (selectedMatch === null) return;
+    editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [selectedMatch]);
+
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "Fecha por definir";
     const date = new Date(`${dateStr}T00:00:00`);
@@ -118,6 +124,10 @@ const TournamentResultsConfig: React.FC<Props> = ({ tournamentId }) => {
   const totalPoints = useMemo(
     () => resolvedMatches.reduce((acc, match) => acc + match.teamAPoints + match.teamBPoints, 0),
     [resolvedMatches]
+  );
+  const selectedMatchInfo = useMemo(
+    () => resolvedMatches.find((match) => match.matchId === selectedMatch) ?? null,
+    [resolvedMatches, selectedMatch]
   );
 
   return (
@@ -143,6 +153,24 @@ const TournamentResultsConfig: React.FC<Props> = ({ tournamentId }) => {
           </div>
         </div>
       </section>
+
+      {selectedMatch !== null ? (
+        <div ref={editorRef} className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+            {selectedMatchInfo
+              ? `Editando: ${selectedMatchInfo.teamA} vs ${selectedMatchInfo.teamB}`
+              : `Editando partido #${selectedMatch}`}
+          </p>
+          <MatchResultForm
+            matchId={selectedMatch}
+            onClose={() => setSelectedMatch(null)}
+            onSaved={() => {
+              setSelectedMatch(null);
+              fetchMatches();
+            }}
+          />
+        </div>
+      ) : null}
 
       {resolvedMatches.length === 0 ? (
         <section className="app-card p-4 text-sm text-[hsl(var(--muted-foreground))] sm:p-5">
@@ -192,17 +220,6 @@ const TournamentResultsConfig: React.FC<Props> = ({ tournamentId }) => {
             </article>
           ))}
         </section>
-      )}
-
-      {selectedMatch !== null && (
-        <MatchResultForm
-          matchId={selectedMatch}
-          onClose={() => setSelectedMatch(null)}
-          onSaved={() => {
-            setSelectedMatch(null);
-            fetchMatches();
-          }}
-        />
       )}
     </div>
   );

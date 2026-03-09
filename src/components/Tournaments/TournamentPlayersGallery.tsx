@@ -25,6 +25,8 @@ type TournamentPlayersGalleryProps = {
   teams: Team[];
   loading?: boolean;
   statsPhase?: TournamentPhaseFilter;
+  followedPlayerIds?: number[];
+  onToggleFollowPlayer?: (playerId: number) => void;
 };
 
 type PlayersViewMode = "gallery" | "list";
@@ -61,6 +63,8 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({
   teams,
   loading = false,
   statsPhase = "all",
+  followedPlayerIds = [],
+  onToggleFollowPlayer,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedTeamId, setExpandedTeamId] = useState<number | null>(null);
@@ -166,6 +170,11 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({
 
     return map;
   }, [phaseLines]);
+
+  const followedPlayerSet = useMemo(
+    () => new Set(followedPlayerIds),
+    [followedPlayerIds]
+  );
 
   const openPlayerDetail = async (
     playerId: number,
@@ -353,6 +362,7 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({
                       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
                         {visiblePlayers.map((player) => {
                           const grade = playerGradeById.get(player.id) ?? null;
+                          const isFollowing = followedPlayerSet.has(player.id);
 
                           return (
                           <article key={player.id} className="overflow-hidden rounded-[10px] border bg-[hsl(var(--surface-1))]">
@@ -395,6 +405,19 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({
                                 <EyeIcon className="h-3.5 w-3.5" />
                                 Ver detalle
                               </button>
+                              {onToggleFollowPlayer ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onToggleFollowPlayer(player.id)}
+                                  className={`w-full rounded-[8px] border px-2.5 py-1.5 text-xs font-semibold ${
+                                    isFollowing
+                                      ? "border-[hsl(var(--success)/0.34)] bg-[hsl(var(--success)/0.14)] text-[hsl(var(--success))]"
+                                      : "border-[hsl(var(--border))] text-[hsl(var(--text-subtle))]"
+                                  }`}
+                                >
+                                  {isFollowing ? "Siguiendo" : "Seguir"}
+                                </button>
+                              ) : null}
                             </div>
                           </article>
                         )})}
@@ -403,6 +426,7 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({
                       <ul className="space-y-2">
                         {visiblePlayers.map((player) => {
                           const grade = playerGradeById.get(player.id) ?? null;
+                          const isFollowing = followedPlayerSet.has(player.id);
 
                           return (
                           <li
@@ -450,6 +474,19 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({
                                 <EyeIcon className="h-3 w-3" />
                                 Ver detalle
                               </button>
+                              {onToggleFollowPlayer ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onToggleFollowPlayer(player.id)}
+                                  className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                                    isFollowing
+                                      ? "border-[hsl(var(--success)/0.34)] bg-[hsl(var(--success)/0.14)] text-[hsl(var(--success))]"
+                                      : "border-[hsl(var(--border))] text-[hsl(var(--text-subtle))]"
+                                  }`}
+                                >
+                                  {isFollowing ? "Siguiendo" : "Seguir"}
+                                </button>
+                              ) : null}
                             </div>
                           </li>
                         )})}

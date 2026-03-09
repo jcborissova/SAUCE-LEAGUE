@@ -18,6 +18,8 @@ import type {
   TournamentResultMatchOverview,
   TournamentPhaseFilter,
   TournamentResultSummary,
+  TournamentActivityItem,
+  TournamentActivityType,
   TournamentSettings,
   TournamentStatMetric,
 } from "../types/tournament-analytics";
@@ -115,6 +117,19 @@ const toSafeText = (value: unknown): string => {
   if (typeof value === "string") return value.trim();
   if (value === null || value === undefined) return "";
   return String(value).trim();
+};
+
+const toTournamentActivityType = (value: unknown): TournamentActivityType => {
+  if (
+    value === "match_result_updated" ||
+    value === "match_stats_updated" ||
+    value === "playoff_series_updated" ||
+    value === "leader_of_day"
+  ) {
+    return value;
+  }
+
+  return "match_stats_updated";
 };
 
 const chunkArray = <T,>(items: T[], size: number): T[][] => {
@@ -2412,7 +2427,29 @@ export const saveMatchStats = async (payload: {
   });
 
   const submittedIds = new Set(normalizedRows.map((row) => row.playerId));
+  const submittedIdsList = Array.from(submittedIds);
   const toDeleteIds = Array.from(participantIds).filter((playerId) => !submittedIds.has(playerId));
+
+  const { error: clearPlayedError } = await supabase
+    .from("match_players")
+    .update({ played: false })
+    .eq("match_id", payload.matchId);
+
+  if (clearPlayedError) {
+    throw new Error(clearPlayedError.message);
+  }
+
+  if (submittedIdsList.length > 0) {
+    const { error: setPlayedError } = await supabase
+      .from("match_players")
+      .update({ played: true })
+      .eq("match_id", payload.matchId)
+      .in("player_id", submittedIdsList);
+
+    if (setPlayedError) {
+      throw new Error(setPlayedError.message);
+    }
+  }
 
   const { error: winnerError } = await supabase
     .from("matches")
@@ -3049,6 +3086,35 @@ export const getTournamentResultsSummary = (
     totalPoints,
     avgPoints,
   };
+};
+
+export const listTournamentActivity = async (
+  tournamentId: string,
+  limit = 20
+): Promise<TournamentActivityItem[]> => {
+  const safeLimit = Math.min(50, Math.max(1, Math.floor(Number(limit) || 20)));
+
+  const { data, error } = await supabase
+    .from("tournament_activity_feed")
+    .select("id, tournament_id, type, created_at, payload")
+    .eq("tournament_id", tournamentId)
+    .order("created_at", { ascending: false })
+    .limit(safeLimit);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    id: toNumber(row.id),
+    tournamentId: String(row.tournament_id ?? tournamentId),
+    type: toTournamentActivityType(row.type),
+    createdAt: String(row.created_at ?? new Date().toISOString()),
+    payload:
+      row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+        ? (row.payload as Record<string, unknown>)
+        : {},
+  }));
 };
 
 export const buildResultsSummary = getTournamentResultsSummary;

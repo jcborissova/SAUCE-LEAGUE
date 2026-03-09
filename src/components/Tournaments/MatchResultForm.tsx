@@ -111,6 +111,71 @@ const sanitizeStatsLine = (line: unknown): StatsLine => {
   };
 };
 
+const SHOT_RELATED_FIELDS: Array<keyof StatsLine> = ["fgm", "fga", "tpm", "tpa", "ftm", "fta"];
+
+const isShotRelatedField = (key: keyof StatsLine): boolean => SHOT_RELATED_FIELDS.includes(key);
+
+const computePointsFromShooting = (line: StatsLine): number =>
+  Math.max(0, 2 * toNonNegativeInt(line.fgm) + toNonNegativeInt(line.tpm) + toNonNegativeInt(line.ftm));
+
+const enforceStatsConsistency = (line: StatsLine): StatsLine => {
+  const next: StatsLine = {
+    ...line,
+    points: toNonNegativeInt(line.points),
+    rebounds: toNonNegativeInt(line.rebounds),
+    assists: toNonNegativeInt(line.assists),
+    steals: toNonNegativeInt(line.steals),
+    blocks: toNonNegativeInt(line.blocks),
+    turnovers: toNonNegativeInt(line.turnovers),
+    fouls: toNonNegativeInt(line.fouls),
+    fgm: toNonNegativeInt(line.fgm),
+    fga: toNonNegativeInt(line.fga),
+    tpm: toNonNegativeInt(line.tpm),
+    tpa: toNonNegativeInt(line.tpa),
+    ftm: toNonNegativeInt(line.ftm),
+    fta: toNonNegativeInt(line.fta),
+  };
+
+  if (next.fgm > next.fga) next.fgm = next.fga;
+  if (next.tpa > next.fga) next.tpa = next.fga;
+  if (next.tpm > next.tpa) next.tpm = next.tpa;
+  if (next.tpm > next.fgm) next.tpm = next.fgm;
+  if (next.ftm > next.fta) next.ftm = next.fta;
+
+  return next;
+};
+
+const applySmartStatUpdate = (
+  currentLine: StatsLine,
+  key: keyof StatsLine,
+  rawValue: number
+): StatsLine => {
+  const next: StatsLine = {
+    ...currentLine,
+    [key]: toNonNegativeInt(rawValue),
+  };
+
+  if (key === "tpa") {
+    if (next.tpa > next.fga) next.fga = next.tpa;
+  } else if (key === "tpm") {
+    if (next.tpm > next.tpa) next.tpa = next.tpm;
+    if (next.tpm > next.fgm) next.fgm = next.tpm;
+    if (next.tpa > next.fga) next.fga = next.tpa;
+    if (next.fgm > next.fga) next.fga = next.fgm;
+  } else if (key === "fgm") {
+    if (next.fgm > next.fga) next.fga = next.fgm;
+  } else if (key === "ftm") {
+    if (next.ftm > next.fta) next.fta = next.ftm;
+  }
+
+  const normalized = enforceStatsConsistency(next);
+  if (isShotRelatedField(key)) {
+    normalized.points = computePointsFromShooting(normalized);
+  }
+
+  return normalized;
+};
+
 const normalizeDraftPlayer = (value: unknown): PlayerRow | null => {
   if (typeof value !== "object" || value === null) return null;
 
@@ -387,8 +452,22 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
           })
         : Promise.resolve();
 
-      const fetchParticipants = async (): Promise<Array<{ player_id: number; team: "A" | "B" | null }>> => {
-        const participantsResult = await runQueryWithRetry<Array<{ player_id: number; team: "A" | "B" | null }>>(() =>
+      type MatchParticipantRow = { player_id: number; team: "A" | "B" | null; played: boolean | null };
+
+      const fetchParticipants = async (): Promise<MatchParticipantRow[]> => {
+        const participantsWithPlayedResult = await runQueryWithRetry<MatchParticipantRow[]>(() =>
+          supabase
+            .from("match_players")
+            .select("player_id, team, played")
+            .eq("match_id", matchId)
+            .order("team", { ascending: true })
+        );
+
+        if (!participantsWithPlayedResult.error) {
+          return (participantsWithPlayedResult.data ?? []) as MatchParticipantRow[];
+        }
+
+        const legacyParticipantsResult = await runQueryWithRetry<Array<{ player_id: number; team: "A" | "B" | null }>>(() =>
           supabase
             .from("match_players")
             .select("player_id, team")
@@ -396,14 +475,17 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
             .order("team", { ascending: true })
         );
 
-        if (participantsResult.error) {
-          throw new Error(participantsResult.error.message);
+        if (legacyParticipantsResult.error) {
+          throw new Error(legacyParticipantsResult.error.message);
         }
 
-        return (participantsResult.data ?? []) as Array<{ player_id: number; team: "A" | "B" | null }>;
+        return ((legacyParticipantsResult.data ?? []) as Array<{ player_id: number; team: "A" | "B" | null }>).map((row) => ({
+          ...row,
+          played: null,
+        }));
       };
 
-      let participantRows: Array<{ player_id: number; team: "A" | "B" | null }> = [];
+      let participantRows: MatchParticipantRow[] = [];
 
       try {
         participantRows = await fetchParticipants();
@@ -551,6 +633,14 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
         }
       });
 
+      const persistedPlayedByPlayerId = new Map<number, boolean>();
+      participantRows.forEach((row) => {
+        const playerId = Number(row.player_id);
+        if (!Number.isFinite(playerId) || playerId <= 0) return;
+        if (typeof row.played !== "boolean") return;
+        persistedPlayedByPlayerId.set(playerId, row.played);
+      });
+
       const initialStats: Record<number, StatsLine> = {};
       const initialPlayed: Record<number, boolean> = {};
       const hasPersistedRows = existingRows.length > 0;
@@ -574,7 +664,11 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
           tpa: toNonNegativeInt(existing?.tpa),
         };
 
-        initialPlayed[player.playerId] = hasPersistedRows ? Boolean(existing) : true;
+        if (persistedPlayedByPlayerId.has(player.playerId)) {
+          initialPlayed[player.playerId] = Boolean(persistedPlayedByPlayerId.get(player.playerId));
+        } else {
+          initialPlayed[player.playerId] = hasPersistedRows ? Boolean(existing) : true;
+        }
       });
 
       const mergedStats: Record<number, StatsLine> = { ...initialStats };
@@ -707,15 +801,19 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
   }, [playedByPlayer, players, stats]);
 
   const setValue = (playerId: number, key: keyof StatsLine, value: string) => {
-    const parsed = Math.max(0, Number(value || 0));
+    const parsed = Number(value || 0);
+    const resolvedValue = Number.isFinite(parsed) ? parsed : 0;
 
-    setStats((prev) => ({
-      ...prev,
-      [playerId]: {
-        ...(prev[playerId] ?? emptyLine()),
-        [key]: Number.isFinite(parsed) ? parsed : 0,
-      },
-    }));
+    setErrorMessage(null);
+    setStats((prev) => {
+      const currentLine = prev[playerId] ?? emptyLine();
+      const nextLine = applySmartStatUpdate(currentLine, key, resolvedValue);
+
+      return {
+        ...prev,
+        [playerId]: nextLine,
+      };
+    });
   };
 
   const setPlayed = (playerId: number, checked: boolean) => {
@@ -738,10 +836,24 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
 
     const lines: MatchPlayerStatsInput[] = players
       .filter((player) => Boolean(playedByPlayer[player.playerId]))
-      .map((player) => ({
-        playerId: player.playerId,
-        ...(stats[player.playerId] ?? emptyLine()),
-      }));
+      .map((player) => {
+        const rawLine = stats[player.playerId] ?? emptyLine();
+        const normalized = enforceStatsConsistency(rawLine);
+        const pointsByShots = computePointsFromShooting(normalized);
+        const hasShootingData =
+          normalized.fga > 0 ||
+          normalized.fgm > 0 ||
+          normalized.tpa > 0 ||
+          normalized.tpm > 0 ||
+          normalized.fta > 0 ||
+          normalized.ftm > 0;
+
+        return {
+          playerId: player.playerId,
+          ...normalized,
+          points: hasShootingData ? pointsByShots : normalized.points,
+        };
+      });
 
     for (const line of lines) {
       if (line.fgm > line.fga) {
@@ -791,172 +903,178 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
   }, [draftSavedAt]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-[1px] sm:items-center sm:p-4">
-      <div className="h-[100dvh] w-full overflow-hidden border bg-[hsl(var(--background))] shadow-2xl sm:h-auto sm:max-h-[94vh] sm:max-w-6xl">
-        <div className="flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-6">
-          <div>
-            <h2 className="flex items-center gap-2 text-lg font-bold sm:text-xl">
-              <TrophyIcon className="h-5 w-5 text-[hsl(var(--warning))]" />
-              Resultado del partido
-            </h2>
-            <p className="text-xs text-[hsl(var(--muted-foreground))] sm:text-sm">Carga stats por jugador y define el ganador.</p>
-          </div>
-          <button type="button" className="inline-flex h-9 w-9 items-center justify-center border" onClick={handleClose} aria-label="Cerrar">
-            <XMarkIcon className="h-5 w-5" />
-          </button>
+    <section className="app-card overflow-hidden">
+      <div className="flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-6">
+        <div>
+          <h2 className="flex items-center gap-2 text-lg font-bold sm:text-xl">
+            <TrophyIcon className="h-5 w-5 text-[hsl(var(--warning))]" />
+            Resultado del partido
+          </h2>
+          <p className="text-xs text-[hsl(var(--muted-foreground))] sm:text-sm">Carga stats por jugador y define el ganador.</p>
         </div>
+        <button
+          type="button"
+          className="inline-flex h-9 w-9 items-center justify-center border"
+          onClick={handleClose}
+          aria-label="Cerrar editor"
+        >
+          <XMarkIcon className="h-5 w-5" />
+        </button>
+      </div>
 
-        <div className="soft-scrollbar max-h-[calc(100dvh-136px)] overflow-y-auto space-y-4 px-4 py-4 sm:max-h-[calc(94vh-140px)] sm:px-6">
-          {loading ? (
-            <div className="flex justify-center py-16">
-              <ArrowPathIcon className="h-8 w-8 animate-spin text-[hsl(var(--primary))]" />
-            </div>
-          ) : (
-            <>
-              {errorMessage ? (
-                <div className="border border-[hsl(var(--destructive)/0.35)] bg-[hsl(var(--destructive)/0.12)] px-3 py-2 text-sm text-[hsl(var(--destructive))]">
-                  {errorMessage}
-                </div>
-              ) : null}
-
-              {infoMessage ? (
-                <div className="border border-[hsl(var(--primary)/0.3)] bg-[hsl(var(--primary)/0.08)] px-3 py-2 text-xs text-[hsl(var(--foreground))]">
-                  {infoMessage}
-                </div>
-              ) : null}
-
-              <label className="block border bg-[hsl(var(--surface-1))] px-3 py-2 text-sm">
-                <span className="mb-1 block font-medium">Equipo ganador</span>
-                <AppSelect value={winnerTeam} onChange={(event) => setWinnerTeam(event.target.value)} className="input-base">
-                  <option value="">Seleccionar</option>
-                  <option value={teams.A}>{teams.A}</option>
-                  <option value={teams.B}>{teams.B}</option>
-                </AppSelect>
-              </label>
-
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                Marca si el jugador participó. Solo los jugadores marcados como "Jugó" cuentan para promedios (PPP/RPP/APP) y totales.
-              </p>
-
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">{draftStatusText}</p>
-
-              <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
-                <div className="border bg-[hsl(var(--surface-1))] px-3 py-2">
-                  <p className="text-[hsl(var(--muted-foreground))]">{teams.A || "Equipo A"}</p>
-                  <p className="text-sm font-semibold">{pointsTotals.teamA} pts</p>
-                </div>
-                <div className="border bg-[hsl(var(--surface-1))] px-3 py-2">
-                  <p className="text-[hsl(var(--muted-foreground))]">{teams.B || "Equipo B"}</p>
-                  <p className="text-sm font-semibold">{pointsTotals.teamB} pts</p>
-                </div>
-                <div className="border bg-[hsl(var(--surface-1))] px-3 py-2">
-                  <p className="text-[hsl(var(--muted-foreground))]">Total partido</p>
-                  <p className="text-sm font-semibold">{pointsTotals.total} pts</p>
-                </div>
+      <div className="soft-scrollbar max-h-[70vh] overflow-y-auto space-y-4 px-4 py-4 sm:px-6">
+        {loading ? (
+          <div className="flex justify-center py-16">
+            <ArrowPathIcon className="h-8 w-8 animate-spin text-[hsl(var(--primary))]" />
+          </div>
+        ) : (
+          <>
+            {errorMessage ? (
+              <div className="border border-[hsl(var(--destructive)/0.35)] bg-[hsl(var(--destructive)/0.12)] px-3 py-2 text-sm text-[hsl(var(--destructive))]">
+                {errorMessage}
               </div>
+            ) : null}
 
-              {(["A", "B"] as const).map((side) => (
-                <section key={side} className="space-y-3 border bg-[hsl(var(--surface-1))] p-3 sm:p-4">
-                  <h3 className="text-base font-semibold sm:text-lg">{teams[side]}</h3>
+            {infoMessage ? (
+              <div className="border border-[hsl(var(--primary)/0.3)] bg-[hsl(var(--primary)/0.08)] px-3 py-2 text-xs text-[hsl(var(--foreground))]">
+                {infoMessage}
+              </div>
+            ) : null}
 
-                  <div className="space-y-3 md:hidden">
-                    {groupedTeams[side].map((player) => (
-                      <article key={player.playerId} className="border bg-[hsl(var(--surface-2))] p-3">
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <p className="text-sm font-semibold">
+            <label className="block border bg-[hsl(var(--surface-1))] px-3 py-2 text-sm">
+              <span className="mb-1 block font-medium">Equipo ganador</span>
+              <AppSelect value={winnerTeam} onChange={(event) => setWinnerTeam(event.target.value)} className="input-base">
+                <option value="">Seleccionar</option>
+                <option value={teams.A}>{teams.A}</option>
+                <option value={teams.B}>{teams.B}</option>
+              </AppSelect>
+            </label>
+
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">
+              Marca si el jugador participó. Solo los jugadores marcados como "Jugó" cuentan para promedios (PPP/RPP/APP) y totales.
+            </p>
+            <p className="text-xs text-[hsl(var(--text-subtle))]">
+              Reglas automáticas activas: 3PA sube FGA si hace falta, 3PM ajusta FGM/3PA, FTM ajusta FTA y los puntos se sincronizan con los tiros cargados.
+            </p>
+
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">{draftStatusText}</p>
+
+            <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+              <div className="border bg-[hsl(var(--surface-1))] px-3 py-2">
+                <p className="text-[hsl(var(--muted-foreground))]">{teams.A || "Equipo A"}</p>
+                <p className="text-sm font-semibold">{pointsTotals.teamA} pts</p>
+              </div>
+              <div className="border bg-[hsl(var(--surface-1))] px-3 py-2">
+                <p className="text-[hsl(var(--muted-foreground))]">{teams.B || "Equipo B"}</p>
+                <p className="text-sm font-semibold">{pointsTotals.teamB} pts</p>
+              </div>
+              <div className="border bg-[hsl(var(--surface-1))] px-3 py-2">
+                <p className="text-[hsl(var(--muted-foreground))]">Total partido</p>
+                <p className="text-sm font-semibold">{pointsTotals.total} pts</p>
+              </div>
+            </div>
+
+            {(["A", "B"] as const).map((side) => (
+              <section key={side} className="space-y-3 border bg-[hsl(var(--surface-1))] p-3 sm:p-4">
+                <h3 className="text-base font-semibold sm:text-lg">{teams[side]}</h3>
+
+                <div className="space-y-3 md:hidden">
+                  {groupedTeams[side].map((player) => (
+                    <article key={player.playerId} className="border bg-[hsl(var(--surface-2))] p-3">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold">
+                          {player.names} {player.lastnames}
+                        </p>
+                        <label className="inline-flex items-center gap-1 text-xs font-medium">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(playedByPlayer[player.playerId])}
+                            onChange={(event) => setPlayed(player.playerId, event.target.checked)}
+                          />
+                          Jugó
+                        </label>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {STAT_FIELDS.map((field) => (
+                          <label key={`${player.playerId}-${field.key}`} className="space-y-1 text-xs">
+                            <span className="text-[hsl(var(--muted-foreground))]">{field.label}</span>
+                            <input
+                              type="number"
+                              min={0}
+                              value={stats[player.playerId]?.[field.key] ?? 0}
+                              onChange={(event) => setValue(player.playerId, field.key, event.target.value)}
+                              disabled={!playedByPlayer[player.playerId]}
+                              className={`input-base h-9 min-h-0 px-2 py-1 text-center ${
+                                !playedByPlayer[player.playerId] ? "cursor-not-allowed opacity-60" : ""
+                              }`}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+
+                <div className="hidden overflow-x-auto border md:block">
+                  <table className="w-full min-w-[1240px] text-sm">
+                    <thead>
+                      <tr className="bg-[hsl(var(--muted))]">
+                        <th className="px-2 py-2 text-left">Jugador</th>
+                        <th className="px-2 py-2 text-center">Jugó</th>
+                        {STAT_FIELDS.map((field) => (
+                          <th key={field.key} className="px-2 py-2 text-center">
+                            {field.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupedTeams[side].map((player) => (
+                        <tr key={player.playerId} className="border-t border-[hsl(var(--border))]">
+                          <td className="px-2 py-2 whitespace-nowrap font-medium">
                             {player.names} {player.lastnames}
-                          </p>
-                          <label className="inline-flex items-center gap-1 text-xs font-medium">
+                          </td>
+                          <td className="px-2 py-2 text-center">
                             <input
                               type="checkbox"
                               checked={Boolean(playedByPlayer[player.playerId])}
                               onChange={(event) => setPlayed(player.playerId, event.target.checked)}
                             />
-                            Jugó
-                          </label>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
+                          </td>
                           {STAT_FIELDS.map((field) => (
-                            <label key={`${player.playerId}-${field.key}`} className="space-y-1 text-xs">
-                              <span className="text-[hsl(var(--muted-foreground))]">{field.label}</span>
+                            <td key={`${player.playerId}-${field.key}`} className="px-2 py-2">
                               <input
                                 type="number"
                                 min={0}
                                 value={stats[player.playerId]?.[field.key] ?? 0}
                                 onChange={(event) => setValue(player.playerId, field.key, event.target.value)}
                                 disabled={!playedByPlayer[player.playerId]}
-                                className={`input-base h-9 min-h-0 px-2 py-1 text-center ${
+                                className={`input-base h-9 min-h-0 w-16 px-2 py-1 text-center ${
                                   !playedByPlayer[player.playerId] ? "cursor-not-allowed opacity-60" : ""
                                 }`}
                               />
-                            </label>
-                          ))}
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-
-                  <div className="hidden overflow-x-auto border md:block">
-                    <table className="w-full min-w-[1240px] text-sm">
-                      <thead>
-                        <tr className="bg-[hsl(var(--muted))]">
-                          <th className="px-2 py-2 text-left">Jugador</th>
-                          <th className="px-2 py-2 text-center">Jugó</th>
-                          {STAT_FIELDS.map((field) => (
-                            <th key={field.key} className="px-2 py-2 text-center">
-                              {field.label}
-                            </th>
+                            </td>
                           ))}
                         </tr>
-                      </thead>
-                      <tbody>
-                        {groupedTeams[side].map((player) => (
-                          <tr key={player.playerId} className="border-t border-[hsl(var(--border))]">
-                            <td className="px-2 py-2 whitespace-nowrap font-medium">
-                              {player.names} {player.lastnames}
-                            </td>
-                            <td className="px-2 py-2 text-center">
-                              <input
-                                type="checkbox"
-                                checked={Boolean(playedByPlayer[player.playerId])}
-                                onChange={(event) => setPlayed(player.playerId, event.target.checked)}
-                              />
-                            </td>
-                            {STAT_FIELDS.map((field) => (
-                              <td key={`${player.playerId}-${field.key}`} className="px-2 py-2">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={stats[player.playerId]?.[field.key] ?? 0}
-                                  onChange={(event) => setValue(player.playerId, field.key, event.target.value)}
-                                  disabled={!playedByPlayer[player.playerId]}
-                                  className={`input-base h-9 min-h-0 w-16 px-2 py-1 text-center ${
-                                    !playedByPlayer[player.playerId] ? "cursor-not-allowed opacity-60" : ""
-                                  }`}
-                                />
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              ))}
-            </>
-          )}
-        </div>
-
-        <div className="flex justify-end gap-2 border-t px-4 py-3 sm:px-6">
-          <button type="button" onClick={handleClose} className="btn-secondary">
-            Cancelar
-          </button>
-          <button type="button" disabled={saving || loading} onClick={handleSubmit} className="btn-primary disabled:opacity-60">
-            {saving ? "Guardando..." : "Guardar resultado"}
-          </button>
-        </div>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ))}
+          </>
+        )}
       </div>
-    </div>
+
+      <div className="flex justify-end gap-2 border-t px-4 py-3 sm:px-6">
+        <button type="button" onClick={handleClose} className="btn-secondary">
+          Cerrar editor
+        </button>
+        <button type="button" disabled={saving || loading} onClick={handleSubmit} className="btn-primary disabled:opacity-60">
+          {saving ? "Guardando..." : "Guardar resultado"}
+        </button>
+      </div>
+    </section>
   );
 };
 
