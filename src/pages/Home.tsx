@@ -21,6 +21,7 @@ import { useRole } from "../contexts/RoleContext";
 import { supabase } from "../lib/supabase";
 import {
   getTournamentPlayerLinesFast,
+  getTournamentRegularStandings,
   getTournamentResultsOverview,
   getTournamentResultsSummary,
   getTournamentSettings,
@@ -249,24 +250,15 @@ const loadUpcomingMatches = async (tournamentId: string): Promise<UpcomingTourna
   return sortMatchesByScheduleAsc((data ?? []).map((row) => toUpcomingMatch(row as Record<string, unknown>)));
 };
 
-const loadStandingsFromView = async (tournamentId: string): Promise<TeamStandingSummary[]> => {
-  const { data, error } = await supabase
-    .from("tournament_regular_standings")
-    .select("team_id, team_name, games_played, wins, losses, win_pct")
-    .eq("tournament_id", tournamentId)
-    .limit(12);
-
-  if (error || !data) {
-    return [];
-  }
-
-  return (data || []).map((row) => ({
-    teamId: Number(row.team_id),
-    name: String(row.team_name),
-    pj: Number(row.games_played ?? 0),
-    pg: Number(row.wins ?? 0),
-    pp: Number(row.losses ?? 0),
-    winPct: Number(row.win_pct ?? 0),
+const loadStandings = async (tournamentId: string): Promise<TeamStandingSummary[]> => {
+  const rows = await getTournamentRegularStandings(tournamentId, { limit: 12 });
+  return rows.map((row) => ({
+    teamId: row.teamId,
+    name: row.name,
+    pj: row.pj,
+    pg: row.pg,
+    pp: row.pp,
+    winPct: row.winPct,
   }));
 };
 
@@ -410,15 +402,6 @@ const withinNextDays = (dateValue: string | null, days: number) => {
   return diffDays >= 0 && diffDays <= days;
 };
 
-const sortStandings = (rows: TeamStandingSummary[]) => {
-  return [...rows].sort((a, b) => {
-    if (b.pg !== a.pg) return b.pg - a.pg;
-    if (b.winPct !== a.winPct) return b.winPct - a.winPct;
-    if (a.pp !== b.pp) return a.pp - b.pp;
-    return a.name.localeCompare(b.name);
-  });
-};
-
 const buildTournamentInsight = ({
   tournamentId,
   tournamentName,
@@ -452,7 +435,7 @@ const buildTournamentInsight = ({
   const todayPendingMatchesCount = upcomingMatches.filter((match) => match.matchDate === todayIso).length;
   const next7DaysPendingMatchesCount = upcomingMatches.filter((match) => withinNextDays(match.matchDate, 7)).length;
 
-  const sortedStandings = sortStandings(standings);
+  const sortedStandings = standings;
   const bestTeam = sortedStandings[0] ?? null;
 
   const leader = topScorers[0] ?? null;
@@ -1645,7 +1628,7 @@ const useTournamentHomeFeed = (): TournamentHomeFeedState => {
           getTournamentPlayerLinesFast(tournamentId, "playoffs"),
           getTournamentResultsOverview(tournamentId),
           loadUpcomingMatches(tournamentId),
-          loadStandingsFromView(tournamentId),
+          loadStandings(tournamentId),
           getTournamentSettings(tournamentId),
         ]);
 

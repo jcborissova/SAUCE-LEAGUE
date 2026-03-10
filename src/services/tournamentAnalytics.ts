@@ -32,6 +32,10 @@ import {
   computeValuationPerGame,
   round2,
 } from "../utils/tournament-stats";
+import {
+  computeStandingsWithFibaTiebreak,
+  type TeamStandingResolved,
+} from "../utils/standings-tiebreak";
 
 type EnrichedStatsRow = {
   tournament_id: string;
@@ -736,16 +740,8 @@ const loadStatsRows = async (tournamentId: string): Promise<EnrichedStatsRow[]> 
 };
 
 const getTeamWinPct = async (tournamentId: string): Promise<Map<string, number>> => {
-  const { data, error } = await supabase
-    .from("tournament_regular_standings")
-    .select("team_name, win_pct")
-    .eq("tournament_id", tournamentId);
-
-  if (error || !data) {
-    return new Map<string, number>();
-  }
-
-  return new Map(data.map((row) => [row.team_name as string, toNumber(row.win_pct)]));
+  const standings = await getTournamentRegularStandings(tournamentId);
+  return new Map(standings.map((row) => [row.name, row.winPct]));
 };
 
 const analyticsSnapshotCache = new Map<
@@ -2857,6 +2853,56 @@ export const getTournamentResultsOverview = async (
   if (fromView) return fromView;
 
   return loadResultsOverviewFallback(tournamentId);
+};
+
+export const getTournamentRegularStandings = async (
+  tournamentId: string,
+  options?: { limit?: number }
+): Promise<TeamStandingResolved[]> => {
+  const [{ data: teams, error: teamsError }, regularSeasonMatches, { data: playoffGames, error: playoffGamesError }] =
+    await Promise.all([
+      supabase.from("teams").select("id, name").eq("tournament_id", tournamentId),
+      getTournamentResultsOverview(tournamentId),
+      supabase.from("playoff_games").select("match_id").eq("tournament_id", tournamentId),
+    ]);
+
+  if (teamsError) {
+    throw new Error(teamsError.message);
+  }
+  if (playoffGamesError) {
+    throw new Error(playoffGamesError.message);
+  }
+
+  const playoffMatchIds = new Set(
+    ((playoffGames as Array<{ match_id: number | null }> | null) ?? [])
+      .map((row) => Number(row.match_id))
+      .filter((matchId) => Number.isFinite(matchId) && matchId > 0)
+  );
+
+  const regularMatchesOnly = regularSeasonMatches.filter((match) => !playoffMatchIds.has(match.matchId));
+
+  const rows = computeStandingsWithFibaTiebreak(
+    ((teams as Array<{ id: number; name: string }> | null) ?? []).map((team) => ({
+      teamId: Number(team.id),
+      name: String(team.name),
+    })),
+    regularMatchesOnly.map((match) => ({
+      matchId: match.matchId,
+      teamA: match.teamA,
+      teamB: match.teamB,
+      winnerTeam: match.winnerTeam,
+      teamAPoints: match.teamAPoints,
+      teamBPoints: match.teamBPoints,
+      hasStats: match.hasStats,
+    }))
+  );
+
+  const limit = options?.limit;
+  if (typeof limit === "number" && Number.isFinite(limit) && limit > 0) {
+    return rows.slice(0, Math.floor(limit));
+  }
+
+  return rows;
 };
 
 const toBoxscoreRowFromView = (row: Record<string, unknown>): TournamentResultBoxscoreRow => {
