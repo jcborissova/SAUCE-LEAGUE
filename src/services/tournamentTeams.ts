@@ -14,6 +14,7 @@ export type TournamentTeamRoster = {
 };
 
 type TournamentTeamInput = {
+  id?: number;
   name: string;
   playerIds: number[];
 };
@@ -368,6 +369,7 @@ export const saveTournamentTeamAssignments = async (
   teams: TournamentTeamInput[]
 ): Promise<void> => {
   const sanitizedTeams = teams.map((team, index) => ({
+    inputId: toNumber(team.id),
     name: normalizeTeamName(team.name, index),
     playerIds: Array.from(
       new Set(team.playerIds.map((playerId) => toNumber(playerId)).filter((playerId) => playerId > 0))
@@ -386,34 +388,79 @@ export const saveTournamentTeamAssignments = async (
   const existingIds = (existingTeams ?? [])
     .map((team) => toNumber(team.id))
     .filter((teamId) => teamId > 0);
+  const existingIdSet = new Set(existingIds);
+  const persistedTeams: Array<{ teamId: number; playerIds: number[] }> = [];
 
-  if (existingIds.length > 0) {
-    const { error: removePlayersError } = await supabase.from("team_players").delete().in("team_id", existingIds);
-    if (removePlayersError) {
-      throw new Error(removePlayersError.message);
+  for (const team of sanitizedTeams) {
+    let persistedTeamId = 0;
+
+    if (team.inputId > 0 && existingIdSet.has(team.inputId)) {
+      const { error: updateTeamError } = await supabase
+        .from("teams")
+        .update({ name: team.name })
+        .eq("id", team.inputId)
+        .eq("tournament_id", tournamentId);
+
+      if (updateTeamError) {
+        throw new Error(updateTeamError.message);
+      }
+
+      persistedTeamId = team.inputId;
+    } else {
+      const { data: createdTeam, error: createTeamError } = await supabase
+        .from("teams")
+        .insert({ name: team.name, tournament_id: tournamentId })
+        .select("id")
+        .single();
+
+      if (createTeamError || !createdTeam) {
+        throw new Error(createTeamError?.message ?? `No se pudo crear el equipo "${team.name}".`);
+      }
+
+      persistedTeamId = toNumber(createdTeam.id);
     }
 
-    const { error: removeTeamsError } = await supabase.from("teams").delete().in("id", existingIds);
+    if (persistedTeamId <= 0) {
+      throw new Error(`No se pudo persistir el equipo "${team.name}".`);
+    }
+
+    persistedTeams.push({
+      teamId: persistedTeamId,
+      playerIds: team.playerIds,
+    });
+  }
+
+  const persistedTeamIds = persistedTeams.map((team) => team.teamId);
+  const removedTeamIds = existingIds.filter((teamId) => !persistedTeamIds.includes(teamId));
+
+  if (removedTeamIds.length > 0) {
+    const { error: removeTeamsError } = await supabase
+      .from("teams")
+      .delete()
+      .in("id", removedTeamIds)
+      .eq("tournament_id", tournamentId);
+
     if (removeTeamsError) {
       throw new Error(removeTeamsError.message);
     }
   }
 
-  for (const team of sanitizedTeams) {
-    const { data: createdTeam, error: createTeamError } = await supabase
-      .from("teams")
-      .insert({ name: team.name, tournament_id: tournamentId })
-      .select("id")
-      .single();
+  if (persistedTeamIds.length > 0) {
+    const { error: clearPlayersError } = await supabase
+      .from("team_players")
+      .delete()
+      .in("team_id", persistedTeamIds);
 
-    if (createTeamError || !createdTeam) {
-      throw new Error(createTeamError?.message ?? `No se pudo crear el equipo "${team.name}".`);
+    if (clearPlayersError) {
+      throw new Error(clearPlayersError.message);
     }
+  }
 
+  for (const team of persistedTeams) {
     if (team.playerIds.length === 0) continue;
 
     const participantsRows = team.playerIds.map((playerId) => ({
-      team_id: toNumber(createdTeam.id),
+      team_id: team.teamId,
       player_id: playerId,
       tournament_id: tournamentId,
     }));
