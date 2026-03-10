@@ -43,7 +43,6 @@ import type {
 import { TOURNAMENT_RULES_PDF_URL } from "../constants/tournamentRules";
 import { abbreviateLeaderboardName } from "../utils/player-display";
 import {
-  IDEAL_FIVE_ROLE_BADGE_VARIANT,
   buildAntiIdealFiveProjection,
   buildIdealFiveProjection,
   type IdealFiveProjection,
@@ -2916,30 +2915,68 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
               <Badge variant="default">Mín. juegos: {selectedFiveProjection.minGames}</Badge>
             </div>
 
-            <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            <ol className="space-y-2">
               {selectedFiveLineup.map((slot) => (
                 <li key={`${slot.role}-${slot.playerId}`}>
                   <article
-                    className={`rounded-[10px] border p-3 ${
+                    className={`rounded-[10px] border px-2.5 py-2 ${
                       fiveTab === "ideal"
                         ? "bg-[hsl(var(--surface-1))]"
                         : "border-[hsl(var(--destructive)/0.34)] bg-[hsl(var(--destructive)/0.06)]"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <Badge variant={IDEAL_FIVE_ROLE_BADGE_VARIANT[slot.role]}>{slot.role}</Badge>
-                      <p className="text-[10px] text-[hsl(var(--text-subtle))] tabular-nums">
-                        {selectedFiveRoleScoreLabel} {slot.roleScore.toFixed(1)}
-                      </p>
+                    <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-2">
+                      <span
+                        className={`inline-flex h-5 min-w-8 items-center justify-center rounded-[6px] border px-1.5 text-[10px] font-semibold ${
+                          slot.role === "PG"
+                            ? "border-[hsl(var(--primary)/0.28)] bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]"
+                            : slot.role === "SG"
+                              ? "border-[hsl(var(--warning)/0.34)] bg-[hsl(var(--warning)/0.16)] text-[hsl(var(--warning))]"
+                              : slot.role === "SF"
+                                ? "border-[hsl(var(--success)/0.34)] bg-[hsl(var(--success)/0.14)] text-[hsl(var(--success))]"
+                                : slot.role === "C"
+                                  ? "border-[hsl(var(--destructive)/0.34)] bg-[hsl(var(--destructive)/0.14)] text-[hsl(var(--destructive))]"
+                                  : "border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] text-[hsl(var(--text-subtle))]"
+                        }`}
+                      >
+                        {slot.role}
+                      </span>
+
+                      <div className="min-w-0">
+                        <p className="truncate text-[12px] font-semibold leading-tight" title={slot.name}>
+                          {abbreviateLeaderboardName(slot.name, 28)}
+                        </p>
+                        <p className="truncate text-[10px] leading-tight text-[hsl(var(--muted-foreground))]">
+                          {slot.teamName ?? "Sin equipo"}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <p className="text-[9px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">
+                          {selectedFiveRoleScoreLabel}
+                        </p>
+                        <p className="text-[12px] font-semibold tabular-nums leading-tight">{slot.roleScore.toFixed(1)}</p>
+                      </div>
                     </div>
-                    <p className="mt-2 truncate text-sm font-semibold" title={slot.name}>
-                      {abbreviateLeaderboardName(slot.name, 18)}
-                    </p>
-                    <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">{slot.teamName ?? "Sin equipo"}</p>
-                    <p className="mt-2 text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">{slot.keyStatLabel}</p>
-                    <p className="text-xs font-semibold tabular-nums">{slot.keyStatValue}</p>
-                    <p className="mt-2 text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Perfil</p>
-                    <p className="text-xs font-semibold">{slot.archetype}</p>
+
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
+                      <span className="max-w-full truncate text-[hsl(var(--text-subtle))]">
+                        {slot.keyStatLabel}: <span className="font-semibold text-[hsl(var(--foreground))]">{slot.keyStatValue}</span>
+                      </span>
+
+                      <span className="text-[hsl(var(--text-subtle))] tabular-nums">{slot.gamesPlayed} PJ</span>
+
+                      <span
+                        className={`inline-flex max-w-[160px] items-center truncate rounded-[6px] border px-1.5 py-0.5 text-[9px] font-semibold ${
+                          fiveTab === "ideal"
+                            ? "border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] text-[hsl(var(--text-subtle))]"
+                            : "border-[hsl(var(--destructive)/0.34)] bg-[hsl(var(--destructive)/0.14)] text-[hsl(var(--destructive))]"
+                        }`}
+                        title={slot.archetype}
+                      >
+                        {slot.archetype}
+                      </span>
+                    </div>
                   </article>
                 </li>
               ))}
