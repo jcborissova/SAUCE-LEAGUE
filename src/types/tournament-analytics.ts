@@ -8,9 +8,32 @@ export type TournamentStatMetric =
   | "blocks"
   | "defensive_impact"
   | "pra"
+  | "most_improved"
   | "turnovers"
   | "fouls"
   | "fg_pct";
+
+export type MostImprovedBreakdown = {
+  score: number;
+  gamesAnalyzed: number;
+  startWindowGames: number;
+  endWindowGames: number;
+  earlyValuation: number;
+  lateValuation: number;
+  valuationDelta: number;
+  earlyPra: number;
+  latePra: number;
+  praDelta: number;
+  earlyTsPct: number;
+  lateTsPct: number;
+  tsPctDelta: number;
+  earlyTurnovers: number;
+  lateTurnovers: number;
+  turnoversDelta: number;
+  trendSlope: number;
+  startBoost: number;
+  explanation: string;
+};
 
 export type BattleMetric =
   | "ppg"
@@ -71,6 +94,7 @@ export type PlayerStatsLine = {
 export type TournamentLeaderRow = PlayerStatsLine & {
   value: number;
   metric: TournamentStatMetric;
+  mostImproved?: MostImprovedBreakdown;
 };
 
 export type RaceSeriesPoint = {

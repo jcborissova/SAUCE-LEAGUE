@@ -50,6 +50,7 @@ type StatsFocus =
   | "steals"
   | "blocks"
   | "pra"
+  | "most_improved"
   | "defensive"
   | "mvp"
   | "duel";
@@ -78,12 +79,13 @@ const FOCUS_OPTIONS: Array<{ value: Exclude<StatsFocus, "duel">; label: string }
   { value: "steals", label: "Robos" },
   { value: "blocks", label: "Tapones" },
   { value: "pra", label: "PRA" },
+  { value: "most_improved", label: "Más mejorado" },
   { value: "defensive", label: "Líder defensivo" },
   { value: "mvp", label: "MVP" },
 ];
 
 const focusMeta: Record<
-  Exclude<StatsFocus, "mvp" | "duel" | "defensive" | "pra">,
+  Exclude<StatsFocus, "mvp" | "duel" | "defensive" | "pra" | "most_improved">,
   {
     title: string;
     tabLabel: string;
@@ -481,6 +483,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
   const [blocksLeaders, setBlocksLeaders] = useState<TournamentLeaderRow[]>([]);
   const [defensiveLeaders, setDefensiveLeaders] = useState<TournamentLeaderRow[]>([]);
   const [praLeaders, setPraLeaders] = useState<TournamentLeaderRow[]>([]);
+  const [mostImprovedLeaders, setMostImprovedLeaders] = useState<TournamentLeaderRow[]>([]);
   const [mvpRows, setMvpRows] = useState<MvpBreakdownRow[]>([]);
 
   const [fullViewOpen, setFullViewOpen] = useState(false);
@@ -563,13 +566,14 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       setError(null);
 
       try {
-        const [points, rebounds, assists, steals, blocks, pra, defensive, mvp] = await Promise.all([
+        const [points, rebounds, assists, steals, blocks, pra, mostImproved, defensive, mvp] = await Promise.all([
           getLeaders({ tournamentId, phase, metric: "points", limit: 10 }),
           getLeaders({ tournamentId, phase, metric: "rebounds", limit: 10 }),
           getLeaders({ tournamentId, phase, metric: "assists", limit: 10 }),
           getLeaders({ tournamentId, phase, metric: "steals", limit: 10 }),
           getLeaders({ tournamentId, phase, metric: "blocks", limit: 10 }),
           getLeaders({ tournamentId, phase, metric: "pra", limit: 10 }),
+          getLeaders({ tournamentId, phase, metric: "most_improved", limit: 10 }),
           getLeaders({ tournamentId, phase, metric: "defensive_impact", limit: 10 }),
           getMvpRaceFast({
             tournamentId,
@@ -585,6 +589,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
         setStealsLeaders(steals);
         setBlocksLeaders(blocks);
         setPraLeaders(pra);
+        setMostImprovedLeaders(mostImproved);
         setDefensiveLeaders(defensive);
         setMvpRows(mvp);
       } catch (err) {
@@ -717,6 +722,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       stealsLeaders.length > 0 ||
       blocksLeaders.length > 0 ||
       praLeaders.length > 0 ||
+      mostImprovedLeaders.length > 0 ||
       defensiveLeaders.length > 0 ||
       mvpRows.length > 0,
     [
@@ -726,6 +732,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       stealsLeaders.length,
       blocksLeaders.length,
       praLeaders.length,
+      mostImprovedLeaders.length,
       defensiveLeaders.length,
       mvpRows.length,
     ]
@@ -738,9 +745,20 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
     if (focus === "steals") return stealsLeaders;
     if (focus === "blocks") return blocksLeaders;
     if (focus === "pra") return praLeaders;
+    if (focus === "most_improved") return mostImprovedLeaders;
     if (focus === "defensive") return defensiveLeaders;
     return [];
-  }, [focus, pointsLeaders, reboundsLeaders, assistsLeaders, stealsLeaders, blocksLeaders, praLeaders, defensiveLeaders]);
+  }, [
+    focus,
+    pointsLeaders,
+    reboundsLeaders,
+    assistsLeaders,
+    stealsLeaders,
+    blocksLeaders,
+    praLeaders,
+    mostImprovedLeaders,
+    defensiveLeaders,
+  ]);
 
   const hasFocusContent = useMemo(() => {
     if (focus === "mvp") return mvpRows.length > 0;
@@ -754,6 +772,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
     if (focus === "mvp") return "Carrera MVP";
     if (focus === "duel") return "Duelo 1v1";
     if (focus === "pra") return "Líderes de PRA";
+    if (focus === "most_improved") return "Jugador más mejorado";
     if (focus === "defensive") return "Líder defensivo";
     return focusMeta[focus].title;
   }, [focus]);
@@ -762,6 +781,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
     if (focus === "mvp") return "Ranking MVP completo";
     if (focus === "duel") return "Ranking completo";
     if (focus === "pra") return "Líderes de PRA (Ranking completo)";
+    if (focus === "most_improved") return "Jugador más mejorado (Temporada regular)";
     if (focus === "defensive") return "Líder defensivo (Ranking completo)";
     return `${focusMeta[focus].title} (Ranking completo)`;
   }, [focus]);
@@ -770,6 +790,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
     if (focus === "mvp") return "Score";
     if (focus === "duel") return "Valor";
     if (focus === "pra") return "PRA/PJ";
+    if (focus === "most_improved") return "Score MIP";
     if (focus === "defensive") return "D-Impact";
     return focusMeta[focus].metricLabel;
   }, [focus]);
@@ -777,6 +798,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
   const fullViewSecondaryLabel = useMemo(() => {
     if (focus === "mvp" || focus === "duel") return undefined;
     if (focus === "pra") return "PRA Total";
+    if (focus === "most_improved") return "Δ VAL";
     if (focus === "defensive") return "ROB/TAP";
     return "Total";
   }, [focus]);
@@ -784,6 +806,9 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
   const fullViewInfoNote = useMemo(() => {
     if (focus === "pra") {
       return "PRA por partido = puntos + rebotes + asistencias - pérdidas. Ajusta el volumen ofensivo por el costo de perder posesiones.";
+    }
+    if (focus === "most_improved") {
+      return "MIP se calcula solo en temporada regular. Score MIP combina: salto de valoración (inicio vs cierre), tendencia positiva por juego, ajuste de eficiencia (TS%) y control de pérdidas. El algoritmo favorece arranques flojos con mejora sostenida, no solo picos aislados.";
     }
     if (focus === "defensive") {
       return "D-Impact/PJ = (1.4 x ROB/PJ) + (1.8 x TAP/PJ) + (0.35 x REB/PJ) - (0.15 x FALTAS/PJ). Mide acciones defensivas directas y su consistencia.";
@@ -802,6 +827,8 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
         ? "defensive_impact"
         : focus === "pra"
           ? "pra"
+          : focus === "most_improved"
+            ? "most_improved"
           : focusMeta[focus].metric;
     const nextKey = `${tournamentId}:${phase}:${metric}`;
     if (fullLeadersKey === nextKey && fullLeadersRows.length > 0) return;
@@ -845,6 +872,21 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
 
     if (focus === "duel") {
       return [];
+    }
+
+    if (focus === "most_improved") {
+      return fullLeadersRows.map((row) => {
+        const delta = row.mostImproved?.valuationDelta ?? 0;
+        return {
+          playerId: row.playerId,
+          name: row.name,
+          photo: row.photo ?? null,
+          teamName: row.teamName,
+          valuePrimaryText: row.value.toFixed(2),
+          valueSecondaryText: `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}`,
+          helperText: row.mostImproved?.explanation ?? `PJ ${row.gamesPlayed} · Progresión sostenida`,
+        };
+      });
     }
 
     if (focus === "pra") {
@@ -1331,6 +1373,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
   };
 
   const mvpDetailPhase: TournamentPhaseFilter = phase === "playoffs" ? "playoffs" : "regular";
+  const detailPhaseForFocus: TournamentPhaseFilter = focus === "most_improved" ? "regular" : phase;
 
   const openPlayerDetail = async (
     playerId: number,
@@ -2133,17 +2176,71 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {focus === "pra" || focus === "defensive" ? (
+                  {focus === "pra" || focus === "defensive" || focus === "most_improved" ? (
                     <p className="rounded-lg border bg-[hsl(var(--surface-2)/0.65)] px-3 py-2 text-xs text-[hsl(var(--muted-foreground))]">
                       {focus === "pra"
                         ? "PRA/PJ = puntos + rebotes + asistencias - pérdidas por juego. Es la referencia usada para medir volumen productivo neto."
-                        : "D-Impact/PJ = (1.4 x ROB/PJ) + (1.8 x TAP/PJ) + (0.35 x REB/PJ) - (0.15 x FALTAS/PJ)."}
+                        : focus === "defensive"
+                          ? "D-Impact/PJ = (1.4 x ROB/PJ) + (1.8 x TAP/PJ) + (0.35 x REB/PJ) - (0.15 x FALTAS/PJ)."
+                          : "Más Mejorado usa solo temporada regular: compara inicio vs cierre, tendencia por juego y eficiencia (TS%) para premiar progreso sostenido."}
                     </p>
                   ) : null}
                   {previewRows.length === 0 ? (
                     <p className="text-sm text-[hsl(var(--text-subtle))]">No hay datos para esta métrica.</p>
                   ) : (
                     previewRows.map((row, index) => {
+                      if (focus === "most_improved") {
+                        return (
+                          <div
+                            key={row.playerId}
+                            className="flex min-h-[92px] items-center justify-between rounded-lg border bg-[hsl(var(--surface-2)/0.7)] px-3 py-2 text-sm"
+                          >
+                            <div className="min-w-0">
+                              <p className="flex min-w-0 items-center gap-2 font-semibold">
+                                {row.photo ? (
+                                  <img
+                                    src={row.photo}
+                                    alt={row.name}
+                                    className="h-7 w-7 rounded-full object-cover border border-[hsl(var(--border)/0.82)]"
+                                  />
+                                ) : (
+                                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[hsl(var(--border)/0.82)] bg-[hsl(var(--surface-1))] text-[10px]">
+                                    {getPlayerInitials(row.name)}
+                                  </span>
+                                )}
+                                <span className="truncate" title={row.name}>
+                                  #{index + 1} {abbreviateLeaderboardName(row.name, 20)}
+                                </span>
+                              </p>
+                              <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
+                                {row.teamName ?? "Sin equipo"} · Regular
+                              </p>
+                              <p className="truncate text-[11px] text-[hsl(var(--muted-foreground))]">
+                                {row.mostImproved?.explanation ?? "Progresión sostenida durante la temporada regular."}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs font-semibold tabular-nums">
+                                Score MIP {row.value.toFixed(2)}
+                              </p>
+                              <p className="text-[11px] text-[hsl(var(--muted-foreground))]">
+                                Δ VAL {row.mostImproved ? `${row.mostImproved.valuationDelta >= 0 ? "+" : ""}${row.mostImproved.valuationDelta.toFixed(1)}` : "0.0"}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => void openPlayerDetail(row.playerId, "regular")}
+                                className="mt-1 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors hover:bg-[hsl(var(--surface-1))]"
+                                title="Ver detalle del jugador"
+                                aria-label={`Ver detalle de ${row.name}`}
+                              >
+                                <EyeIcon className="h-3.5 w-3.5" />
+                                Ver detalle
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+
                       if (focus === "pra") {
                         return (
                           <div
@@ -2186,7 +2283,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                               </p>
                               <button
                                 type="button"
-                                onClick={() => void openPlayerDetail(row.playerId, phase)}
+                                onClick={() => void openPlayerDetail(row.playerId, detailPhaseForFocus)}
                                 className="mt-1 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors hover:bg-[hsl(var(--surface-1))]"
                                 title="Ver detalle del jugador"
                                 aria-label={`Ver detalle de ${row.name}`}
@@ -2235,7 +2332,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                               </p>
                               <button
                                 type="button"
-                                onClick={() => void openPlayerDetail(row.playerId, phase)}
+                                onClick={() => void openPlayerDetail(row.playerId, detailPhaseForFocus)}
                                 className="mt-1 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors hover:bg-[hsl(var(--surface-1))]"
                                 title="Ver detalle del jugador"
                                 aria-label={`Ver detalle de ${row.name}`}
@@ -2284,7 +2381,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                             </p>
                             <button
                               type="button"
-                              onClick={() => void openPlayerDetail(row.playerId, phase)}
+                              onClick={() => void openPlayerDetail(row.playerId, detailPhaseForFocus)}
                               className="mt-1 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors hover:bg-[hsl(var(--surface-1))]"
                               title="Ver detalle del jugador"
                               aria-label={`Ver detalle de ${row.name}`}
@@ -2316,7 +2413,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
           onBack={() => setFullViewOpen(false)}
           onRetry={focus === "mvp" ? undefined : retryFullLeaders}
           onPlayerSelect={(playerId) => {
-            void openPlayerDetail(playerId, focus === "mvp" ? mvpDetailPhase : phase);
+            void openPlayerDetail(playerId, focus === "mvp" ? mvpDetailPhase : detailPhaseForFocus);
           }}
         />
       ) : null}

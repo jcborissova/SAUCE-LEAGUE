@@ -12,6 +12,7 @@ import { DocumentTextIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outli
 
 import PageShell from "../components/ui/PageShell";
 import SectionCard from "../components/ui/SectionCard";
+import SegmentedControl from "../components/ui/SegmentedControl";
 import StatPill from "../components/ui/StatPill";
 import Badge from "../components/ui/Badge";
 import ModalShell from "../components/ui/ModalShell";
@@ -43,6 +44,7 @@ import { TOURNAMENT_RULES_PDF_URL } from "../constants/tournamentRules";
 import { abbreviateLeaderboardName } from "../utils/player-display";
 import {
   IDEAL_FIVE_ROLE_BADGE_VARIANT,
+  buildAntiIdealFiveProjection,
   buildIdealFiveProjection,
   type IdealFiveProjection,
 } from "../utils/ideal-five";
@@ -103,6 +105,7 @@ type TournamentHomeInsight = {
   next7DaysPendingMatchesCount: number;
   statsCoveragePct: number;
   idealFive: IdealFiveProjection | null;
+  antiIdealFive: IdealFiveProjection | null;
 };
 
 type TournamentHomeOption = {
@@ -440,6 +443,7 @@ const buildTournamentInsight = ({
 
   const leader = topScorers[0] ?? null;
   const idealFive = buildIdealFiveProjection(playerLines, playoffLines);
+  const antiIdealFive = buildAntiIdealFiveProjection(playerLines, playoffLines);
   const playedResultsCount = completedResults.length;
   const statsCoveragePct = playedResultsCount > 0 ? (summary.matchesWithStats / playedResultsCount) * 100 : 0;
 
@@ -477,6 +481,7 @@ const buildTournamentInsight = ({
     next7DaysPendingMatchesCount,
     statsCoveragePct,
     idealFive,
+    antiIdealFive,
   };
 };
 
@@ -1754,6 +1759,7 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
   const [challengeSearch, setChallengeSearch] = useState("");
   const [challengeStatusFilter, setChallengeStatusFilter] = useState<TournamentChallengeStatus | "all">("all");
   const [regeneratingChallenges, setRegeneratingChallenges] = useState(false);
+  const [fiveTab, setFiveTab] = useState<"ideal" | "anti">("ideal");
 
   useEffect(() => {
     if (!HOME_CHALLENGES_IN_HOME_ENABLED || !insight) {
@@ -1999,15 +2005,113 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
     selectedPlayerNextChallenge === null &&
     selectedPlayerLatestSettledChallenge === null;
   const idealFive = insight.idealFive;
+  const antiIdealFive = insight.antiIdealFive;
   const idealFiveRoleOrder = ["PG", "SG", "SF", "PF", "C"];
-  const idealFiveLineup = idealFive
-    ? [...idealFive.lineup].sort((a, b) => {
+  const fiveTabOptions: Array<{ label: string; value: "ideal" | "anti" }> = [
+    { label: "Quinteto ideal", value: "ideal" },
+    { label: "Quinteto no ideal", value: "anti" },
+  ];
+  const selectedFiveProjection = fiveTab === "ideal" ? idealFive : antiIdealFive;
+  const selectedFiveLineup = selectedFiveProjection
+    ? [...selectedFiveProjection.lineup].sort((a, b) => {
         const indexA = idealFiveRoleOrder.indexOf(a.role);
         const indexB = idealFiveRoleOrder.indexOf(b.role);
         if (indexA !== indexB) return indexA - indexB;
         return b.overallScore - a.overallScore;
       })
     : [];
+  const playerLineById = new Map(insight.playerLines.map((line) => [line.playerId, line]));
+  const selectedFiveConfidenceVariant: "success" | "warning" | "danger" =
+    selectedFiveProjection?.confidence === "alta"
+      ? "success"
+      : selectedFiveProjection?.confidence === "media"
+        ? "warning"
+        : "danger";
+  const selectedFiveChemistryLabel = fiveTab === "ideal" ? "Química" : "Sinergia de riesgo";
+  const selectedFiveModelLabel = fiveTab === "ideal" ? "Modelo" : "Riesgo modelo";
+  const selectedFiveRoleScoreLabel = fiveTab === "ideal" ? "Fit" : "Riesgo";
+  const selectedFiveEmptyMessage =
+    fiveTab === "ideal"
+      ? "No hay datos suficientes para construir un quinteto ideal confiable todavía."
+      : "No hay datos suficientes para construir un quinteto no ideal confiable todavía.";
+
+  const antiFiveDiagnostics = (() => {
+    if (fiveTab !== "anti" || selectedFiveLineup.length === 0 || !selectedFiveProjection) return [];
+
+    const lines = selectedFiveLineup
+      .map((slot) => playerLineById.get(slot.playerId))
+      .filter((line): line is PlayerStatsLine => Boolean(line));
+
+    if (lines.length === 0) return [];
+
+    const averageRoleRisk =
+      selectedFiveLineup.reduce((sum, slot) => sum + slot.roleScore, 0) / selectedFiveLineup.length;
+    const riskSpread =
+      Math.max(...selectedFiveLineup.map((slot) => slot.roleScore)) -
+      Math.min(...selectedFiveLineup.map((slot) => slot.roleScore));
+    const worstSlots = selectedFiveLineup
+      .slice()
+      .sort((a, b) => b.roleScore - a.roleScore)
+      .slice(0, 2)
+      .map((slot) => `${slot.role} (${slot.roleScore.toFixed(1)})`)
+      .join(" + ");
+
+    const avgTopg = lines.reduce((sum, line) => sum + line.perGame.topg, 0) / lines.length;
+    const avgFpg = lines.reduce((sum, line) => sum + line.perGame.fpg, 0) / lines.length;
+    const avgFgPct = lines.reduce((sum, line) => sum + line.fgPct, 0) / lines.length;
+    const avgTpPct = lines.reduce((sum, line) => sum + line.tpPct, 0) / lines.length;
+    const avgVal = lines.reduce((sum, line) => sum + line.valuationPerGame, 0) / lines.length;
+    const avgDefStocks = lines.reduce((sum, line) => sum + line.perGame.spg + line.perGame.bpg, 0) / lines.length;
+    const avgPra = lines.reduce(
+      (sum, line) => sum + (line.perGame.ppg + line.perGame.rpg + line.perGame.apg - line.perGame.topg),
+      0
+    ) / lines.length;
+
+    const archetypeCount = new Map<string, number>();
+    selectedFiveLineup.forEach((slot) => {
+      archetypeCount.set(slot.archetype, (archetypeCount.get(slot.archetype) ?? 0) + 1);
+    });
+    const dominantArchetype =
+      Array.from(archetypeCount.entries()).sort((entryA, entryB) => entryB[1] - entryA[1])[0]?.[0] ?? "Riesgo mixto";
+
+    return [
+      {
+        id: "risk-core",
+        label: "Riesgo estructural",
+        value: `${averageRoleRisk.toFixed(1)} / 99`,
+        detail: `La combinación de debilidades se concentra en ${worstSlots} con dispersión ${riskSpread.toFixed(1)}.`,
+      },
+      {
+        label: "Pérdidas colectivas",
+        value: `${avgTopg.toFixed(1)} TOPG`,
+        detail: `Con ${selectedFiveProjection.chemistryScore.toFixed(1)} de sinergia de riesgo, el manejo de balón se vuelve inestable.`,
+      },
+      {
+        id: "offense-collapse",
+        label: "Eficiencia ofensiva baja",
+        value: `${avgFgPct.toFixed(1)}% FG · ${avgTpPct.toFixed(1)}% 3P`,
+        detail: "Baja eficiencia de tiro interior y exterior; la media cancha pierde amenaza sostenida.",
+      },
+      {
+        id: "impact-floor",
+        label: "Impacto total limitado",
+        value: `${avgVal.toFixed(1)} VAL/PJ`,
+        detail: `El PRA medio (${avgPra.toFixed(1)}) no compensa el costo de errores no forzados.`,
+      },
+      {
+        id: "defensive-floor",
+        label: "Fragilidad defensiva",
+        value: `${avgDefStocks.toFixed(1)} stocks`,
+        detail: "Pocas acciones de ruptura defensiva (robos + tapones) para sostener parciales.",
+      },
+      {
+        id: "discipline",
+        label: "Disciplina y faltas",
+        value: `${avgFpg.toFixed(1)} FPG`,
+        detail: `Predomina el perfil "${dominantArchetype}" y sube el riesgo de colapso en cierres apretados.`,
+      },
+    ];
+  })();
   const leagueFlavorLine = (() => {
     if (insight.leader && insight.bestTeam && insight.leader.teamName === insight.bestTeam.name) {
       return `${insight.bestTeam.name} está encendida: manda en tabla y también tiene al cañonero del torneo.`;
@@ -2785,35 +2889,48 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
       </SectionCard>
 
       <SectionCard
-        title="Quinteto ideal inteligente"
-        description="Cinco puestos, una lectura objetiva y fácil de entender."
+        title="Laboratorio de quintetos"
+        description={
+          fiveTab === "ideal"
+            ? "Cinco puestos y una lectura objetiva del mejor encaje colectivo."
+            : "Radiografía del peor encaje real: quiénes castigan más la eficiencia y por qué."
+        }
+        actions={
+          <div className="w-full sm:w-[290px]">
+            <SegmentedControl options={fiveTabOptions} value={fiveTab} onChange={setFiveTab} />
+          </div>
+        }
       >
-        {idealFive ? (
+        {selectedFiveProjection ? (
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2">
-              <Badge variant="success">Química: {idealFive.chemistryScore.toFixed(1)}</Badge>
-              <Badge variant="primary">Modelo: {idealFive.modelScore.toFixed(1)}</Badge>
-              <Badge
-                variant={
-                  idealFive.confidence === "alta"
-                    ? "success"
-                    : idealFive.confidence === "media"
-                      ? "warning"
-                      : "danger"
-                }
-              >
-                Confianza: {idealFive.confidence}
+              <Badge variant={fiveTab === "ideal" ? "success" : "danger"}>
+                {selectedFiveChemistryLabel}: {selectedFiveProjection.chemistryScore.toFixed(1)}
               </Badge>
-              <Badge variant="default">Mín. juegos: {idealFive.minGames}</Badge>
+              <Badge variant={fiveTab === "ideal" ? "primary" : "warning"}>
+                {selectedFiveModelLabel}: {selectedFiveProjection.modelScore.toFixed(1)}
+              </Badge>
+              <Badge variant={selectedFiveConfidenceVariant}>
+                Confianza: {selectedFiveProjection.confidence}
+              </Badge>
+              <Badge variant="default">Mín. juegos: {selectedFiveProjection.minGames}</Badge>
             </div>
 
             <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-              {idealFiveLineup.map((slot) => (
+              {selectedFiveLineup.map((slot) => (
                 <li key={`${slot.role}-${slot.playerId}`}>
-                  <article className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3">
+                  <article
+                    className={`rounded-[10px] border p-3 ${
+                      fiveTab === "ideal"
+                        ? "bg-[hsl(var(--surface-1))]"
+                        : "border-[hsl(var(--destructive)/0.34)] bg-[hsl(var(--destructive)/0.06)]"
+                    }`}
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <Badge variant={IDEAL_FIVE_ROLE_BADGE_VARIANT[slot.role]}>{slot.role}</Badge>
-                      <p className="text-[10px] text-[hsl(var(--text-subtle))] tabular-nums">Fit {slot.roleScore.toFixed(1)}</p>
+                      <p className="text-[10px] text-[hsl(var(--text-subtle))] tabular-nums">
+                        {selectedFiveRoleScoreLabel} {slot.roleScore.toFixed(1)}
+                      </p>
                     </div>
                     <p className="mt-2 truncate text-sm font-semibold" title={slot.name}>
                       {abbreviateLeaderboardName(slot.name, 18)}
@@ -2821,18 +2938,44 @@ const TournamentHomeLiveFeed = ({ mode }: { mode: "viewer" | "admin" }) => {
                     <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">{slot.teamName ?? "Sin equipo"}</p>
                     <p className="mt-2 text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">{slot.keyStatLabel}</p>
                     <p className="text-xs font-semibold tabular-nums">{slot.keyStatValue}</p>
+                    <p className="mt-2 text-[10px] uppercase tracking-wide text-[hsl(var(--text-subtle))]">Perfil</p>
+                    <p className="text-xs font-semibold">{slot.archetype}</p>
                   </article>
                 </li>
               ))}
             </ol>
 
+            {fiveTab === "anti" && antiFiveDiagnostics.length > 0 ? (
+              <section className="rounded-[10px] border border-[hsl(var(--destructive)/0.28)] bg-[hsl(var(--destructive)/0.05)] p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[hsl(var(--destructive))]">
+                  Diagnóstico profundo del quinteto no ideal
+                </p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {antiFiveDiagnostics.map((diagnostic) => (
+                    <article
+                      key={`${diagnostic.label}-${diagnostic.value}`}
+                      className="rounded-[10px] border border-[hsl(var(--destructive)/0.24)] bg-[hsl(var(--surface-1))] p-3"
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-subtle))]">
+                        {diagnostic.label}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold">{diagnostic.value}</p>
+                      <p className="mt-1 text-xs leading-relaxed text-[hsl(var(--muted-foreground))]">
+                        {diagnostic.detail}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
             <p className="text-xs text-[hsl(var(--text-subtle))]">
-              {idealFive.note} ({idealFive.modelVersion})
+              {selectedFiveProjection.note} ({selectedFiveProjection.modelVersion})
             </p>
           </div>
         ) : (
           <p className="rounded-[10px] border bg-[hsl(var(--surface-1))] p-3 text-sm text-[hsl(var(--muted-foreground))]">
-            No hay datos suficientes para construir un quinteto ideal confiable todavía.
+            {selectedFiveEmptyMessage}
           </p>
         )}
       </SectionCard>

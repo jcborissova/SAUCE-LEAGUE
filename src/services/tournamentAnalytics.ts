@@ -2,6 +2,7 @@ import { supabase } from "../lib/supabase";
 import type {
   BattleMetric,
   BattlePlayerResult,
+  MostImprovedBreakdown,
   TournamentAnalyticsCacheKey,
   TournamentAnalyticsKpi,
   TournamentAnalyticsPlayerGame,
@@ -107,6 +108,7 @@ const METRIC_LOWER_IS_BETTER: Record<TournamentStatMetric, boolean> = {
   blocks: false,
   defensive_impact: false,
   pra: false,
+  most_improved: false,
   turnovers: true,
   fouls: true,
   fg_pct: false,
@@ -515,6 +517,289 @@ const computeDefensiveImpactPerGame = (line: PlayerStatsLine): number =>
       line.perGame.rpg * 0.35 -
       line.perGame.fpg * 0.15
   );
+
+const clamp = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
+
+const average = (values: number[]): number => {
+  if (values.length === 0) return 0;
+  return round2(values.reduce((sum, value) => sum + value, 0) / values.length);
+};
+
+const stddev = (values: number[]): number => {
+  if (values.length <= 1) return 0;
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const variance =
+    values.reduce((sum, value) => sum + (value - mean) * (value - mean), 0) / values.length;
+  return round2(Math.sqrt(variance));
+};
+
+const computeTrendSlope = (values: number[]): number => {
+  if (values.length <= 1) return 0;
+
+  const meanX = (values.length + 1) / 2;
+  const meanY = values.reduce((sum, value) => sum + value, 0) / values.length;
+  let numerator = 0;
+  let denominator = 0;
+
+  values.forEach((value, index) => {
+    const x = index + 1;
+    numerator += (x - meanX) * (value - meanY);
+    denominator += (x - meanX) * (x - meanX);
+  });
+
+  if (denominator <= 0) return 0;
+  return round2(numerator / denominator);
+};
+
+const computeQuantile = (values: number[], quantile: number): number => {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  if (sorted.length === 1) return sorted[0];
+
+  const q = clamp(quantile, 0, 1);
+  const position = (sorted.length - 1) * q;
+  const lowerIndex = Math.floor(position);
+  const upperIndex = Math.ceil(position);
+  const weight = position - lowerIndex;
+
+  if (lowerIndex === upperIndex) return sorted[lowerIndex];
+  return sorted[lowerIndex] + (sorted[upperIndex] - sorted[lowerIndex]) * weight;
+};
+
+const formatSigned = (value: number, decimals = 1): string => {
+  const rounded = Number(value.toFixed(decimals));
+  return `${rounded >= 0 ? "+" : "-"}${Math.abs(rounded).toFixed(decimals)}`;
+};
+
+const computeTrueShootingPctForGame = (game: TournamentAnalyticsPlayerGame): number => {
+  const points = toNumber(game.points);
+  const fga = toNumber(game.fga);
+  const fta = toNumber(game.fta);
+  const attempts = fga + 0.44 * fta;
+  if (attempts <= 0) return 0;
+  return round2((points / (2 * attempts)) * 100);
+};
+
+const computeValuationForGame = (game: TournamentAnalyticsPlayerGame): number =>
+  computeValuation({
+    points: toNumber(game.points),
+    rebounds: toNumber(game.rebounds),
+    assists: toNumber(game.assists),
+    steals: toNumber(game.steals),
+    blocks: toNumber(game.blocks),
+    turnovers: toNumber(game.turnovers),
+    fouls: toNumber(game.fouls),
+    fgm: toNumber(game.fgm),
+    fga: toNumber(game.fga),
+    ftm: toNumber(game.ftm),
+    fta: toNumber(game.fta),
+    tpm: toNumber(game.tpm),
+  });
+
+type MostImprovedCandidate = {
+  line: PlayerStatsLine;
+  score: number;
+  details: MostImprovedBreakdown;
+};
+
+type MostImprovedRaw = {
+  line: PlayerStatsLine;
+  gamesPlayed: number;
+  splitWindow: number;
+  earlyValuation: number;
+  lateValuation: number;
+  valuationDelta: number;
+  earlyPra: number;
+  latePra: number;
+  praDelta: number;
+  earlyTsPct: number;
+  lateTsPct: number;
+  tsPctDelta: number;
+  earlyTurnovers: number;
+  lateTurnovers: number;
+  turnoversDelta: number;
+  trendSlope: number;
+  consistencyBonus: number;
+};
+
+const buildMostImprovedLeaders = async (
+  tournamentId: string,
+  limit: number
+): Promise<TournamentLeaderRow[]> => {
+  const snapshot = await getTournamentAnalyticsSnapshot(tournamentId, "regular");
+  const lineByPlayerId = new Map(snapshot.playerLines.map((line) => [line.playerId, line]));
+  const gamesByPlayerId = new Map<number, TournamentAnalyticsPlayerGame[]>();
+
+  snapshot.playerGames.forEach((game) => {
+    const playerId = toNumber(game.playerId);
+    if (playerId <= 0) return;
+    const current = gamesByPlayerId.get(playerId) ?? [];
+    current.push(game);
+    gamesByPlayerId.set(playerId, current);
+  });
+
+  const candidatesRaw: MostImprovedRaw[] = Array.from(gamesByPlayerId.entries())
+    .map(([playerId, games]) => {
+      const line = lineByPlayerId.get(playerId);
+      if (!line) return null;
+
+      const sortedGames = [...games].sort((left, right) => {
+        if (left.gameOrder !== right.gameOrder) return left.gameOrder - right.gameOrder;
+        const leftDate = left.matchDate ?? "";
+        const rightDate = right.matchDate ?? "";
+        if (leftDate !== rightDate) return leftDate.localeCompare(rightDate);
+        const leftTime = left.matchTime ?? "";
+        const rightTime = right.matchTime ?? "";
+        if (leftTime !== rightTime) return leftTime.localeCompare(rightTime);
+        return left.matchId - right.matchId;
+      });
+
+      const gamesPlayed = sortedGames.length;
+      if (gamesPlayed < 6) return null;
+
+      const splitWindow = Math.max(2, Math.min(6, Math.floor(gamesPlayed / 2)));
+      if (splitWindow < 2 || splitWindow * 2 > gamesPlayed) return null;
+
+      const earlySegment = sortedGames.slice(0, splitWindow);
+      const lateSegment = sortedGames.slice(gamesPlayed - splitWindow);
+      if (earlySegment.length < 2 || lateSegment.length < 2) return null;
+
+      const valuationSeries = sortedGames.map((game) => computeValuationForGame(game));
+      const praSeries = sortedGames.map((game) =>
+        round2(
+          toNumber(game.points) +
+            toNumber(game.rebounds) +
+            toNumber(game.assists) -
+            toNumber(game.turnovers)
+        )
+      );
+      const tsSeries = sortedGames.map((game) => computeTrueShootingPctForGame(game));
+      const turnoversSeries = sortedGames.map((game) => toNumber(game.turnovers));
+
+      const earlyValuation = average(valuationSeries.slice(0, splitWindow));
+      const lateValuation = average(valuationSeries.slice(gamesPlayed - splitWindow));
+      const valuationDelta = round2(lateValuation - earlyValuation);
+
+      const earlyPra = average(praSeries.slice(0, splitWindow));
+      const latePra = average(praSeries.slice(gamesPlayed - splitWindow));
+      const praDelta = round2(latePra - earlyPra);
+
+      const earlyTsPct = average(tsSeries.slice(0, splitWindow));
+      const lateTsPct = average(tsSeries.slice(gamesPlayed - splitWindow));
+      const tsPctDelta = round2(lateTsPct - earlyTsPct);
+
+      const earlyTurnovers = average(turnoversSeries.slice(0, splitWindow));
+      const lateTurnovers = average(turnoversSeries.slice(gamesPlayed - splitWindow));
+      const turnoversDelta = round2(earlyTurnovers - lateTurnovers);
+
+      const trendSlope = computeTrendSlope(valuationSeries);
+      const earlyStddev = stddev(valuationSeries.slice(0, splitWindow));
+      const lateStddev = stddev(valuationSeries.slice(gamesPlayed - splitWindow));
+      const consistencyBonus = clamp((earlyStddev - lateStddev) * 0.35, -2.5, 2.5);
+
+      return {
+        line,
+        gamesPlayed,
+        splitWindow,
+        earlyValuation,
+        lateValuation,
+        valuationDelta,
+        earlyPra,
+        latePra,
+        praDelta,
+        earlyTsPct,
+        lateTsPct,
+        tsPctDelta,
+        earlyTurnovers,
+        lateTurnovers,
+        turnoversDelta,
+        trendSlope,
+        consistencyBonus,
+      };
+    })
+    .filter((item): item is MostImprovedRaw => item !== null);
+
+  if (candidatesRaw.length === 0) return [];
+
+  const earlyValues = candidatesRaw.map((item) => item.earlyValuation);
+  const earlyQ25 = computeQuantile(earlyValues, 0.25);
+  const earlyQ75 = computeQuantile(earlyValues, 0.75);
+  const earlyIqr = Math.max(1, round2(earlyQ75 - earlyQ25));
+
+  const candidates: MostImprovedCandidate[] = candidatesRaw
+    .map((item) => {
+      const startBoost = clamp((earlyQ75 - item.earlyValuation) / earlyIqr, 0, 1);
+      const baseScore =
+        item.valuationDelta * 4.2 +
+        item.trendSlope * 10 +
+        item.tsPctDelta * 0.55 +
+        item.turnoversDelta * 1.4 +
+        item.praDelta * 0.8 +
+        item.consistencyBonus;
+      const improvementGate = clamp(
+        (item.valuationDelta * 0.8 + item.trendSlope * 4 + item.praDelta * 0.25) / 6,
+        0,
+        1.25
+      );
+      const sampleMultiplier = clamp(0.9 + Math.min(1, item.gamesPlayed / 12) * 0.2, 0.9, 1.1);
+
+      const score = round2(
+        Math.max(0, baseScore) * (1 + startBoost * 0.25) * improvementGate * sampleMultiplier
+      );
+
+      const explanation = [
+        `VAL ${item.earlyValuation.toFixed(1)}→${item.lateValuation.toFixed(1)} (${formatSigned(
+          item.valuationDelta,
+          1
+        )})`,
+        `TS ${formatSigned(item.tsPctDelta, 1)} pts`,
+        `PÉRD ${formatSigned(-item.turnoversDelta, 1)}`,
+        `tendencia ${formatSigned(item.trendSlope, 2)}/juego`,
+      ].join(" · ");
+
+      return {
+        line: item.line,
+        score,
+        details: {
+          score,
+          gamesAnalyzed: item.gamesPlayed,
+          startWindowGames: item.splitWindow,
+          endWindowGames: item.splitWindow,
+          earlyValuation: item.earlyValuation,
+          lateValuation: item.lateValuation,
+          valuationDelta: item.valuationDelta,
+          earlyPra: item.earlyPra,
+          latePra: item.latePra,
+          praDelta: item.praDelta,
+          earlyTsPct: item.earlyTsPct,
+          lateTsPct: item.lateTsPct,
+          tsPctDelta: item.tsPctDelta,
+          earlyTurnovers: item.earlyTurnovers,
+          lateTurnovers: item.lateTurnovers,
+          turnoversDelta: item.turnoversDelta,
+          trendSlope: item.trendSlope,
+          startBoost: round2(startBoost),
+          explanation,
+        },
+      };
+    })
+    .filter((candidate) => candidate.score > 0.5 && candidate.details.valuationDelta > 0)
+    .sort((left, right) => {
+      const byScore = right.score - left.score;
+      if (byScore !== 0) return byScore;
+      const byDelta = right.details.valuationDelta - left.details.valuationDelta;
+      if (byDelta !== 0) return byDelta;
+      return right.details.trendSlope - left.details.trendSlope;
+    });
+
+  return candidates.slice(0, limit).map((candidate) => ({
+    ...candidate.line,
+    value: candidate.score,
+    metric: "most_improved",
+    mostImproved: candidate.details,
+  }));
+};
 
 const computePieLikeNumerator = (row: TournamentAnalyticsPlayerGame): number => {
   // Inspirado en el PIE oficial de NBA; no usamos OREB/DREB por no existir en nuestro boxscore.
@@ -1700,6 +1985,10 @@ export const getLeaders = async (params: {
   const metric = params.metric ?? "points";
   const limit = params.limit ?? 20;
 
+  if (metric === "most_improved") {
+    return buildMostImprovedLeaders(params.tournamentId, limit);
+  }
+
   const playerLines = await getTournamentPlayerLines(params.tournamentId, phase);
 
   return playerLines
@@ -1736,7 +2025,7 @@ export const getLeaders = async (params: {
 export const getRaceSeries = async (params: {
   tournamentId: string;
   phase?: TournamentPhaseFilter;
-  metric: Exclude<TournamentStatMetric, "fg_pct" | "pra" | "defensive_impact">;
+  metric: Exclude<TournamentStatMetric, "fg_pct" | "pra" | "defensive_impact" | "most_improved">;
   topN?: number;
 }): Promise<RaceSeriesPlayer[]> => {
   const phase = params.phase ?? "regular";
