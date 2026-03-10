@@ -75,6 +75,7 @@ type CandidateProfile = {
 };
 
 const MODEL_VERSION = "ideal-five-v2.3";
+const ANTI_MODEL_VERSION = "anti-ideal-five-v1.0";
 const SHRINKAGE_GAMES = 4;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -145,6 +146,22 @@ const roleKeyStat = (role: IdealFiveRole, line: PlayerStatsLine): { label: strin
   return { label: "Pintura", value: `${line.perGame.bpg.toFixed(1)} BPG · ${line.perGame.rpg.toFixed(1)} RPG` };
 };
 
+const roleRiskKeyStat = (role: IdealFiveRole, line: PlayerStatsLine): { label: string; value: string } => {
+  if (role === "PG") {
+    return { label: "Riesgo de control", value: `${line.perGame.topg.toFixed(1)} TOPG · ${line.perGame.apg.toFixed(1)} APG` };
+  }
+  if (role === "SG") {
+    return { label: "Ineficiencia", value: `${line.perGame.ppg.toFixed(1)} PPP · ${line.tpPct.toFixed(1)}% 3P` };
+  }
+  if (role === "SF") {
+    return { label: "Impacto bajo", value: `${line.valuationPerGame.toFixed(1)} VAL/PJ` };
+  }
+  if (role === "PF") {
+    return { label: "Fragilidad física", value: `${line.perGame.rpg.toFixed(1)} RPG · ${line.perGame.bpg.toFixed(1)} BPG` };
+  }
+  return { label: "Aro expuesto", value: `${line.perGame.bpg.toFixed(1)} BPG · ${line.perGame.rpg.toFixed(1)} RPG` };
+};
+
 const pickArchetype = (candidate: {
   pCreation: number;
   pDiscipline: number;
@@ -164,6 +181,27 @@ const pickArchetype = (candidate: {
 
   shape.sort((a, b) => b.score - a.score);
   return shape[0]?.key ?? "Balanceado";
+};
+
+const pickLiabilityArchetype = (candidate: CandidateProfile): string => {
+  const lackScoring = 1 - candidate.pScoring;
+  const lackCreation = 1 - candidate.pCreation;
+  const lackShooting = 1 - candidate.pShooting;
+  const lackPerimeterDefense = 1 - candidate.pPerimeterDefense;
+  const lackInteriorDefense = 1 - candidate.pInteriorDefense;
+  const lackRebounding = 1 - candidate.pRebounding;
+  const lackImpact = 1 - candidate.pImpact;
+  const riskDiscipline = 1 - candidate.pDiscipline;
+
+  const shape: Array<{ key: string; score: number }> = [
+    { key: "Manejo inestable", score: lackCreation * 0.52 + riskDiscipline * 0.48 },
+    { key: "Frío ofensivo", score: lackScoring * 0.58 + lackShooting * 0.42 },
+    { key: "Hueco 2-way", score: lackImpact * 0.44 + lackPerimeterDefense * 0.32 + lackInteriorDefense * 0.24 },
+    { key: "Pintura vulnerable", score: lackInteriorDefense * 0.6 + lackRebounding * 0.4 },
+  ];
+
+  shape.sort((a, b) => b.score - a.score);
+  return shape[0]?.key ?? "Riesgo balanceado";
 };
 
 const normalizeTeamKey = (teamName: string | null, playerId: number): string => {
@@ -432,6 +470,121 @@ const evaluateLineup = (
   return { chemistryScore, modelScore };
 };
 
+type LiabilityProfile = {
+  candidate: CandidateProfile;
+  overallRisk: number;
+  roleRiskScores: Record<IdealFiveRole, number>;
+  liabilityArchetype: string;
+};
+
+const buildLiabilityProfiles = (profiles: CandidateProfile[]): LiabilityProfile[] =>
+  profiles.map((candidate) => {
+    const lackScoring = 1 - candidate.pScoring;
+    const lackCreation = 1 - candidate.pCreation;
+    const lackShooting = 1 - candidate.pShooting;
+    const lackPerimeterDefense = 1 - candidate.pPerimeterDefense;
+    const lackInteriorDefense = 1 - candidate.pInteriorDefense;
+    const lackRebounding = 1 - candidate.pRebounding;
+    const lackImpact = 1 - candidate.pImpact;
+    const riskDiscipline = 1 - candidate.pDiscipline;
+
+    const roleRiskScores: Record<IdealFiveRole, number> = {
+      PG: (lackCreation * 0.28 + riskDiscipline * 0.26 + lackShooting * 0.16 + lackImpact * 0.16 + lackScoring * 0.14) * 100,
+      SG: (lackScoring * 0.29 + lackShooting * 0.27 + riskDiscipline * 0.16 + lackPerimeterDefense * 0.16 + lackImpact * 0.12) * 100,
+      SF: (lackImpact * 0.24 + lackPerimeterDefense * 0.2 + lackRebounding * 0.17 + lackShooting * 0.19 + lackScoring * 0.1 + riskDiscipline * 0.1) * 100,
+      PF: (lackInteriorDefense * 0.27 + lackRebounding * 0.25 + lackImpact * 0.2 + riskDiscipline * 0.14 + lackShooting * 0.08 + lackScoring * 0.06) * 100,
+      C: (lackInteriorDefense * 0.34 + lackRebounding * 0.3 + lackImpact * 0.2 + riskDiscipline * 0.1 + lackScoring * 0.06) * 100,
+    };
+
+    IDEAL_FIVE_ROLES.forEach((role) => {
+      roleRiskScores[role] = round1(clamp(roleRiskScores[role], 30, 99));
+    });
+
+    const overallRisk = round1(
+      clamp(
+        (lackImpact * 0.24 +
+          riskDiscipline * 0.2 +
+          lackScoring * 0.16 +
+          lackShooting * 0.14 +
+          lackPerimeterDefense * 0.12 +
+          lackInteriorDefense * 0.1 +
+          lackRebounding * 0.04) *
+          100,
+        30,
+        99
+      )
+    );
+
+    return {
+      candidate,
+      overallRisk,
+      roleRiskScores,
+      liabilityArchetype: pickLiabilityArchetype(candidate),
+    };
+  });
+
+const evaluateLiabilityLineup = (
+  lineup: Array<{ role: IdealFiveRole; profile: LiabilityProfile }>
+): { chemistryScore: number; modelScore: number } => {
+  const roleRisk = lineup.map((slot) => slot.profile.roleRiskScores[slot.role]);
+  const avgRoleRisk = average(roleRisk);
+  const minRoleRisk = Math.min(...roleRisk);
+  const riskCoherence = clamp(100 - standardDeviation(roleRisk) * 1.2, 40, 100);
+
+  const turnoverRisk = average(
+    lineup
+      .filter((slot) => slot.role === "PG" || slot.role === "SG" || slot.role === "SF")
+      .map((slot) => (1 - slot.profile.candidate.pDiscipline) * 100)
+  );
+  const creatorVacuum = average(
+    lineup
+      .filter((slot) => slot.role === "PG" || slot.role === "SG")
+      .map((slot) => (1 - slot.profile.candidate.pCreation) * 100)
+  );
+  const spacingCollapse = average(
+    lineup.map((slot) => (1 - slot.profile.candidate.pShooting) * 100)
+  );
+  const rimLeak = average(
+    lineup
+      .filter((slot) => slot.role === "PF" || slot.role === "C")
+      .map((slot) => (1 - slot.profile.candidate.pInteriorDefense) * 100)
+  );
+  const reboundingLeak = average(
+    lineup
+      .filter((slot) => slot.role === "SF" || slot.role === "PF" || slot.role === "C")
+      .map((slot) => (1 - slot.profile.candidate.pRebounding) * 100)
+  );
+  const foulRisk = average(lineup.map((slot) => (1 - slot.profile.candidate.pDiscipline) * 100));
+
+  const teamCount = new Map<string, number>();
+  lineup.forEach((slot) => {
+    const key = normalizeTeamKey(slot.profile.candidate.line.teamName, slot.profile.candidate.line.playerId);
+    teamCount.set(key, (teamCount.get(key) ?? 0) + 1);
+  });
+  const maxTeamStack = Math.max(...Array.from(teamCount.values()));
+  const stackBonus = maxTeamStack > 2 ? (maxTeamStack - 2) * 3 : 0;
+
+  const chemistryScore = round1(
+    clamp(
+      turnoverRisk * 0.23 +
+        creatorVacuum * 0.18 +
+        spacingCollapse * 0.16 +
+        rimLeak * 0.2 +
+        reboundingLeak * 0.13 +
+        foulRisk * 0.1 +
+        stackBonus,
+      30,
+      99
+    )
+  );
+
+  const modelScore = round1(
+    clamp(avgRoleRisk * 0.52 + chemistryScore * 0.3 + minRoleRisk * 0.12 + riskCoherence * 0.06, 30, 99)
+  );
+
+  return { chemistryScore, modelScore };
+};
+
 export const buildIdealFiveProjection = (
   regularLines: PlayerStatsLine[],
   playoffLines: PlayerStatsLine[] = []
@@ -535,5 +688,110 @@ export const buildIdealFiveProjection = (
     confidence,
     note,
     modelVersion: MODEL_VERSION,
+  };
+};
+
+export const buildAntiIdealFiveProjection = (
+  regularLines: PlayerStatsLine[],
+  playoffLines: PlayerStatsLine[] = []
+): IdealFiveProjection | null => {
+  const { pool: regularPool, minGames } = selectComparisonPool(regularLines);
+  if (regularPool.length < 5) return null;
+
+  const playoffBoost = buildPlayoffBoost(playoffLines);
+  const candidateProfiles = buildCandidateProfiles(regularPool, playoffBoost, minGames);
+  if (candidateProfiles.length < 5) return null;
+
+  const liabilities = buildLiabilityProfiles(candidateProfiles);
+  const shortlistSize = Math.min(9, liabilities.length);
+  const roleCandidates: Record<IdealFiveRole, LiabilityProfile[]> = {
+    PG: [],
+    SG: [],
+    SF: [],
+    PF: [],
+    C: [],
+  };
+
+  IDEAL_FIVE_ROLES.forEach((role) => {
+    roleCandidates[role] = [...liabilities]
+      .sort((a, b) => b.roleRiskScores[role] - a.roleRiskScores[role])
+      .slice(0, shortlistSize);
+  });
+
+  let worst:
+    | {
+        lineup: Array<{ role: IdealFiveRole; profile: LiabilityProfile }>;
+        chemistryScore: number;
+        modelScore: number;
+      }
+    | null = null;
+
+  for (const pg of roleCandidates.PG) {
+    for (const sg of roleCandidates.SG) {
+      for (const sf of roleCandidates.SF) {
+        for (const pf of roleCandidates.PF) {
+          for (const c of roleCandidates.C) {
+            const lineup = [
+              { role: "PG" as const, profile: pg },
+              { role: "SG" as const, profile: sg },
+              { role: "SF" as const, profile: sf },
+              { role: "PF" as const, profile: pf },
+              { role: "C" as const, profile: c },
+            ];
+
+            const uniquePlayers = new Set(lineup.map((slot) => slot.profile.candidate.line.playerId));
+            if (uniquePlayers.size < 5) continue;
+
+            const { chemistryScore, modelScore } = evaluateLiabilityLineup(lineup);
+            if (!worst || modelScore > worst.modelScore) {
+              worst = { lineup, chemistryScore, modelScore };
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!worst) return null;
+
+  const lineup = IDEAL_FIVE_ROLES.map((role) => {
+    const selected = worst?.lineup.find((slot) => slot.role === role);
+    if (!selected) return null;
+
+    const line = selected.profile.candidate.line;
+    const keyStat = roleRiskKeyStat(role, line);
+
+    return {
+      role,
+      playerId: line.playerId,
+      name: line.name,
+      photo: line.photo ?? null,
+      teamName: line.teamName,
+      gamesPlayed: line.gamesPlayed,
+      roleScore: selected.profile.roleRiskScores[role],
+      overallScore: selected.profile.overallRisk,
+      keyStatLabel: keyStat.label,
+      keyStatValue: keyStat.value,
+      archetype: selected.profile.liabilityArchetype,
+    } satisfies IdealFivePlayer;
+  }).filter((slot): slot is IdealFivePlayer => Boolean(slot));
+
+  if (lineup.length < 5) return null;
+
+  const confidence: "alta" | "media" | "baja" =
+    regularPool.length >= 18 ? "alta" : regularPool.length >= 10 ? "media" : "baja";
+
+  const note =
+    "Modelo de riesgo por rol: identifica bajo impacto sostenido, ineficiencia y fragilidad táctica. No premia ausencia; exige muestra mínima y compara contra percentiles reales del torneo.";
+
+  return {
+    lineup,
+    chemistryScore: worst.chemistryScore,
+    modelScore: worst.modelScore,
+    sampleSize: regularPool.length,
+    minGames,
+    confidence,
+    note,
+    modelVersion: ANTI_MODEL_VERSION,
   };
 };
