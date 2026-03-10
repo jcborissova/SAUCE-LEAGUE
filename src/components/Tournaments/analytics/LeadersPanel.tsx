@@ -23,6 +23,7 @@ const formatLeaderValue = (metric: TournamentStatMetric, value: number) => {
   if (metric === "fg_pct") return `${value.toFixed(2)}%`;
   if (metric === "defensive_impact") return value.toFixed(2);
   if (metric === "pra") return value.toFixed(1);
+  if (metric === "most_improved") return value.toFixed(2);
   return value.toLocaleString("es-ES");
 };
 
@@ -38,6 +39,7 @@ const LeadersPanel: React.FC<LeadersPanelProps> = ({
   const [showAll, setShowAll] = useState(false);
   const showPraExplanation = metric === "pra";
   const showDefensiveExplanation = metric === "defensive_impact";
+  const showMostImprovedExplanation = metric === "most_improved";
 
   useEffect(() => {
     setShowAll(false);
@@ -114,6 +116,21 @@ const LeadersPanel: React.FC<LeadersPanelProps> = ({
         </article>
       ) : null}
 
+      {showMostImprovedExplanation ? (
+        <article className="app-panel p-3 text-xs text-[hsl(var(--text-subtle))] leading-relaxed">
+          <p className="font-semibold text-[hsl(var(--text-strong))]">Cómo se calcula Más Mejorado (regular season)</p>
+          <p className="mt-1">
+            Esta categoría usa solo temporada regular y premia progreso real: compara el inicio vs el cierre del jugador.
+          </p>
+          <p className="mt-1 tabular-nums">
+            Score MIP = salto de VAL + tendencia por juego + mejora de TS% + reducción de pérdidas
+          </p>
+          <p className="mt-1">
+            También aplica un ajuste a favor de quienes arrancaron más abajo y luego sostuvieron una mejora.
+          </p>
+        </article>
+      ) : null}
+
       {loading ? (
         <div className="app-card p-6 text-center text-sm text-[hsl(var(--text-subtle))]">
           Cargando líderes...
@@ -176,7 +193,9 @@ const LeadersPanel: React.FC<LeadersPanelProps> = ({
                     </span>
                   </p>
                   <p className="text-xs text-[hsl(var(--text-subtle))] truncate">
-                    {row.teamName ?? "Sin equipo"} • {row.gamesPlayed} juegos
+                    {metric === "most_improved"
+                      ? row.mostImproved?.explanation ?? `${row.teamName ?? "Sin equipo"} • Regular season`
+                      : `${row.teamName ?? "Sin equipo"} • ${row.gamesPlayed} juegos`}
                   </p>
                 </div>
                 <div className="text-right">
