@@ -1781,209 +1781,255 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                         </div>
 
                         <div className="flex justify-center">
-                          <div className="w-full">
+                          <div className="w-full max-w-[38rem]">
                             <div
                               ref={duelShareCardRef}
-                              className="relative w-full overflow-hidden rounded-[28px] border border-white/20 bg-[linear-gradient(156deg,#081224_0%,#14376f_49%,#36152f_100%)] p-4 text-white shadow-[0_36px_78px_-34px_rgba(2,6,23,0.95)] sm:p-5"
+                              className="relative mx-auto w-full overflow-hidden rounded-[30px] border border-white/12 bg-[linear-gradient(180deg,#08111f_0%,#0d1728_48%,#111827_100%)] text-white shadow-[0_36px_90px_-42px_rgba(2,6,23,0.95)]"
                             >
-                              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_10%,rgba(59,130,246,0.34),transparent_34%),radial-gradient(circle_at_86%_14%,rgba(239,68,68,0.28),transparent_34%),radial-gradient(circle_at_50%_100%,rgba(15,23,42,0.5),transparent_48%)]" />
+                              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(96,165,250,0.18),transparent_34%),radial-gradient(circle_at_top_right,rgba(248,113,113,0.14),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0))]" />
+                              <div className="pointer-events-none absolute inset-[1px] rounded-[29px] border border-white/6" />
 
                               {duelSharePlayers ? (
-                                <div className="relative flex h-full flex-col gap-3 sm:gap-3.5">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <div className="flex min-w-0 items-center gap-1.5">
-                                      <img
-                                        src={sauceLeagueLogoMark}
-                                        alt="Sauce League"
-                                        className="h-7 w-7 rounded-md object-contain"
-                                        onError={(event) => {
-                                          if (event.currentTarget.src.endsWith("/sauce-league-logo-mark.png")) return;
-                                          event.currentTarget.src = "/sauce-league-logo-mark.png";
-                                        }}
-                                        crossOrigin="anonymous"
-                                        referrerPolicy="no-referrer"
-                                      />
+                                <div className="relative flex h-full flex-col gap-3 p-3 sm:gap-3.5 sm:p-3.5">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="flex min-w-0 items-center gap-2.5">
+                                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                                        <img
+                                          src={sauceLeagueLogoMark}
+                                          alt="Sauce League"
+                                          className="h-5 w-5 object-contain"
+                                          onError={(event) => {
+                                            if (event.currentTarget.src.endsWith("/sauce-league-logo-mark.png")) return;
+                                            event.currentTarget.src = "/sauce-league-logo-mark.png";
+                                          }}
+                                          crossOrigin="anonymous"
+                                          referrerPolicy="no-referrer"
+                                        />
+                                      </div>
                                       <div className="min-w-0">
-                                        <p className="truncate text-[9px] font-semibold uppercase tracking-[0.16em] text-white/80">
+                                        <p className="truncate text-[9px] font-semibold uppercase tracking-[0.18em] text-white/56">
                                           Sauce League
                                         </p>
-                                        <p className="truncate text-[10px] font-semibold text-white/92">Battle Card</p>
+                                        <p className="truncate text-[13px] font-semibold tracking-[0.01em] text-white/96">
+                                          Duel Battle Card
+                                        </p>
                                       </div>
                                     </div>
-                                    <span className="shrink-0 rounded-full border border-white/18 bg-black/25 px-2 py-0.5 text-[9px] font-semibold text-white/76">
+                                    <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-white/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
                                       {phaseLabel(phase)}
                                     </span>
                                   </div>
 
-                                  <div className="rounded-2xl border border-white/12 bg-black/26 px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] sm:px-3.5 sm:py-3.5">
-                                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
-                                      <div className="text-center">
-                                        <div className="relative mx-auto mb-1.5 h-[clamp(5rem,22vw,6rem)] w-[clamp(5rem,22vw,6rem)]">
+                                  <div className="rounded-[20px] border border-white/10 bg-white/[0.04] px-2.5 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:px-3 sm:py-3">
+                                    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-3">
+                                      <div className="min-w-0 text-center">
+                                        <div className="relative mx-auto mb-1 h-[clamp(3.55rem,18vw,4.5rem)] w-[clamp(3.55rem,18vw,4.5rem)]">
                                           <div
-                                            className={`relative inline-flex h-full w-full items-center justify-center overflow-hidden rounded-full border bg-white/10 ${
+                                            className={`relative inline-flex h-full w-full items-center justify-center overflow-hidden rounded-full border-[3px] bg-white/[0.07] shadow-[0_18px_38px_-24px_rgba(15,23,42,0.95)] ${
                                               duelShareGrades?.left.ringClassName ?? "border-white/28"
                                             }`}
                                           >
-                                            <span className="pointer-events-none absolute inset-0 inline-flex items-center justify-center text-xl font-black">
-                                              {getPlayerInitials(duelSharePlayers.left.name)}
-                                            </span>
                                             {duelSharePlayers.left.photo ? (
                                               <img
                                                 src={duelSharePlayers.left.photo}
                                                 alt={duelSharePlayers.left.name}
-                                                className="relative z-[1] h-full w-full object-cover"
+                                                className="relative z-[1] h-full w-full object-cover opacity-[0.94]"
                                                 onError={(event) => {
                                                   event.currentTarget.style.display = "none";
                                                 }}
                                                 crossOrigin="anonymous"
                                                 referrerPolicy="no-referrer"
                                               />
-                                            ) : null}
+                                            ) : (
+                                              <span className="pointer-events-none absolute inset-0 z-[2] inline-flex items-center justify-center text-[1rem] font-black tracking-[0.04em] text-white/84">
+                                                {getPlayerInitials(duelSharePlayers.left.name)}
+                                              </span>
+                                            )}
                                           </div>
                                           {duelShareGrades?.left ? (
                                             <span
-                                              className={`pointer-events-none absolute bottom-0 right-0 inline-flex h-6 w-6 items-center justify-center rounded-full border-2 text-[11px] font-black shadow-[0_10px_18px_-12px_rgba(0,0,0,0.9)] ${duelShareGrades.left.badgeClassName}`}
+                                              className={`pointer-events-none absolute -bottom-0.5 right-0 z-[3] inline-flex h-6 w-6 items-center justify-center rounded-full border-[2.5px] border-[#08111f] text-[10px] font-black shadow-[0_12px_22px_-14px_rgba(0,0,0,0.95)] ${duelShareGrades.left.badgeClassName}`}
                                             >
                                               {duelShareGrades.left.grade}
                                             </span>
                                           ) : null}
                                         </div>
-                                        <p className="truncate text-[15px] font-bold leading-tight sm:text-base" title={duelSharePlayers.left.name}>
+                                        <p
+                                          className="truncate text-[clamp(0.82rem,3.1vw,0.98rem)] font-semibold leading-tight text-white"
+                                          title={duelSharePlayers.left.name}
+                                        >
                                           {abbreviateLeaderboardName(duelSharePlayers.left.name, 14)}
                                         </p>
-                                        <p className="truncate text-[10px] text-white/72">{duelSharePlayers.left.teamName ?? "Sin equipo"}</p>
-                                        <p className="mt-0.5 text-[10px] font-semibold text-[#93c5fd]">
-                                          Índice {(duelResult.summary.battleIndexByPlayer[duelSharePlayers.left.playerId] ?? 50).toFixed(1)}
+                                        <p className="mt-0.5 truncate text-[9px] text-white/56">
+                                          {duelSharePlayers.left.teamName ?? "Sin equipo"}
                                         </p>
+                                        <div className="mt-1.5 rounded-xl border border-white/10 bg-[#0d1728]/78 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                                          <p className="text-[8px] font-semibold uppercase tracking-[0.16em] text-white/44">
+                                            Index
+                                          </p>
+                                          <p className="mt-0.5 text-[clamp(0.95rem,3.6vw,1.2rem)] font-black tabular-nums text-[#bfdbfe]">
+                                            {(
+                                              duelResult.summary.battleIndexByPlayer[duelSharePlayers.left.playerId] ?? 50
+                                            ).toFixed(1)}
+                                          </p>
+                                        </div>
                                       </div>
 
-                                      <div className="flex flex-col items-center">
-                                        <div className="relative inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/35 bg-[radial-gradient(circle_at_24%_22%,rgba(148,197,255,0.58),rgba(30,58,138,0.66)_48%,rgba(15,23,42,0.98)_100%)] shadow-[0_14px_24px_-14px_rgba(59,130,246,0.66)] sm:h-[3.125rem] sm:w-[3.125rem]">
-                                          <span className="pointer-events-none absolute inset-[2px] rounded-full border border-white/18" />
-                                          <span className="pointer-events-none absolute left-1/2 top-[6px] h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-white/52 blur-[0.3px]" />
-                                          <span className="relative text-[25px] font-black leading-none tracking-[0.02em] text-white/95 sm:text-[26px]">
+                                      <div className="flex items-center justify-center">
+                                        <div className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/12 bg-white/[0.06] shadow-[0_18px_36px_-24px_rgba(15,23,42,0.95)] sm:h-11 sm:w-11">
+                                          <span className="pointer-events-none absolute inset-[4px] rounded-full border border-white/10" />
+                                          <span className="relative text-[11px] font-black uppercase tracking-[0.18em] text-white/92 sm:text-[12px]">
                                             VS
                                           </span>
                                         </div>
-                                        <span className="mt-0.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-white/66">
-                                          Cancha
-                                        </span>
                                       </div>
 
-                                      <div className="text-center">
-                                        <div className="relative mx-auto mb-1.5 h-[clamp(5rem,22vw,6rem)] w-[clamp(5rem,22vw,6rem)]">
+                                      <div className="min-w-0 text-center">
+                                        <div className="relative mx-auto mb-1 h-[clamp(3.55rem,18vw,4.5rem)] w-[clamp(3.55rem,18vw,4.5rem)]">
                                           <div
-                                            className={`relative inline-flex h-full w-full items-center justify-center overflow-hidden rounded-full border bg-white/10 ${
+                                            className={`relative inline-flex h-full w-full items-center justify-center overflow-hidden rounded-full border-[3px] bg-white/[0.07] shadow-[0_18px_38px_-24px_rgba(15,23,42,0.95)] ${
                                               duelShareGrades?.right.ringClassName ?? "border-white/28"
                                             }`}
                                           >
-                                            <span className="pointer-events-none absolute inset-0 inline-flex items-center justify-center text-xl font-black">
-                                              {getPlayerInitials(duelSharePlayers.right.name)}
-                                            </span>
                                             {duelSharePlayers.right.photo ? (
                                               <img
                                                 src={duelSharePlayers.right.photo}
                                                 alt={duelSharePlayers.right.name}
-                                                className="relative z-[1] h-full w-full object-cover"
+                                                className="relative z-[1] h-full w-full object-cover opacity-[0.94]"
                                                 onError={(event) => {
                                                   event.currentTarget.style.display = "none";
                                                 }}
                                                 crossOrigin="anonymous"
                                                 referrerPolicy="no-referrer"
                                               />
-                                            ) : null}
+                                            ) : (
+                                              <span className="pointer-events-none absolute inset-0 z-[2] inline-flex items-center justify-center text-[1rem] font-black tracking-[0.04em] text-white/84">
+                                                {getPlayerInitials(duelSharePlayers.right.name)}
+                                              </span>
+                                            )}
                                           </div>
                                           {duelShareGrades?.right ? (
                                             <span
-                                              className={`pointer-events-none absolute bottom-0 right-0 inline-flex h-6 w-6 items-center justify-center rounded-full border-2 text-[11px] font-black shadow-[0_10px_18px_-12px_rgba(0,0,0,0.9)] ${duelShareGrades.right.badgeClassName}`}
+                                              className={`pointer-events-none absolute -bottom-0.5 right-0 z-[3] inline-flex h-6 w-6 items-center justify-center rounded-full border-[2.5px] border-[#08111f] text-[10px] font-black shadow-[0_12px_22px_-14px_rgba(0,0,0,0.95)] ${duelShareGrades.right.badgeClassName}`}
                                             >
                                               {duelShareGrades.right.grade}
                                             </span>
                                           ) : null}
                                         </div>
-                                        <p className="truncate text-[15px] font-bold leading-tight sm:text-base" title={duelSharePlayers.right.name}>
+                                        <p
+                                          className="truncate text-[clamp(0.82rem,3.1vw,0.98rem)] font-semibold leading-tight text-white"
+                                          title={duelSharePlayers.right.name}
+                                        >
                                           {abbreviateLeaderboardName(duelSharePlayers.right.name, 14)}
                                         </p>
-                                        <p className="truncate text-[10px] text-white/72">{duelSharePlayers.right.teamName ?? "Sin equipo"}</p>
-                                        <p className="mt-0.5 text-[10px] font-semibold text-[#fca5a5]">
-                                          Índice {(duelResult.summary.battleIndexByPlayer[duelSharePlayers.right.playerId] ?? 50).toFixed(1)}
+                                        <p className="mt-0.5 truncate text-[9px] text-white/56">
+                                          {duelSharePlayers.right.teamName ?? "Sin equipo"}
+                                        </p>
+                                        <div className="mt-1.5 rounded-xl border border-white/10 bg-[#0d1728]/78 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                                          <p className="text-[8px] font-semibold uppercase tracking-[0.16em] text-white/44">
+                                            Index
+                                          </p>
+                                          <p className="mt-0.5 text-[clamp(0.95rem,3.6vw,1.2rem)] font-black tabular-nums text-[#fecaca]">
+                                            {(
+                                              duelResult.summary.battleIndexByPlayer[duelSharePlayers.right.playerId] ?? 50
+                                            ).toFixed(1)}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="rounded-[20px] border border-white/10 bg-white/[0.05] px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:px-3.5 sm:py-3">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/52">
+                                          Resultado
+                                        </p>
+                                        <p className="mt-0.5 text-[clamp(0.98rem,3.6vw,1.18rem)] font-semibold leading-tight text-white">
+                                          {duelResult.summary.overallWinnerName
+                                            ? `Ganador: ${abbreviateLeaderboardName(duelResult.summary.overallWinnerName, 24)}`
+                                            : "Empate técnico"}
                                         </p>
                                       </div>
+                                      <span className="shrink-0 rounded-full border border-white/10 bg-[#0d1728]/78 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-white/66">
+                                        {duelInsight?.dominantDimension?.label ?? "Parejo"}
+                                      </span>
                                     </div>
+                                    <p className="mt-1.5 text-[10px] leading-4.5 text-white/68 sm:text-[10.5px]">
+                                      {duelInsight?.dominantDimension
+                                        ? `Se decidió en ${duelInsight.dominantDimension.label.toLowerCase()} con una brecha de ${duelInsight.dominantDimension.gap.toFixed(1)} puntos.`
+                                        : "Duelo parejo en todas las dimensiones."}
+                                    </p>
                                   </div>
 
-                                <div className="rounded-xl border border-white/14 bg-white/[0.10] px-3 py-3">
-                                  <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-white/70">Resultado inteligente</p>
-                                  <p className="mt-1 line-clamp-1 text-[14px] font-semibold leading-tight">
-                                    {duelResult.summary.overallWinnerName
-                                      ? `Ganador: ${abbreviateLeaderboardName(duelResult.summary.overallWinnerName, 24)}`
-                                      : "Empate técnico"}
-                                  </p>
-                                  <p className="mt-0.5 line-clamp-2 text-[10px] text-white/76">
-                                    {duelInsight?.dominantDimension
-                                      ? `Se decidió en ${duelInsight.dominantDimension.label.toLowerCase()} (brecha ${duelInsight.dominantDimension.gap.toFixed(1)}).`
-                                      : "Duelo parejo en todas las dimensiones."}
-                                  </p>
-                                </div>
-
-                                {duelDimensionSummary.length > 0 ? (
-                                  <div className="rounded-xl border border-white/14 bg-black/24 px-3 py-3 sm:px-3.5 sm:py-3.5">
-                                    <div className="mb-2 flex items-center justify-between text-[9px] font-semibold uppercase tracking-[0.13em] text-white/76 sm:mb-2.5 sm:text-[10px]">
-                                      <span>Mapa de estilos</span>
-                                      <span>Escala 0-100</span>
-                                    </div>
-                                    <div className="mb-2 grid grid-cols-2 gap-1.5 text-[9px] sm:mb-2.5 sm:text-[10px]">
-                                      <div className="inline-flex min-w-0 items-center gap-1 truncate rounded-full border border-[#60a5fa]/42 bg-[#1d4ed8]/25 px-2 py-0.5 font-semibold text-[#bfdbfe]">
-                                        <span className="h-1.5 w-1.5 rounded-full bg-[#60a5fa]" />
-                                        {abbreviateLeaderboardName(duelSharePlayers.left.name, 10)}
+                                  {duelDimensionSummary.length > 0 ? (
+                                    <div className="rounded-[20px] border border-white/10 bg-[#0d1728]/74 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:px-3.5 sm:py-3">
+                                      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                          <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/52">
+                                            Mapa de estilos
+                                          </p>
+                                          <p className="mt-0.5 text-[10px] text-white/58">Escala comparativa 0-100</p>
+                                        </div>
+                                        <div className="flex flex-wrap gap-1.5 text-[9px] font-semibold">
+                                          <span className="inline-flex min-w-0 items-center gap-1 rounded-full border border-[#60a5fa]/28 bg-[#1d4ed8]/16 px-2 py-1 text-[#bfdbfe]">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-[#60a5fa]" />
+                                            {abbreviateLeaderboardName(duelSharePlayers.left.name, 12)}
+                                          </span>
+                                          <span className="inline-flex min-w-0 items-center gap-1 rounded-full border border-[#f87171]/28 bg-[#b91c1c]/16 px-2 py-1 text-[#fecaca]">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-[#f87171]" />
+                                            {abbreviateLeaderboardName(duelSharePlayers.right.name, 12)}
+                                          </span>
+                                        </div>
                                       </div>
-                                      <div className="inline-flex min-w-0 items-center justify-end gap-1 truncate rounded-full border border-[#f87171]/42 bg-[#b91c1c]/26 px-2 py-0.5 font-semibold text-[#fecaca]">
-                                        {abbreviateLeaderboardName(duelSharePlayers.right.name, 10)}
-                                        <span className="h-1.5 w-1.5 rounded-full bg-[#f87171]" />
-                                      </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                      {duelDimensionSummary.map((dimension) => {
-                                        const leaderTone =
-                                          dimension.winnerId === null
-                                            ? "text-white/68"
-                                            : dimension.winnerId === duelSharePlayers.left.playerId
-                                              ? "text-[#93c5fd]"
-                                              : "text-[#fca5a5]";
 
-                                        return (
-                                          <div key={`share-dimension-${dimension.key}`} className="space-y-1">
-                                            <div className="flex items-center justify-between gap-2 text-[10px]">
-                                              <span className="truncate font-semibold text-white/92">{dimension.label}</span>
-                                              <span className={`shrink-0 font-semibold tabular-nums ${leaderTone}`}>
-                                                <span className="sm:hidden">
-                                                  {`${dimension.leftScore.toFixed(0)}-${dimension.rightScore.toFixed(0)} · b${dimension.gap.toFixed(0)}`}
+                                      <div className="mt-3 space-y-2">
+                                        {duelDimensionSummary.map((dimension) => {
+                                          const leaderTone =
+                                            dimension.winnerId === null
+                                              ? "text-white/54"
+                                              : dimension.winnerId === duelSharePlayers.left.playerId
+                                                ? "text-[#93c5fd]"
+                                                : "text-[#fca5a5]";
+
+                                          return (
+                                            <div
+                                              key={`share-dimension-${dimension.key}`}
+                                              className="rounded-[18px] border border-white/6 bg-white/[0.025] px-2 py-2"
+                                            >
+                                              <div className="flex items-center justify-between gap-2">
+                                                <span className="w-7 text-left text-[9px] font-semibold tabular-nums text-[#bfdbfe]">
+                                                  {dimension.leftScore.toFixed(0)}
                                                 </span>
-                                                <span className="hidden sm:inline">{`brecha ${dimension.gap.toFixed(0)}`}</span>
-                                              </span>
+                                                <span className="min-w-0 flex-1 truncate text-center text-[10px] font-semibold text-white/88">
+                                                  {dimension.label}
+                                                </span>
+                                                <span className="w-7 text-right text-[9px] font-semibold tabular-nums text-[#fecaca]">
+                                                  {dimension.rightScore.toFixed(0)}
+                                                </span>
+                                              </div>
+                                              <div className="relative mt-1.5 h-2 overflow-hidden rounded-full bg-white/10">
+                                                <span
+                                                  className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-[#2563eb] to-[#7dd3fc]"
+                                                  style={{ width: `${dimension.leftScore}%` }}
+                                                />
+                                                <span
+                                                  className="absolute inset-y-0 right-0 rounded-full bg-gradient-to-l from-[#dc2626] to-[#fda4af]"
+                                                  style={{ width: `${dimension.rightScore}%` }}
+                                                />
+                                                <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-white/16" />
+                                              </div>
+                                              <div className="mt-1 flex justify-end">
+                                                <span className={`text-[8px] font-semibold uppercase tracking-[0.14em] ${leaderTone}`}>
+                                                  Brecha {dimension.gap.toFixed(0)}
+                                                </span>
+                                              </div>
                                             </div>
-                                            <div className="relative h-2 overflow-hidden rounded-full bg-white/14">
-                                              <span
-                                                className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#1d4ed8] via-[#3b82f6] to-[#7dd3fc]"
-                                                style={{ width: `${dimension.leftScore}%` }}
-                                              />
-                                              <span
-                                                className="absolute inset-y-0 right-0 bg-gradient-to-l from-[#991b1b] via-[#dc2626] to-[#fb7185]"
-                                                style={{ width: `${dimension.rightScore}%` }}
-                                              />
-                                            </div>
-                                            <div className="hidden items-center justify-between text-[9px] font-semibold tabular-nums text-white/82 sm:flex">
-                                              <span className="text-[#bfdbfe]">{dimension.leftScore.toFixed(0)}</span>
-                                              <span className="text-white/62">vs</span>
-                                              <span className="text-[#fecaca]">{dimension.rightScore.toFixed(0)}</span>
-                                            </div>
-                                          </div>
-                                        );
-                                      })}
+                                          );
+                                        })}
+                                      </div>
                                     </div>
-                                  </div>
-                                ) : null}
-
+                                  ) : null}
                                 </div>
                               ) : null}
                             </div>
