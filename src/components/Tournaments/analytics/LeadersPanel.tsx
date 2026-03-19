@@ -118,15 +118,15 @@ const LeadersPanel: React.FC<LeadersPanelProps> = ({
 
       {showMostImprovedExplanation ? (
         <article className="app-panel p-3 text-xs text-[hsl(var(--text-subtle))] leading-relaxed">
-          <p className="font-semibold text-[hsl(var(--text-strong))]">Cómo se calcula Más Mejorado (regular season)</p>
+          <p className="font-semibold text-[hsl(var(--text-strong))]">Cómo se calcula Más progreso (regular season)</p>
           <p className="mt-1">
             Esta categoría usa solo temporada regular y premia progreso real: compara el inicio vs el cierre del jugador.
           </p>
           <p className="mt-1 tabular-nums">
-            Score MIP = salto de VAL + tendencia por juego + mejora de TS% + reducción de pérdidas
+            Score progreso (escala compacta) = salto de VAL + tendencia por juego + mejora de TS% + reducción de pérdidas
           </p>
           <p className="mt-1">
-            También aplica un ajuste a favor de quienes arrancaron más abajo y luego sostuvieron una mejora.
+            También aplica un ajuste a favor de quienes arrancaron más abajo y luego sostuvieron una mejora, incluso en temporadas regulares cortas.
           </p>
         </article>
       ) : null}

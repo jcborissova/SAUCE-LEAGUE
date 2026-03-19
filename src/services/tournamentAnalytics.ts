@@ -100,6 +100,10 @@ const DEFAULT_PLAYOFF_FORMAT: TournamentSettings["playoffFormat"] = {
   ],
 };
 
+const DEFAULT_MVP_ELIGIBILITY_RATE = 0.5;
+const MIN_MVP_ELIGIBLE_GAMES = 2;
+const MIN_MOST_IMPROVED_GAMES = 3;
+
 const METRIC_LOWER_IS_BETTER: Record<TournamentStatMetric, boolean> = {
   points: false,
   rebounds: false,
@@ -521,6 +525,15 @@ const computeDefensiveImpactPerGame = (line: PlayerStatsLine): number =>
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
 
+const getMinimumMvpGames = (teamGames: number, eligibilityRate: number): number => {
+  if (teamGames <= 0) return 1;
+
+  const baseMinimum = Math.max(1, Math.ceil(teamGames * eligibilityRate));
+  const availabilityFloor = teamGames > 1 ? MIN_MVP_ELIGIBLE_GAMES : 1;
+
+  return Math.min(teamGames, Math.max(baseMinimum, availabilityFloor));
+};
+
 const average = (values: number[]): number => {
   if (values.length === 0) return 0;
   return round2(values.reduce((sum, value) => sum + value, 0) / values.length);
@@ -599,6 +612,7 @@ const computeValuationForGame = (game: TournamentAnalyticsPlayerGame): number =>
 
 type MostImprovedCandidate = {
   line: PlayerStatsLine;
+  rawScore: number;
   score: number;
   details: MostImprovedBreakdown;
 };
@@ -623,12 +637,20 @@ type MostImprovedRaw = {
   consistencyBonus: number;
 };
 
+const compactMostImprovedScore = (rawScore: number): number => {
+  if (rawScore <= 0) return 0;
+  // La muestra corta de 3 juegos puede inflar el score crudo; comprimimos la escala
+  // para mantener un ranking legible sin alterar el orden relativo entre jugadores.
+  return round2(Math.sqrt(rawScore) * 2.4);
+};
+
 const buildMostImprovedLeaders = async (
   tournamentId: string,
   limit: number
 ): Promise<TournamentLeaderRow[]> => {
   const snapshot = await getTournamentAnalyticsSnapshot(tournamentId, "regular");
-  const lineByPlayerId = new Map(snapshot.playerLines.map((line) => [line.playerId, line]));
+  const playerLines = await hydrateMissingPlayerPhotos(snapshot.playerLines);
+  const lineByPlayerId = new Map(playerLines.map((line) => [line.playerId, line]));
   const gamesByPlayerId = new Map<number, TournamentAnalyticsPlayerGame[]>();
 
   snapshot.playerGames.forEach((game) => {
@@ -656,14 +678,14 @@ const buildMostImprovedLeaders = async (
       });
 
       const gamesPlayed = sortedGames.length;
-      if (gamesPlayed < 6) return null;
+      if (gamesPlayed < MIN_MOST_IMPROVED_GAMES) return null;
 
-      const splitWindow = Math.max(2, Math.min(6, Math.floor(gamesPlayed / 2)));
-      if (splitWindow < 2 || splitWindow * 2 > gamesPlayed) return null;
+      const splitWindow = Math.max(1, Math.min(3, Math.floor(gamesPlayed / 2)));
+      if (splitWindow < 1 || splitWindow * 2 > gamesPlayed) return null;
 
       const earlySegment = sortedGames.slice(0, splitWindow);
       const lateSegment = sortedGames.slice(gamesPlayed - splitWindow);
-      if (earlySegment.length < 2 || lateSegment.length < 2) return null;
+      if (earlySegment.length < 1 || lateSegment.length < 1) return null;
 
       const valuationSeries = sortedGames.map((game) => computeValuationForGame(game));
       const praSeries = sortedGames.map((game) =>
@@ -694,9 +716,12 @@ const buildMostImprovedLeaders = async (
       const turnoversDelta = round2(earlyTurnovers - lateTurnovers);
 
       const trendSlope = computeTrendSlope(valuationSeries);
-      const earlyStddev = stddev(valuationSeries.slice(0, splitWindow));
-      const lateStddev = stddev(valuationSeries.slice(gamesPlayed - splitWindow));
-      const consistencyBonus = clamp((earlyStddev - lateStddev) * 0.35, -2.5, 2.5);
+      const earlyStddev =
+        splitWindow > 1 ? stddev(valuationSeries.slice(0, splitWindow)) : 0;
+      const lateStddev =
+        splitWindow > 1 ? stddev(valuationSeries.slice(gamesPlayed - splitWindow)) : 0;
+      const consistencyBonus =
+        splitWindow > 1 ? clamp((earlyStddev - lateStddev) * 0.35, -2.5, 2.5) : 0;
 
       return {
         line,
@@ -742,11 +767,12 @@ const buildMostImprovedLeaders = async (
         0,
         1.25
       );
-      const sampleMultiplier = clamp(0.9 + Math.min(1, item.gamesPlayed / 12) * 0.2, 0.9, 1.1);
+      const sampleMultiplier = clamp(0.75 + Math.min(1, item.gamesPlayed / 6) * 0.25, 0.75, 1);
 
-      const score = round2(
+      const rawScore = round2(
         Math.max(0, baseScore) * (1 + startBoost * 0.25) * improvementGate * sampleMultiplier
       );
+      const score = compactMostImprovedScore(rawScore);
 
       const explanation = [
         `VAL ${item.earlyValuation.toFixed(1)}→${item.lateValuation.toFixed(1)} (${formatSigned(
@@ -760,6 +786,7 @@ const buildMostImprovedLeaders = async (
 
       return {
         line: item.line,
+        rawScore,
         score,
         details: {
           score,
@@ -784,9 +811,13 @@ const buildMostImprovedLeaders = async (
         },
       };
     })
-    .filter((candidate) => candidate.score > 0.5 && candidate.details.valuationDelta > 0)
+    .filter(
+      (candidate) =>
+        candidate.rawScore > 0.15 &&
+        (candidate.details.valuationDelta > 0 || candidate.details.trendSlope > 0)
+    )
     .sort((left, right) => {
-      const byScore = right.score - left.score;
+      const byScore = right.rawScore - left.rawScore;
       if (byScore !== 0) return byScore;
       const byDelta = right.details.valuationDelta - left.details.valuationDelta;
       if (byDelta !== 0) return byDelta;
@@ -1711,7 +1742,7 @@ export const getTournamentAnalyticsSnapshot = async (
 
 const buildMvpRowsFromSnapshot = (
   snapshot: TournamentAnalyticsSnapshot,
-  eligibilityRate = 0.3
+  eligibilityRate = DEFAULT_MVP_ELIGIBILITY_RATE
 ): MvpBreakdownRow[] => {
   const pieShareByPlayer = buildPlayerPieShareByPlayer(snapshot.playerGames);
 
@@ -1732,7 +1763,7 @@ const buildMvpRowsFromSnapshot = (
 
   const scoresInput = snapshot.playerLines.map((line) => {
     const teamGames = line.teamName ? teamGamesMap.get(line.teamName) ?? 0 : 0;
-    const minGames = Math.max(1, Math.ceil(teamGames * eligibilityRate));
+    const minGames = getMinimumMvpGames(teamGames, eligibilityRate);
     const teamFactor = line.teamName ? teamFactorMap.get(line.teamName) ?? 0 : 0;
     const availabilityRate = teamGames > 0 ? Math.min(1, line.gamesPlayed / teamGames) : 0;
     const tsPct = computeTrueShootingPct(
@@ -1805,7 +1836,7 @@ const buildMvpRowsFromSnapshot = (
 const buildMvpRowsFromPlayerLines = (
   playerLines: PlayerStatsLine[],
   teamFactorMap: Map<string, number>,
-  eligibilityRate = 0.3
+  eligibilityRate = DEFAULT_MVP_ELIGIBILITY_RATE
 ): MvpBreakdownRow[] => {
   const teamGamesMap = new Map<string, number>();
   const teamValuationMap = new Map<string, number>();
@@ -1821,7 +1852,7 @@ const buildMvpRowsFromPlayerLines = (
 
   const scoredInput = playerLines.map((line) => {
     const teamGames = line.teamName ? teamGamesMap.get(line.teamName) ?? 0 : 0;
-    const minGames = Math.max(1, Math.ceil(teamGames * eligibilityRate));
+    const minGames = getMinimumMvpGames(teamGames, eligibilityRate);
     const teamFactor = line.teamName ? teamFactorMap.get(line.teamName) ?? 0 : 0;
     const availabilityRate = teamGames > 0 ? Math.min(1, line.gamesPlayed / teamGames) : 0;
     const tsPct = computeTrueShootingPct(line.totals.points, line.totals.fga, line.totals.fta);
@@ -2212,7 +2243,7 @@ export const getMvpRace = async (params: {
   eligibilityRate?: number;
 }): Promise<MvpBreakdownRow[]> => {
   const phase = params.phase ?? "regular";
-  const eligibilityRate = params.eligibilityRate ?? 0.3;
+  const eligibilityRate = params.eligibilityRate ?? DEFAULT_MVP_ELIGIBILITY_RATE;
   const snapshot = await getTournamentAnalyticsSnapshot(params.tournamentId, phase);
 
   return buildMvpRowsFromSnapshot(snapshot, eligibilityRate);
@@ -2224,7 +2255,7 @@ export const getMvpRaceFast = async (params: {
   eligibilityRate?: number;
 }): Promise<MvpBreakdownRow[]> => {
   const phase = params.phase ?? "regular";
-  const eligibilityRate = params.eligibilityRate ?? 0.3;
+  const eligibilityRate = params.eligibilityRate ?? DEFAULT_MVP_ELIGIBILITY_RATE;
   const [playerLines, teamFactorMap] = await Promise.all([
     getTournamentPlayerLines(params.tournamentId, phase),
     loadTeamFactorMapForPhase(params.tournamentId, phase),
@@ -2234,7 +2265,7 @@ export const getMvpRaceFast = async (params: {
 };
 
 export const getFinalsMvpRace = async (tournamentId: string): Promise<MvpBreakdownRow[]> =>
-  getMvpRace({ tournamentId, phase: "finals", eligibilityRate: 0.3 });
+  getMvpRace({ tournamentId, phase: "finals" });
 
 export const getBattleData = async (params: {
   tournamentId: string;
@@ -2257,7 +2288,11 @@ export const getBattleData = async (params: {
   if (lines.length !== 2) {
     throw new Error("No hay datos suficientes para comparar esos 2 jugadores en la fase seleccionada.");
   }
-  const mvpRows = buildMvpRowsFromPlayerLines(playerLines, teamFactorMap, 0.3);
+  const mvpRows = buildMvpRowsFromPlayerLines(
+    playerLines,
+    teamFactorMap,
+    DEFAULT_MVP_ELIGIBILITY_RATE
+  );
 
   const mvpByPlayer = new Map(mvpRows.map((row) => [row.playerId, row.finalScore]));
 

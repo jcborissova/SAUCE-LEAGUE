@@ -79,7 +79,7 @@ const FOCUS_OPTIONS: Array<{ value: Exclude<StatsFocus, "duel">; label: string }
   { value: "steals", label: "Robos" },
   { value: "blocks", label: "Tapones" },
   { value: "pra", label: "PRA" },
-  { value: "most_improved", label: "Más mejorado" },
+  { value: "most_improved", label: "Más progreso" },
   { value: "defensive", label: "Líder defensivo" },
   { value: "mvp", label: "MVP" },
 ];
@@ -772,7 +772,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
     if (focus === "mvp") return "Carrera MVP";
     if (focus === "duel") return "Duelo 1v1";
     if (focus === "pra") return "Líderes de PRA";
-    if (focus === "most_improved") return "Jugador más mejorado";
+    if (focus === "most_improved") return "Más progreso";
     if (focus === "defensive") return "Líder defensivo";
     return focusMeta[focus].title;
   }, [focus]);
@@ -781,7 +781,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
     if (focus === "mvp") return "Ranking MVP completo";
     if (focus === "duel") return "Ranking completo";
     if (focus === "pra") return "Líderes de PRA (Ranking completo)";
-    if (focus === "most_improved") return "Jugador más mejorado (Temporada regular)";
+    if (focus === "most_improved") return "Más progreso (Temporada regular)";
     if (focus === "defensive") return "Líder defensivo (Ranking completo)";
     return `${focusMeta[focus].title} (Ranking completo)`;
   }, [focus]);
@@ -790,7 +790,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
     if (focus === "mvp") return "Score";
     if (focus === "duel") return "Valor";
     if (focus === "pra") return "PRA/PJ";
-    if (focus === "most_improved") return "Score MIP";
+    if (focus === "most_improved") return "Score progreso";
     if (focus === "defensive") return "D-Impact";
     return focusMeta[focus].metricLabel;
   }, [focus]);
@@ -808,7 +808,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       return "PRA por partido = puntos + rebotes + asistencias - pérdidas. Ajusta el volumen ofensivo por el costo de perder posesiones.";
     }
     if (focus === "most_improved") {
-      return "MIP se calcula solo en temporada regular. Score MIP combina: salto de valoración (inicio vs cierre), tendencia positiva por juego, ajuste de eficiencia (TS%) y control de pérdidas. El algoritmo favorece arranques flojos con mejora sostenida, no solo picos aislados.";
+      return "Más progreso usa solo temporada regular. En muestras cortas como una fase de 3 juegos, compara arranque vs cierre, tendencia de valoración, eficiencia (TS%) y control de pérdidas. El score se muestra en escala compacta para que el ranking sea más legible.";
     }
     if (focus === "defensive") {
       return "D-Impact/PJ = (1.4 x ROB/PJ) + (1.8 x TAP/PJ) + (0.35 x REB/PJ) - (0.15 x FALTAS/PJ). Mide acciones defensivas directas y su consistencia.";
@@ -1424,7 +1424,6 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
           const mvpRows = await getMvpRaceFast({
             tournamentId,
             phase: selectedPhase,
-            eligibilityRate: 0.3,
           });
           mvpRow = mvpRows.find((row) => row.playerId === playerId) ?? null;
         } catch {
@@ -2228,7 +2227,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                         ? "PRA/PJ = puntos + rebotes + asistencias - pérdidas por juego. Es la referencia usada para medir volumen productivo neto."
                         : focus === "defensive"
                           ? "D-Impact/PJ = (1.4 x ROB/PJ) + (1.8 x TAP/PJ) + (0.35 x REB/PJ) - (0.15 x FALTAS/PJ)."
-                          : "Más Mejorado usa solo temporada regular: compara inicio vs cierre, tendencia por juego y eficiencia (TS%) para premiar progreso sostenido."}
+                          : "Más progreso usa solo temporada regular: compara inicio vs cierre, tendencia por juego y eficiencia (TS%) para premiar progreso sostenido, incluso en muestras cortas. El score se presenta en escala compacta."}
                     </p>
                   ) : null}
                   {previewRows.length === 0 ? (
@@ -2267,7 +2266,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                             </div>
                             <div className="text-right">
                               <p className="text-xs font-semibold tabular-nums">
-                                Score MIP {row.value.toFixed(2)}
+                                Score progreso {row.value.toFixed(2)}
                               </p>
                               <p className="text-[11px] text-[hsl(var(--muted-foreground))]">
                                 Δ VAL {row.mostImproved ? `${row.mostImproved.valuationDelta >= 0 ? "+" : ""}${row.mostImproved.valuationDelta.toFixed(1)}` : "0.0"}
