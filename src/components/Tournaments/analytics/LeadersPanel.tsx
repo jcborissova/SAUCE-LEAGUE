@@ -40,6 +40,7 @@ const LeadersPanel: React.FC<LeadersPanelProps> = ({
   const showPraExplanation = metric === "pra";
   const showDefensiveExplanation = metric === "defensive_impact";
   const showMostImprovedExplanation = metric === "most_improved";
+  const showFgPctExplanation = metric === "fg_pct";
 
   useEffect(() => {
     setShowAll(false);
@@ -120,13 +121,30 @@ const LeadersPanel: React.FC<LeadersPanelProps> = ({
         <article className="app-panel p-3 text-xs text-[hsl(var(--text-subtle))] leading-relaxed">
           <p className="font-semibold text-[hsl(var(--text-strong))]">Cómo se calcula Más progreso (regular season)</p>
           <p className="mt-1">
-            Esta categoría usa solo temporada regular y premia progreso real: compara el inicio vs el cierre del jugador.
+            Esta categoría usa solo temporada regular y premia salto real: compara el inicio vs el cierre del jugador.
           </p>
           <p className="mt-1 tabular-nums">
-            Score progreso (escala compacta) = salto de VAL + tendencia por juego + mejora de TS% + reducción de pérdidas
+            Score progreso (escala compacta) = salto de VAL + tendencia por juego + mejora de TS% ajustada por volumen + crecimiento de carga ofensiva + control de pérdidas
           </p>
           <p className="mt-1">
-            También aplica un ajuste a favor de quienes arrancaron más abajo y luego sostuvieron una mejora, incluso en temporadas regulares cortas.
+            También favorece a quienes arrancaron desde una base no élite y luego sostuvieron la mejora. Penaliza perfiles ya consolidados
+            y excluye la zona MVP del torneo para que el ranking no se convierta en "el mejor jugador también mejoró".
+          </p>
+        </article>
+      ) : null}
+
+      {showFgPctExplanation ? (
+        <article className="app-panel p-3 text-xs text-[hsl(var(--text-subtle))] leading-relaxed">
+          <p className="font-semibold text-[hsl(var(--text-strong))]">Cómo se filtra el ranking FG%</p>
+          <p className="mt-1">
+            Para evitar líderes engañosos por muestras pequeñas, el ranking de FG% exige un mínimo dinámico de tiros convertidos.
+          </p>
+          <p className="mt-1">
+            El criterio está adaptado de los <span className="font-semibold">stat minimums</span> de NBA: en porcentajes de tiro
+            importa el volumen de aciertos, no solo cuántos juegos jugó el atleta.
+          </p>
+          <p className="mt-1">
+            Si dos jugadores tienen porcentajes muy parecidos, se prioriza al que sostuvo ese acierto con más intentos.
           </p>
         </article>
       ) : null}
@@ -159,16 +177,22 @@ const LeadersPanel: React.FC<LeadersPanelProps> = ({
 
           {visibleRows.map((row, index) => {
             const displayName = abbreviateLeaderboardName(row.name, 20);
+            const usesExtendedMobileLayout =
+              metric === "most_improved" || metric === "fg_pct";
 
             return (
             <article key={row.playerId} className="app-card min-h-[78px] p-3 sm:p-4">
               <button
                 type="button"
                 onClick={() => onPlayerSelect?.(row.playerId, phase)}
-                className={`w-full text-left grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-lg transition ${
+                className={`w-full text-left rounded-lg transition ${
                   onPlayerSelect
                     ? "hover:bg-[hsl(var(--surface-2)/0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))]"
                     : ""
+                } ${
+                  usesExtendedMobileLayout
+                    ? "grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-3"
+                    : "grid grid-cols-[auto_1fr_auto] items-center gap-3"
                 }`}
                 disabled={!onPlayerSelect}
               >
@@ -192,13 +216,30 @@ const LeadersPanel: React.FC<LeadersPanelProps> = ({
                       {displayName}
                     </span>
                   </p>
-                  <p className="text-xs text-[hsl(var(--text-subtle))] truncate">
+                  <p
+                    className={`text-xs text-[hsl(var(--text-subtle))] ${
+                      usesExtendedMobileLayout ? "line-clamp-2 sm:truncate" : "truncate"
+                    }`}
+                  >
                     {metric === "most_improved"
                       ? row.mostImproved?.explanation ?? `${row.teamName ?? "Sin equipo"} • Regular season`
-                      : `${row.teamName ?? "Sin equipo"} • ${row.gamesPlayed} juegos`}
+                      : metric === "fg_pct"
+                        ? `${row.teamName ?? "Sin equipo"} • FG ${row.totals.fgm}/${row.totals.fga} en ${row.gamesPlayed} juegos`
+                        : `${row.teamName ?? "Sin equipo"} • ${row.gamesPlayed} juegos`}
                   </p>
                 </div>
-                <div className="text-right">
+                <div
+                  className={`text-right ${
+                    usesExtendedMobileLayout
+                      ? "col-span-2 flex items-center justify-between gap-2 rounded-lg border border-[hsl(var(--border)/0.72)] bg-[hsl(var(--surface-2)/0.5)] px-2.5 py-2 sm:col-span-1 sm:block sm:rounded-none sm:border-0 sm:bg-transparent sm:px-0 sm:py-0"
+                      : ""
+                  }`}
+                >
+                  {usesExtendedMobileLayout ? (
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))] sm:hidden">
+                      {metric === "most_improved" ? "Score progreso" : "FG%"}
+                    </p>
+                  ) : null}
                   <p className="text-lg font-black text-[hsl(var(--primary))] tabular-nums">
                     {formatLeaderValue(metric, row.value)}
                   </p>

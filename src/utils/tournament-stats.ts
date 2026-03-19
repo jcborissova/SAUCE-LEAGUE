@@ -17,6 +17,70 @@ export const computeFgPct = (fgm: number, fga: number): number => {
   return computePct(fgm, fga);
 };
 
+export const computeEquivalentShotAttempts = (fga: number, fta: number): number =>
+  round2(fga + 0.44 * fta);
+
+export const computeTrueShootingPct = (points: number, fga: number, fta: number): number => {
+  const attempts = computeEquivalentShotAttempts(fga, fta);
+  if (attempts <= 0) return 0;
+  return round2((points / (2 * attempts)) * 100);
+};
+
+export const computeShootingLoadPerGame = (
+  fga: number,
+  fta: number,
+  gamesPlayed: number
+): number => {
+  if (gamesPlayed <= 0) return 0;
+  return round2((fga + 0.44 * fta) / gamesPlayed);
+};
+
+export const computeWeightedAverage = (values: number[], weights: number[]): number => {
+  if (values.length === 0 || weights.length === 0) return 0;
+
+  let weightedTotal = 0;
+  let totalWeight = 0;
+
+  values.forEach((value, index) => {
+    const weight = Math.max(0, weights[index] ?? 0);
+    if (!Number.isFinite(value) || weight <= 0) return;
+    weightedTotal += value * weight;
+    totalWeight += weight;
+  });
+
+  if (totalWeight <= 0) return 0;
+  return weightedTotal / totalWeight;
+};
+
+export const stabilizePercentageByAttempts = (
+  percentage: number,
+  attempts: number,
+  priorPercentage: number,
+  stabilizationAttempts: number
+): number => {
+  const safeAttempts = Math.max(0, attempts);
+  const safePrior = Number.isFinite(priorPercentage) ? priorPercentage : 0;
+  if (safeAttempts <= 0) return round2(safePrior);
+
+  const weight = safeAttempts / (safeAttempts + Math.max(1, stabilizationAttempts));
+  return round2(safePrior + (percentage - safePrior) * weight);
+};
+
+export const SHOOTING_STABILIZATION_ATTEMPTS = {
+  trueShooting: 24,
+  fieldGoalPct: 30,
+  threePointPct: 18,
+} as const;
+
+export const computeScaledShootingMakesMinimum = (
+  teamGames: number,
+  seasonMakes = 300,
+  seasonGames = 82
+): number => {
+  if (teamGames <= 0) return 0;
+  return Math.max(1, Math.ceil((seasonMakes / seasonGames) * teamGames));
+};
+
 export const computeValuation = (stats: {
   points: number;
   rebounds: number;
@@ -107,14 +171,15 @@ export const computeZScores = (values: number[]): number[] => {
 };
 
 export const MVP_SCORE_WEIGHTS = {
-  scoring: 0.12,
+  scoring: 0.11,
   playmaking: 0.08,
   rebounding: 0.07,
   steals: 0.08,
   blocks: 0.04,
-  trueShooting: 0.1,
+  trueShooting: 0.09,
   fieldGoalPct: 0.03,
   threePointPct: 0.02,
+  shotLoad: 0.05,
   pieShareImpact: 0.14,
   praImpact: 0.1,
   valuationImpact: 0.16,
@@ -137,6 +202,7 @@ export const computeMvpScores = (
     tsPct: number;
     fgPct: number;
     tpPct: number;
+    shotLoadPerGame: number;
     pieShare: number;
     praPerGame: number;
     valuationPerGame: number;
@@ -155,6 +221,7 @@ export const computeMvpScores = (
   const tsPctZ = computeZScores(players.map((p) => p.tsPct));
   const fgPctZ = computeZScores(players.map((p) => p.fgPct));
   const tpPctZ = computeZScores(players.map((p) => p.tpPct));
+  const shotLoadZ = computeZScores(players.map((p) => p.shotLoadPerGame));
   const pieShareZ = computeZScores(players.map((p) => p.pieShare));
   const praZ = computeZScores(players.map((p) => p.praPerGame));
   const valuationZ = computeZScores(players.map((p) => p.valuationPerGame));
@@ -173,7 +240,8 @@ export const computeMvpScores = (
     const efficiency =
       MVP_SCORE_WEIGHTS.trueShooting * tsPctZ[index] +
       MVP_SCORE_WEIGHTS.fieldGoalPct * fgPctZ[index] +
-      MVP_SCORE_WEIGHTS.threePointPct * tpPctZ[index];
+      MVP_SCORE_WEIGHTS.threePointPct * tpPctZ[index] +
+      MVP_SCORE_WEIGHTS.shotLoad * shotLoadZ[index];
     const impact =
       MVP_SCORE_WEIGHTS.pieShareImpact * pieShareZ[index] +
       MVP_SCORE_WEIGHTS.praImpact * praZ[index] +
@@ -193,6 +261,7 @@ export const computeMvpScores = (
         tsPct: tsPctZ[index],
         fgPct: fgPctZ[index],
         tpPct: tpPctZ[index],
+        shotLoad: shotLoadZ[index],
         pieShare: pieShareZ[index],
         pra: praZ[index],
         valuationPerGame: valuationZ[index],

@@ -27,6 +27,9 @@ export type MostImprovedBreakdown = {
   earlyTsPct: number;
   lateTsPct: number;
   tsPctDelta: number;
+  earlyShotLoad: number;
+  lateShotLoad: number;
+  shotLoadDelta: number;
   earlyTurnovers: number;
   lateTurnovers: number;
   turnoversDelta: number;
@@ -128,6 +131,7 @@ export type MvpBreakdownRow = PlayerStatsLine & {
     tsPct: number;
     fgPct: number;
     tpPct: number;
+    shotLoad: number;
     pieShare: number;
     pra: number;
     valuationPerGame: number;
@@ -418,6 +422,7 @@ export type BattlePlayerResult = {
   photo?: string | null;
   teamName: string | null;
   metrics: Record<BattleMetric, number>;
+  shotLoadPerGame: number;
   compositeScore: number;
 };
 

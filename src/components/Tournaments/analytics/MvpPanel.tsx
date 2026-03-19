@@ -44,9 +44,10 @@ const MvpPanel: React.FC<MvpPanelProps> = ({
     { weight: MVP_SCORE_WEIGHTS.rebounding, label: "z(RPG)" },
     { weight: MVP_SCORE_WEIGHTS.steals, label: "z(SPG)" },
     { weight: MVP_SCORE_WEIGHTS.blocks, label: "z(BPG)" },
-    { weight: MVP_SCORE_WEIGHTS.trueShooting, label: "z(TS%)" },
-    { weight: MVP_SCORE_WEIGHTS.fieldGoalPct, label: "z(FG%)" },
-    { weight: MVP_SCORE_WEIGHTS.threePointPct, label: "z(3P%)" },
+    { weight: MVP_SCORE_WEIGHTS.trueShooting, label: "z(TS% estab.)" },
+    { weight: MVP_SCORE_WEIGHTS.fieldGoalPct, label: "z(FG% estab.)" },
+    { weight: MVP_SCORE_WEIGHTS.threePointPct, label: "z(3P% estab.)" },
+    { weight: MVP_SCORE_WEIGHTS.shotLoad, label: "z(carga tiro)" },
     { weight: MVP_SCORE_WEIGHTS.pieShareImpact, label: "z(PIE Share)" },
     { weight: MVP_SCORE_WEIGHTS.praImpact, label: "z(PRA)" },
     { weight: MVP_SCORE_WEIGHTS.valuationImpact, label: "z(VAL/PJ)" },
@@ -79,8 +80,8 @@ const MvpPanel: React.FC<MvpPanelProps> = ({
         <p className="mt-2 text-xs">
           Modelo inspirado en prácticas NBA/ACB: valoración por juego (perfil ACB), eficiencia real TS%/FG%,
           impacto tipo PIE-share + volumen PRA neto (restando pérdidas) y éxito colectivo (récord + disponibilidad).
-          Todas las métricas se normalizan con z-score para comparar en la misma escala y se calcula sobre el pool
-          de jugadores elegibles.
+          Las métricas de tiro se estabilizan por volumen total de intentos y además se agrega una señal de carga de
+          tiro por juego, para no sobrepremiar porcentajes inflados con poco uso.
         </p>
         <p className="mt-2 text-[11px] leading-relaxed">
           <span className="font-semibold text-[hsl(var(--text-strong))]">MVP Score = </span>

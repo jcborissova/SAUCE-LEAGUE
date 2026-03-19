@@ -808,7 +808,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       return "PRA por partido = puntos + rebotes + asistencias - pérdidas. Ajusta el volumen ofensivo por el costo de perder posesiones.";
     }
     if (focus === "most_improved") {
-      return "Más progreso usa solo temporada regular. En muestras cortas como una fase de 3 juegos, compara arranque vs cierre, tendencia de valoración, eficiencia (TS%) y control de pérdidas. El score se muestra en escala compacta para que el ranking sea más legible.";
+      return "Más progreso usa solo temporada regular. Busca un salto real desde una base no élite: compara arranque vs cierre, tendencia de valoración, TS% ajustada por volumen, crecimiento de carga ofensiva y control de pérdidas. Penaliza perfiles ya consolidados y excluye la zona MVP del torneo.";
     }
     if (focus === "defensive") {
       return "D-Impact/PJ = (1.4 x ROB/PJ) + (1.8 x TAP/PJ) + (0.35 x REB/PJ) - (0.15 x FALTAS/PJ). Mide acciones defensivas directas y su consistencia.";
@@ -2227,7 +2227,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                         ? "PRA/PJ = puntos + rebotes + asistencias - pérdidas por juego. Es la referencia usada para medir volumen productivo neto."
                         : focus === "defensive"
                           ? "D-Impact/PJ = (1.4 x ROB/PJ) + (1.8 x TAP/PJ) + (0.35 x REB/PJ) - (0.15 x FALTAS/PJ)."
-                          : "Más progreso usa solo temporada regular: compara inicio vs cierre, tendencia por juego y eficiencia (TS%) para premiar progreso sostenido, incluso en muestras cortas. El score se presenta en escala compacta."}
+                          : "Más progreso usa solo temporada regular: premia salto real desde una base no élite con inicio vs cierre, tendencia por juego, TS% ajustada por volumen, crecimiento de carga ofensiva y control de pérdidas. Penaliza perfiles ya consolidados y excluye la zona MVP."}
                     </p>
                   ) : null}
                   {previewRows.length === 0 ? (
@@ -2238,7 +2238,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                         return (
                           <div
                             key={row.playerId}
-                            className="flex min-h-[92px] items-center justify-between rounded-lg border bg-[hsl(var(--surface-2)/0.7)] px-3 py-2 text-sm"
+                            className="grid min-h-[92px] gap-3 rounded-lg border bg-[hsl(var(--surface-2)/0.7)] px-3 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
                           >
                             <div className="min-w-0">
                               <p className="flex min-w-0 items-center gap-2 font-semibold">
@@ -2257,30 +2257,37 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                                   #{index + 1} {abbreviateLeaderboardName(row.name, 20)}
                                 </span>
                               </p>
-                              <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
+                              <p className="mt-0.5 truncate text-xs text-[hsl(var(--muted-foreground))]">
                                 {row.teamName ?? "Sin equipo"} · Regular
                               </p>
-                              <p className="truncate text-[11px] text-[hsl(var(--muted-foreground))]">
+                              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-[hsl(var(--muted-foreground))] sm:truncate">
                                 {row.mostImproved?.explanation ?? "Progresión sostenida durante la temporada regular."}
                               </p>
                             </div>
-                            <div className="text-right">
-                              <p className="text-xs font-semibold tabular-nums">
-                                Score progreso {row.value.toFixed(2)}
-                              </p>
-                              <p className="text-[11px] text-[hsl(var(--muted-foreground))]">
-                                Δ VAL {row.mostImproved ? `${row.mostImproved.valuationDelta >= 0 ? "+" : ""}${row.mostImproved.valuationDelta.toFixed(1)}` : "0.0"}
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => void openPlayerDetail(row.playerId, "regular")}
-                                className="mt-1 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors hover:bg-[hsl(var(--surface-1))]"
-                                title="Ver detalle del jugador"
-                                aria-label={`Ver detalle de ${row.name}`}
-                              >
-                                <EyeIcon className="h-3.5 w-3.5" />
-                                Ver detalle
-                              </button>
+                            <div className="rounded-lg border border-[hsl(var(--border)/0.78)] bg-[hsl(var(--surface-1))] px-2.5 py-2 sm:min-w-[9.5rem] sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:text-right">
+                              <div className="flex items-center justify-between gap-3 sm:block">
+                                <div className="min-w-0">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))] sm:hidden">
+                                    Resultado
+                                  </p>
+                                  <p className="text-xs font-semibold tabular-nums">
+                                    Score progreso {row.value.toFixed(2)}
+                                  </p>
+                                  <p className="text-[11px] text-[hsl(var(--muted-foreground))]">
+                                    Δ VAL {row.mostImproved ? `${row.mostImproved.valuationDelta >= 0 ? "+" : ""}${row.mostImproved.valuationDelta.toFixed(1)}` : "0.0"}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => void openPlayerDetail(row.playerId, "regular")}
+                                  className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-2.5 py-1.5 text-[11px] font-semibold transition-colors hover:bg-[hsl(var(--surface-1))] sm:mt-1"
+                                  title="Ver detalle del jugador"
+                                  aria-label={`Ver detalle de ${row.name}`}
+                                >
+                                  <EyeIcon className="h-3.5 w-3.5" />
+                                  Ver detalle
+                                </button>
+                              </div>
                             </div>
                           </div>
                         );
