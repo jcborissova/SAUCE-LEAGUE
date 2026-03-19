@@ -402,7 +402,6 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
         const rows = await getMvpRaceFast({
           tournamentId,
           phase: "regular",
-          eligibilityRate: 0.3,
         });
 
         if (!cancelled) {
@@ -597,7 +596,6 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
           const mvpRows = await getMvpRaceFast({
             tournamentId,
             phase,
-            eligibilityRate: 0.3,
           });
           mvpRow = mvpRows.find((row) => row.playerId === playerId) ?? null;
         } catch {

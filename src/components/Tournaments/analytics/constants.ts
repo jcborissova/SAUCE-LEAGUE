@@ -33,7 +33,7 @@ export const LEADER_CATEGORIES: Array<{ value: TournamentStatMetric; label: stri
   { value: "blocks", label: "Bloqueos" },
   { value: "defensive_impact", label: "Líder defensivo (D-Impact)" },
   { value: "pra", label: "PRA (Puntos+Rebotes+Asistencias-Pérdidas)" },
-  { value: "most_improved", label: "Más mejorado (regular)" },
+  { value: "most_improved", label: "Más progreso (regular)" },
   { value: "fg_pct", label: "FG%" },
   { value: "turnovers", label: "Pérdidas (menos es mejor)" },
   { value: "fouls", label: "Faltas (menos es mejor)" },
