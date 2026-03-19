@@ -159,16 +159,22 @@ const LeadersPanel: React.FC<LeadersPanelProps> = ({
 
           {visibleRows.map((row, index) => {
             const displayName = abbreviateLeaderboardName(row.name, 20);
+            const usesExtendedMobileLayout =
+              metric === "most_improved" || metric === "fg_pct";
 
             return (
             <article key={row.playerId} className="app-card min-h-[78px] p-3 sm:p-4">
               <button
                 type="button"
                 onClick={() => onPlayerSelect?.(row.playerId, phase)}
-                className={`w-full text-left grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-lg transition ${
+                className={`w-full text-left rounded-lg transition ${
                   onPlayerSelect
                     ? "hover:bg-[hsl(var(--surface-2)/0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))]"
                     : ""
+                } ${
+                  usesExtendedMobileLayout
+                    ? "grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-3"
+                    : "grid grid-cols-[auto_1fr_auto] items-center gap-3"
                 }`}
                 disabled={!onPlayerSelect}
               >
@@ -192,13 +198,28 @@ const LeadersPanel: React.FC<LeadersPanelProps> = ({
                       {displayName}
                     </span>
                   </p>
-                  <p className="text-xs text-[hsl(var(--text-subtle))] truncate">
+                  <p
+                    className={`text-xs text-[hsl(var(--text-subtle))] ${
+                      usesExtendedMobileLayout ? "line-clamp-2 sm:truncate" : "truncate"
+                    }`}
+                  >
                     {metric === "most_improved"
                       ? row.mostImproved?.explanation ?? `${row.teamName ?? "Sin equipo"} • Regular season`
                       : `${row.teamName ?? "Sin equipo"} • ${row.gamesPlayed} juegos`}
                   </p>
                 </div>
-                <div className="text-right">
+                <div
+                  className={`text-right ${
+                    usesExtendedMobileLayout
+                      ? "col-span-2 flex items-center justify-between gap-2 rounded-lg border border-[hsl(var(--border)/0.72)] bg-[hsl(var(--surface-2)/0.5)] px-2.5 py-2 sm:col-span-1 sm:block sm:rounded-none sm:border-0 sm:bg-transparent sm:px-0 sm:py-0"
+                      : ""
+                  }`}
+                >
+                  {usesExtendedMobileLayout ? (
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-subtle))] sm:hidden">
+                      {metric === "most_improved" ? "Score progreso" : "FG%"}
+                    </p>
+                  ) : null}
                   <p className="text-lg font-black text-[hsl(var(--primary))] tabular-nums">
                     {formatLeaderValue(metric, row.value)}
                   </p>
