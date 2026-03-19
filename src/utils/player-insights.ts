@@ -1,4 +1,5 @@
 import type { PlayerStatsLine } from "../types/tournament-analytics";
+import { computeShootingLoadPerGame } from "./tournament-stats";
 
 export type InsightGrade = "S" | "A" | "B" | "C" | "D";
 export type InsightTone = "primary" | "success" | "warning" | "danger";
@@ -58,6 +59,7 @@ type DerivedMetrics = {
   efficiencyIndex: number;
   impactIndex: number;
   scoringVolume: number;
+  shotLoadPerGame: number;
   gamesPlayed: number;
 };
 
@@ -89,6 +91,11 @@ const deriveMetrics = (line: PlayerStatsLine): DerivedMetrics => {
   const stocksPerGame = spg + bpg;
   const tsAttempts = line.totals.fga + 0.44 * line.totals.fta;
   const tsPct = tsAttempts > 0 ? (line.totals.points / (2 * tsAttempts)) * 100 : 0;
+  const shotLoadPerGame = computeShootingLoadPerGame(
+    line.totals.fga,
+    line.totals.fta,
+    line.gamesPlayed
+  );
   const playmakingIndex = apg - topg * 0.55;
   const defenseIndex = stocksPerGame * 0.7 + rpg * 0.3;
   const efficiencyIndex = tsPct * 0.52 + line.fgPct * 0.3 + line.tpPct * 0.18;
@@ -111,7 +118,8 @@ const deriveMetrics = (line: PlayerStatsLine): DerivedMetrics => {
     defenseIndex,
     efficiencyIndex,
     impactIndex,
-    scoringVolume: line.totals.points,
+    scoringVolume: shotLoadPerGame,
+    shotLoadPerGame,
     gamesPlayed: line.gamesPlayed,
   };
 };
@@ -194,14 +202,14 @@ const getPercentiles = (
 });
 
 const weightedCompositeFromPercentiles = (p: InsightPercentiles): number =>
-  (p.scoring * 0.27 +
-    p.impact * 0.2 +
+  (p.scoring * 0.25 +
+    p.impact * 0.19 +
     p.efficiency * 0.15 +
     p.playmaking * 0.13 +
     p.defense * 0.11 +
-    p.rebounding * 0.06 +
+    p.rebounding * 0.05 +
     p.ballSecurity * 0.05 +
-    p.volume * 0.03) * 100;
+    p.volume * 0.07) * 100;
 
 const dominanceBonusFromScoring = (ppg: number, sortedPpg: number[]): number => {
   if (sortedPpg.length === 0) return 0;
@@ -247,7 +255,7 @@ export const buildPlayerDeepInsight = (
     { tag: "Anotador principal", score: p.scoring * 0.75 + p.impact * 0.25 },
     { tag: "Armador creador", score: p.playmaking * 0.75 + p.ballSecurity * 0.25 },
     { tag: "Ancla defensiva", score: p.defense * 0.7 + p.rebounding * 0.3 },
-    { tag: "Tirador confiable", score: p.efficiency * 0.6 + p.shooting3pt * 0.4 },
+    { tag: "Tirador confiable", score: p.efficiency * 0.5 + p.shooting3pt * 0.3 + p.volume * 0.2 },
     { tag: "Reboteador físico", score: p.rebounding * 0.8 + p.defense * 0.2 },
     { tag: "Impacto global", score: p.impact * 0.75 + p.scoring * 0.25 },
   ];

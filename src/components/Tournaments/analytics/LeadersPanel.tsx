@@ -40,6 +40,7 @@ const LeadersPanel: React.FC<LeadersPanelProps> = ({
   const showPraExplanation = metric === "pra";
   const showDefensiveExplanation = metric === "defensive_impact";
   const showMostImprovedExplanation = metric === "most_improved";
+  const showFgPctExplanation = metric === "fg_pct";
 
   useEffect(() => {
     setShowAll(false);
@@ -120,13 +121,30 @@ const LeadersPanel: React.FC<LeadersPanelProps> = ({
         <article className="app-panel p-3 text-xs text-[hsl(var(--text-subtle))] leading-relaxed">
           <p className="font-semibold text-[hsl(var(--text-strong))]">Cómo se calcula Más progreso (regular season)</p>
           <p className="mt-1">
-            Esta categoría usa solo temporada regular y premia progreso real: compara el inicio vs el cierre del jugador.
+            Esta categoría usa solo temporada regular y premia salto real: compara el inicio vs el cierre del jugador.
           </p>
           <p className="mt-1 tabular-nums">
-            Score progreso (escala compacta) = salto de VAL + tendencia por juego + mejora de TS% + reducción de pérdidas
+            Score progreso (escala compacta) = salto de VAL + tendencia por juego + mejora de TS% ajustada por volumen + crecimiento de carga ofensiva + control de pérdidas
           </p>
           <p className="mt-1">
-            También aplica un ajuste a favor de quienes arrancaron más abajo y luego sostuvieron una mejora, incluso en temporadas regulares cortas.
+            También favorece a quienes arrancaron desde una base no élite y luego sostuvieron la mejora. Penaliza perfiles ya consolidados
+            y excluye la zona MVP del torneo para que el ranking no se convierta en "el mejor jugador también mejoró".
+          </p>
+        </article>
+      ) : null}
+
+      {showFgPctExplanation ? (
+        <article className="app-panel p-3 text-xs text-[hsl(var(--text-subtle))] leading-relaxed">
+          <p className="font-semibold text-[hsl(var(--text-strong))]">Cómo se filtra el ranking FG%</p>
+          <p className="mt-1">
+            Para evitar líderes engañosos por muestras pequeñas, el ranking de FG% exige un mínimo dinámico de tiros convertidos.
+          </p>
+          <p className="mt-1">
+            El criterio está adaptado de los <span className="font-semibold">stat minimums</span> de NBA: en porcentajes de tiro
+            importa el volumen de aciertos, no solo cuántos juegos jugó el atleta.
+          </p>
+          <p className="mt-1">
+            Si dos jugadores tienen porcentajes muy parecidos, se prioriza al que sostuvo ese acierto con más intentos.
           </p>
         </article>
       ) : null}
@@ -205,7 +223,9 @@ const LeadersPanel: React.FC<LeadersPanelProps> = ({
                   >
                     {metric === "most_improved"
                       ? row.mostImproved?.explanation ?? `${row.teamName ?? "Sin equipo"} • Regular season`
-                      : `${row.teamName ?? "Sin equipo"} • ${row.gamesPlayed} juegos`}
+                      : metric === "fg_pct"
+                        ? `${row.teamName ?? "Sin equipo"} • FG ${row.totals.fgm}/${row.totals.fga} en ${row.gamesPlayed} juegos`
+                        : `${row.teamName ?? "Sin equipo"} • ${row.gamesPlayed} juegos`}
                   </p>
                 </div>
                 <div

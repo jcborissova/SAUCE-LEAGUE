@@ -70,15 +70,17 @@ export const deriveFallbackBattleGrade = (player: BattlePlayerResult): PlayerGra
   const fgPct = Math.max(0, metrics.fg_pct ?? 0);
   const topg = Math.max(0, metrics.topg ?? 0);
   const pra = Math.max(0, metrics.pra ?? ppg + rpg + apg - topg);
+  const shotLoad = Math.max(0, player.shotLoadPerGame ?? 0);
 
   const scoreRaw =
-    clamp01(ppg / 30) * 26 +
+    clamp01(ppg / 30) * 24 +
     clamp01(pra / 36) * 18 +
-    clamp01(fgPct / 60) * 16 +
+    clamp01(fgPct / 60) * 13 +
     clamp01(apg / 7) * 12 +
     clamp01((spg + bpg) / 4) * 12 +
-    clamp01(rpg / 12) * 8 +
-    clamp01(1 - topg / 4.5) * 8;
+    clamp01(rpg / 12) * 7 +
+    clamp01(1 - topg / 4.5) * 8 +
+    clamp01(shotLoad / 16) * 6;
 
   const score = Math.max(0, Math.min(100, Number(scoreRaw.toFixed(1))));
 

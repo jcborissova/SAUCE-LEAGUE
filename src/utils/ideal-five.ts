@@ -1,5 +1,6 @@
 import type { PlayerStatsLine } from "../types/tournament-analytics";
 import { buildPlayerDeepInsight } from "./player-insights";
+import { computeShootingLoadPerGame } from "./tournament-stats";
 
 export type IdealFiveRole = "PG" | "SG" | "SF" | "PF" | "C";
 
@@ -54,6 +55,7 @@ type CandidateRaw = {
   disciplineCost: number;
   tsPct: number;
   tpPct: number;
+  shotLoadPerGame: number;
 };
 
 type CandidateProfile = {
@@ -74,7 +76,7 @@ type CandidateProfile = {
   roleScores: Record<IdealFiveRole, number>;
 };
 
-const MODEL_VERSION = "ideal-five-v2.3";
+const MODEL_VERSION = "ideal-five-v2.4";
 const ANTI_MODEL_VERSION = "anti-ideal-five-v1.0";
 const SHRINKAGE_GAMES = 4;
 
@@ -260,12 +262,20 @@ const buildRawCandidates = (pool: PlayerStatsLine[]): CandidateRaw[] => {
     valuationPerGame: average(pool.map((line) => line.valuationPerGame)),
     praPerGame: average(pool.map((line) => computePraPerGame(line))),
     tsPct: average(pool.map((line) => computeTsPct(line))),
+    shotLoadPerGame: average(
+      pool.map((line) => computeShootingLoadPerGame(line.totals.fga, line.totals.fta, line.gamesPlayed))
+    ),
   };
 
   return pool.map((line) => {
     const games = Math.max(0, line.gamesPlayed);
     const tsPct = computeTsPct(line);
     const praPerGame = computePraPerGame(line);
+    const shotLoadPerGame = computeShootingLoadPerGame(
+      line.totals.fga,
+      line.totals.fta,
+      line.gamesPlayed
+    );
 
     const shrunkPpg = shrinkToMean(line.perGame.ppg, priors.ppg, games);
     const shrunkApg = shrinkToMean(line.perGame.apg, priors.apg, games);
@@ -278,14 +288,16 @@ const buildRawCandidates = (pool: PlayerStatsLine[]): CandidateRaw[] => {
     const shrunkValPg = shrinkToMean(line.valuationPerGame, priors.valuationPerGame, games);
     const shrunkPraPg = shrinkToMean(praPerGame, priors.praPerGame, games);
     const shrunkTsPct = shrinkToMean(tsPct, priors.tsPct, games);
+    const shrunkShotLoad = shrinkToMean(shotLoadPerGame, priors.shotLoadPerGame, games);
 
-    const scoringIndex = shrunkPpg * 0.66 + shrunkTsPct * 0.2 + shrunkTpPct * 0.14;
+    const scoringIndex =
+      shrunkPpg * 0.58 + shrunkTsPct * 0.18 + shrunkTpPct * 0.1 + shrunkShotLoad * 0.14;
     const creationIndex = shrunkApg - shrunkTopg * 0.65;
-    const shootingIndex = shrunkTpPct * 0.58 + shrunkTsPct * 0.42;
+    const shootingIndex = shrunkTpPct * 0.45 + shrunkTsPct * 0.33 + shrunkShotLoad * 0.22;
     const perimeterDefenseIndex = shrunkSpg * 1.35 + shrunkRpg * 0.22;
     const interiorDefenseIndex = shrunkBpg * 1.9 + shrunkRpg * 0.43;
     const reboundingIndex = shrunkRpg;
-    const impactIndex = shrunkValPg * 0.64 + shrunkPraPg * 0.36;
+    const impactIndex = shrunkValPg * 0.59 + shrunkPraPg * 0.29 + shrunkShotLoad * 0.12;
     const disciplineCost = shrunkTopg * 0.78 + shrunkFpg * 0.22;
 
     return {
@@ -301,6 +313,7 @@ const buildRawCandidates = (pool: PlayerStatsLine[]): CandidateRaw[] => {
       disciplineCost,
       tsPct: shrunkTsPct,
       tpPct: shrunkTpPct,
+      shotLoadPerGame: shrunkShotLoad,
     };
   });
 };

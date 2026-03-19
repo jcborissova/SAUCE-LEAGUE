@@ -26,12 +26,19 @@ import type {
 } from "../types/tournament-analytics";
 import {
   computeBattleWinner,
+  computeEquivalentShotAttempts,
   computePct,
   computeFgPct,
   computeMvpScores,
+  computeScaledShootingMakesMinimum,
+  computeShootingLoadPerGame,
+  computeTrueShootingPct,
   computeValuation,
   computeValuationPerGame,
+  computeWeightedAverage,
   round2,
+  SHOOTING_STABILIZATION_ATTEMPTS,
+  stabilizePercentageByAttempts,
 } from "../utils/tournament-stats";
 import {
   computeStandingsWithFibaTiebreak,
@@ -508,12 +515,6 @@ const applyPlusMinusToPlayerLines = (
   });
 };
 
-const computeTrueShootingPct = (points: number, fga: number, fta: number): number => {
-  const attempts = fga + 0.44 * fta;
-  if (attempts <= 0) return 0;
-  return round2((points / (2 * attempts)) * 100);
-};
-
 const computeDefensiveImpactPerGame = (line: PlayerStatsLine): number =>
   round2(
     line.perGame.spg * 1.4 +
@@ -532,6 +533,131 @@ const getMinimumMvpGames = (teamGames: number, eligibilityRate: number): number 
   const availabilityFloor = teamGames > 1 ? MIN_MVP_ELIGIBLE_GAMES : 1;
 
   return Math.min(teamGames, Math.max(baseMinimum, availabilityFloor));
+};
+
+type MvpScoringEntry = {
+  line: PlayerStatsLine;
+  eligible: boolean;
+  minGames: number;
+  teamFactor: number;
+  availabilityRate: number;
+  tsPct: number;
+  pieShare: number;
+};
+
+const buildTeamGamesByTeamName = (
+  rows: TournamentAnalyticsPlayerGame[]
+): Map<string, number> => {
+  const gamesByTeam = new Map<string, Set<number>>();
+
+  rows.forEach((row) => {
+    const teamName = toSafeText(row.teamName);
+    const matchId = toNumber(row.matchId);
+    if (!teamName || matchId <= 0) return;
+
+    const current = gamesByTeam.get(teamName) ?? new Set<number>();
+    current.add(matchId);
+    gamesByTeam.set(teamName, current);
+  });
+
+  return new Map(
+    Array.from(gamesByTeam.entries()).map(([teamName, games]) => [teamName, games.size])
+  );
+};
+
+const buildMvpShootingPriors = (entries: MvpScoringEntry[]) => {
+  const tsValues = entries.map((entry) => entry.tsPct);
+  const tsWeights = entries.map((entry) =>
+    computeEquivalentShotAttempts(entry.line.totals.fga, entry.line.totals.fta)
+  );
+  const fgValues = entries.map((entry) => entry.line.fgPct);
+  const fgWeights = entries.map((entry) => entry.line.totals.fga);
+  const tpValues = entries.map((entry) => entry.line.tpPct);
+  const tpWeights = entries.map((entry) => entry.line.totals.tpa);
+
+  return {
+    tsPct: round2(computeWeightedAverage(tsValues, tsWeights) || average(tsValues)),
+    fgPct: round2(computeWeightedAverage(fgValues, fgWeights) || average(fgValues)),
+    tpPct: round2(computeWeightedAverage(tpValues, tpWeights) || average(tpValues)),
+  };
+};
+
+const buildMvpRowsFromEligibleInput = (eligibleInput: MvpScoringEntry[]): MvpBreakdownRow[] => {
+  if (eligibleInput.length === 0) return [];
+
+  const priors = buildMvpShootingPriors(eligibleInput);
+  const scored = computeMvpScores(
+    eligibleInput.map((entry) => {
+      const equivalentAttempts = computeEquivalentShotAttempts(
+        entry.line.totals.fga,
+        entry.line.totals.fta
+      );
+
+      return {
+        playerId: entry.line.playerId,
+        ppg: entry.line.perGame.ppg,
+        rpg: entry.line.perGame.rpg,
+        apg: entry.line.perGame.apg,
+        spg: entry.line.perGame.spg,
+        bpg: entry.line.perGame.bpg,
+        topg: entry.line.perGame.topg,
+        fpg: entry.line.perGame.fpg,
+        tsPct: stabilizePercentageByAttempts(
+          entry.tsPct,
+          equivalentAttempts,
+          priors.tsPct,
+          SHOOTING_STABILIZATION_ATTEMPTS.trueShooting
+        ),
+        fgPct: stabilizePercentageByAttempts(
+          entry.line.fgPct,
+          entry.line.totals.fga,
+          priors.fgPct,
+          SHOOTING_STABILIZATION_ATTEMPTS.fieldGoalPct
+        ),
+        tpPct: stabilizePercentageByAttempts(
+          entry.line.tpPct,
+          entry.line.totals.tpa,
+          priors.tpPct,
+          SHOOTING_STABILIZATION_ATTEMPTS.threePointPct
+        ),
+        shotLoadPerGame: computeShootingLoadPerGame(
+          entry.line.totals.fga,
+          entry.line.totals.fta,
+          entry.line.gamesPlayed
+        ),
+        pieShare: entry.pieShare,
+        praPerGame: round2(
+          entry.line.perGame.ppg +
+            entry.line.perGame.rpg +
+            entry.line.perGame.apg -
+            entry.line.perGame.topg
+        ),
+        valuationPerGame: entry.line.valuationPerGame,
+        teamFactor: entry.teamFactor,
+        availabilityRate: entry.availabilityRate,
+      };
+    })
+  );
+
+  return eligibleInput
+    .map((entry) => {
+      const details = scored[entry.line.playerId];
+      if (!details) return null;
+      return {
+        ...entry.line,
+        eligible: entry.eligible,
+        eligibilityThreshold: entry.minGames,
+        teamFactor: details.teamFactor,
+        availabilityRate: entry.availabilityRate,
+        tsPct: entry.tsPct,
+        pieShare: entry.pieShare,
+        z: details.z,
+        componentScore: details.componentScore,
+        finalScore: details.finalScore,
+      };
+    })
+    .filter((row): row is MvpBreakdownRow => Boolean(row))
+    .sort((a, b) => b.finalScore - a.finalScore);
 };
 
 const average = (values: number[]): number => {
@@ -586,12 +712,11 @@ const formatSigned = (value: number, decimals = 1): string => {
 };
 
 const computeTrueShootingPctForGame = (game: TournamentAnalyticsPlayerGame): number => {
-  const points = toNumber(game.points);
-  const fga = toNumber(game.fga);
-  const fta = toNumber(game.fta);
-  const attempts = fga + 0.44 * fta;
-  if (attempts <= 0) return 0;
-  return round2((points / (2 * attempts)) * 100);
+  return computeTrueShootingPct(
+    toNumber(game.points),
+    toNumber(game.fga),
+    toNumber(game.fta)
+  );
 };
 
 const computeValuationForGame = (game: TournamentAnalyticsPlayerGame): number =>
@@ -630,6 +755,9 @@ type MostImprovedRaw = {
   earlyTsPct: number;
   lateTsPct: number;
   tsPctDelta: number;
+  earlyShotLoad: number;
+  lateShotLoad: number;
+  shotLoadDelta: number;
   earlyTurnovers: number;
   lateTurnovers: number;
   turnoversDelta: number;
@@ -650,8 +778,27 @@ const buildMostImprovedLeaders = async (
 ): Promise<TournamentLeaderRow[]> => {
   const snapshot = await getTournamentAnalyticsSnapshot(tournamentId, "regular");
   const playerLines = await hydrateMissingPlayerPhotos(snapshot.playerLines);
+  const teamFactorMap = new Map(
+    Object.entries(snapshot.teamFactors).map(([team, factor]) => [team, toNumber(factor)])
+  );
+  const mvpRows = buildMvpRowsFromPlayerLines(
+    playerLines,
+    teamFactorMap,
+    DEFAULT_MVP_ELIGIBILITY_RATE
+  );
+  const mvpRankByPlayerId = new Map(mvpRows.map((row, index) => [row.playerId, index + 1]));
+  const mvpTierCutoff =
+    mvpRows.length > 0 ? Math.min(3, Math.max(1, Math.ceil(mvpRows.length * 0.2))) : 0;
   const lineByPlayerId = new Map(playerLines.map((line) => [line.playerId, line]));
   const gamesByPlayerId = new Map<number, TournamentAnalyticsPlayerGame[]>();
+  const phaseTsPrior = round2(
+    computeWeightedAverage(
+      snapshot.playerGames.map((game) => computeTrueShootingPctForGame(game)),
+      snapshot.playerGames.map((game) =>
+        computeEquivalentShotAttempts(toNumber(game.fga), toNumber(game.fta))
+      )
+    ) || average(snapshot.playerGames.map((game) => computeTrueShootingPctForGame(game)))
+  );
 
   snapshot.playerGames.forEach((game) => {
     const playerId = toNumber(game.playerId);
@@ -697,6 +844,9 @@ const buildMostImprovedLeaders = async (
         )
       );
       const tsSeries = sortedGames.map((game) => computeTrueShootingPctForGame(game));
+      const shotLoadSeries = sortedGames.map((game) =>
+        computeEquivalentShotAttempts(toNumber(game.fga), toNumber(game.fta))
+      );
       const turnoversSeries = sortedGames.map((game) => toNumber(game.turnovers));
 
       const earlyValuation = average(valuationSeries.slice(0, splitWindow));
@@ -707,9 +857,29 @@ const buildMostImprovedLeaders = async (
       const latePra = average(praSeries.slice(gamesPlayed - splitWindow));
       const praDelta = round2(latePra - earlyPra);
 
-      const earlyTsPct = average(tsSeries.slice(0, splitWindow));
-      const lateTsPct = average(tsSeries.slice(gamesPlayed - splitWindow));
+      const earlyTsAttempts = shotLoadSeries
+        .slice(0, splitWindow)
+        .reduce((sum, value) => sum + value, 0);
+      const lateTsAttempts = shotLoadSeries
+        .slice(gamesPlayed - splitWindow)
+        .reduce((sum, value) => sum + value, 0);
+      const earlyTsPct = stabilizePercentageByAttempts(
+        average(tsSeries.slice(0, splitWindow)),
+        earlyTsAttempts,
+        phaseTsPrior,
+        SHOOTING_STABILIZATION_ATTEMPTS.trueShooting
+      );
+      const lateTsPct = stabilizePercentageByAttempts(
+        average(tsSeries.slice(gamesPlayed - splitWindow)),
+        lateTsAttempts,
+        phaseTsPrior,
+        SHOOTING_STABILIZATION_ATTEMPTS.trueShooting
+      );
       const tsPctDelta = round2(lateTsPct - earlyTsPct);
+
+      const earlyShotLoad = average(shotLoadSeries.slice(0, splitWindow));
+      const lateShotLoad = average(shotLoadSeries.slice(gamesPlayed - splitWindow));
+      const shotLoadDelta = round2(lateShotLoad - earlyShotLoad);
 
       const earlyTurnovers = average(turnoversSeries.slice(0, splitWindow));
       const lateTurnovers = average(turnoversSeries.slice(gamesPlayed - splitWindow));
@@ -736,6 +906,9 @@ const buildMostImprovedLeaders = async (
         earlyTsPct,
         lateTsPct,
         tsPctDelta,
+        earlyShotLoad,
+        lateShotLoad,
+        shotLoadDelta,
         earlyTurnovers,
         lateTurnovers,
         turnoversDelta,
@@ -749,16 +922,51 @@ const buildMostImprovedLeaders = async (
 
   const earlyValues = candidatesRaw.map((item) => item.earlyValuation);
   const earlyQ25 = computeQuantile(earlyValues, 0.25);
+  const earlyMedian = computeQuantile(earlyValues, 0.5);
   const earlyQ75 = computeQuantile(earlyValues, 0.75);
   const earlyIqr = Math.max(1, round2(earlyQ75 - earlyQ25));
+  const earlyPraValues = candidatesRaw.map((item) => item.earlyPra);
+  const earlyPraQ25 = computeQuantile(earlyPraValues, 0.25);
+  const earlyPraMedian = computeQuantile(earlyPraValues, 0.5);
+  const earlyPraQ75 = computeQuantile(earlyPraValues, 0.75);
+  const earlyPraIqr = Math.max(1, round2(earlyPraQ75 - earlyPraQ25));
+  const earlyShotLoadValues = candidatesRaw.map((item) => item.earlyShotLoad);
+  const earlyShotLoadQ25 = computeQuantile(earlyShotLoadValues, 0.25);
+  const earlyShotLoadMedian = computeQuantile(earlyShotLoadValues, 0.5);
+  const earlyShotLoadQ75 = computeQuantile(earlyShotLoadValues, 0.75);
+  const earlyShotLoadIqr = Math.max(0.5, round2(earlyShotLoadQ75 - earlyShotLoadQ25));
+  const hasMeaningfulEarlySpread = earlyQ75 > earlyQ25 || earlyPraQ75 > earlyPraQ25;
 
   const candidates: MostImprovedCandidate[] = candidatesRaw
     .map((item) => {
-      const startBoost = clamp((earlyQ75 - item.earlyValuation) / earlyIqr, 0, 1);
+      const mvpRank = mvpRankByPlayerId.get(item.line.playerId) ?? null;
+      const isMvpTier = mvpTierCutoff > 0 && mvpRank !== null && mvpRank <= mvpTierCutoff;
+      if (isMvpTier) return null;
+
+      const alreadyEstablished =
+        hasMeaningfulEarlySpread &&
+        item.earlyValuation >= earlyQ75 &&
+        item.earlyPra >= earlyPraQ75;
+      if (alreadyEstablished) return null;
+
+      const valuationStartBoost = clamp((earlyQ75 - item.earlyValuation) / earlyIqr, 0, 1);
+      const praStartBoost = clamp((earlyPraQ75 - item.earlyPra) / earlyPraIqr, 0, 1);
+      const startBoost = round2(valuationStartBoost * 0.6 + praStartBoost * 0.4);
+      const baselinePenalty = round2(
+        clamp(
+          clamp((item.earlyValuation - earlyMedian) / earlyIqr, 0, 1.35) * 0.55 +
+            clamp((item.earlyPra - earlyPraMedian) / earlyPraIqr, 0, 1.35) * 0.3 +
+            clamp((item.earlyShotLoad - earlyShotLoadMedian) / earlyShotLoadIqr, 0, 1.15) *
+              0.15,
+          0,
+          1
+        )
+      );
       const baseScore =
         item.valuationDelta * 4.2 +
         item.trendSlope * 10 +
         item.tsPctDelta * 0.55 +
+        item.shotLoadDelta * 1.1 +
         item.turnoversDelta * 1.4 +
         item.praDelta * 0.8 +
         item.consistencyBonus;
@@ -768,11 +976,14 @@ const buildMostImprovedLeaders = async (
         1.25
       );
       const sampleMultiplier = clamp(0.75 + Math.min(1, item.gamesPlayed / 6) * 0.25, 0.75, 1);
+      const breakoutMultiplier = clamp(1 + startBoost * 0.55 - baselinePenalty * 0.8, 0.18, 1.55);
 
       const rawScore = round2(
-        Math.max(0, baseScore) * (1 + startBoost * 0.25) * improvementGate * sampleMultiplier
+        Math.max(0, baseScore) * improvementGate * sampleMultiplier * breakoutMultiplier
       );
       const score = compactMostImprovedScore(rawScore);
+      const baselineLabel =
+        startBoost >= 0.67 ? "base baja" : startBoost >= 0.34 ? "base media" : "base alta";
 
       const explanation = [
         `VAL ${item.earlyValuation.toFixed(1)}→${item.lateValuation.toFixed(1)} (${formatSigned(
@@ -780,8 +991,10 @@ const buildMostImprovedLeaders = async (
           1
         )})`,
         `TS ${formatSigned(item.tsPctDelta, 1)} pts`,
+        `VOL ${formatSigned(item.shotLoadDelta, 1)} TSA`,
         `PÉRD ${formatSigned(-item.turnoversDelta, 1)}`,
         `tendencia ${formatSigned(item.trendSlope, 2)}/juego`,
+        baselineLabel,
       ].join(" · ");
 
       return {
@@ -802,6 +1015,9 @@ const buildMostImprovedLeaders = async (
           earlyTsPct: item.earlyTsPct,
           lateTsPct: item.lateTsPct,
           tsPctDelta: item.tsPctDelta,
+          earlyShotLoad: item.earlyShotLoad,
+          lateShotLoad: item.lateShotLoad,
+          shotLoadDelta: item.shotLoadDelta,
           earlyTurnovers: item.earlyTurnovers,
           lateTurnovers: item.lateTurnovers,
           turnoversDelta: item.turnoversDelta,
@@ -811,6 +1027,7 @@ const buildMostImprovedLeaders = async (
         },
       };
     })
+    .filter((candidate): candidate is MostImprovedCandidate => candidate !== null)
     .filter(
       (candidate) =>
         candidate.rawScore > 0.15 &&
@@ -1785,52 +2002,7 @@ const buildMvpRowsFromSnapshot = (
   });
 
   const eligibleInput = scoresInput.filter((entry) => entry.eligible);
-  if (eligibleInput.length === 0) {
-    return [];
-  }
-
-  const scored = computeMvpScores(
-    eligibleInput.map((entry) => ({
-      playerId: entry.line.playerId,
-      ppg: entry.line.perGame.ppg,
-      rpg: entry.line.perGame.rpg,
-      apg: entry.line.perGame.apg,
-      spg: entry.line.perGame.spg,
-      bpg: entry.line.perGame.bpg,
-      topg: entry.line.perGame.topg,
-      fpg: entry.line.perGame.fpg,
-      tsPct: entry.tsPct,
-      fgPct: entry.line.fgPct,
-      tpPct: entry.line.tpPct,
-      pieShare: entry.pieShare,
-      praPerGame: round2(
-        entry.line.perGame.ppg + entry.line.perGame.rpg + entry.line.perGame.apg - entry.line.perGame.topg
-      ),
-      valuationPerGame: entry.line.valuationPerGame,
-      teamFactor: entry.teamFactor,
-      availabilityRate: entry.availabilityRate,
-    }))
-  );
-
-  return eligibleInput
-    .map((entry) => {
-      const details = scored[entry.line.playerId];
-      if (!details) return null;
-      return {
-        ...entry.line,
-        eligible: entry.eligible,
-        eligibilityThreshold: entry.minGames,
-        teamFactor: details.teamFactor,
-        availabilityRate: entry.availabilityRate,
-        tsPct: entry.tsPct,
-        pieShare: entry.pieShare,
-        z: details.z,
-        componentScore: details.componentScore,
-        finalScore: details.finalScore,
-      };
-    })
-    .filter((row): row is MvpBreakdownRow => Boolean(row))
-    .sort((a, b) => b.finalScore - a.finalScore);
+  return buildMvpRowsFromEligibleInput(eligibleInput);
 };
 
 const buildMvpRowsFromPlayerLines = (
@@ -1872,50 +2044,7 @@ const buildMvpRowsFromPlayerLines = (
   });
 
   const eligibleInput = scoredInput.filter((entry) => entry.eligible);
-  if (eligibleInput.length === 0) return [];
-
-  const scored = computeMvpScores(
-    eligibleInput.map((entry) => ({
-      playerId: entry.line.playerId,
-      ppg: entry.line.perGame.ppg,
-      rpg: entry.line.perGame.rpg,
-      apg: entry.line.perGame.apg,
-      spg: entry.line.perGame.spg,
-      bpg: entry.line.perGame.bpg,
-      topg: entry.line.perGame.topg,
-      fpg: entry.line.perGame.fpg,
-      tsPct: entry.tsPct,
-      fgPct: entry.line.fgPct,
-      tpPct: entry.line.tpPct,
-      pieShare: entry.pieShare,
-      praPerGame: round2(
-        entry.line.perGame.ppg + entry.line.perGame.rpg + entry.line.perGame.apg - entry.line.perGame.topg
-      ),
-      valuationPerGame: entry.line.valuationPerGame,
-      teamFactor: entry.teamFactor,
-      availabilityRate: entry.availabilityRate,
-    }))
-  );
-
-  return eligibleInput
-    .map((entry) => {
-      const details = scored[entry.line.playerId];
-      if (!details) return null;
-      return {
-        ...entry.line,
-        eligible: entry.eligible,
-        eligibilityThreshold: entry.minGames,
-        teamFactor: details.teamFactor,
-        availabilityRate: entry.availabilityRate,
-        tsPct: entry.tsPct,
-        pieShare: entry.pieShare,
-        z: details.z,
-        componentScore: details.componentScore,
-        finalScore: details.finalScore,
-      };
-    })
-    .filter((row): row is MvpBreakdownRow => Boolean(row))
-    .sort((a, b) => b.finalScore - a.finalScore);
+  return buildMvpRowsFromEligibleInput(eligibleInput);
 };
 
 const loadAnalyticsSummary = async (
@@ -2021,8 +2150,26 @@ export const getLeaders = async (params: {
   }
 
   const playerLines = await getTournamentPlayerLines(params.tournamentId, phase);
+  let rowsToRank = playerLines;
 
-  return playerLines
+  if (metric === "fg_pct") {
+    const snapshot = await getTournamentAnalyticsSnapshot(params.tournamentId, phase);
+    const teamGamesByTeamName = buildTeamGamesByTeamName(snapshot.playerGames);
+    const qualifiedRows = playerLines.filter((line) => {
+      const teamGames = line.teamName
+        ? teamGamesByTeamName.get(line.teamName) ?? line.gamesPlayed
+        : line.gamesPlayed;
+      const minimumMakes = computeScaledShootingMakesMinimum(teamGames);
+      return line.totals.fga > 0 && line.totals.fgm >= minimumMakes;
+    });
+
+    rowsToRank =
+      qualifiedRows.length > 0
+        ? qualifiedRows
+        : playerLines.filter((line) => line.totals.fga > 0);
+  }
+
+  return rowsToRank
     .map((line) => {
       const value =
         metric === "fg_pct"
@@ -2048,6 +2195,9 @@ export const getLeaders = async (params: {
       const direction = METRIC_LOWER_IS_BETTER[metric] ? 1 : -1;
       const byValue = (a.value - b.value) * direction;
       if (byValue !== 0) return byValue;
+      if (metric === "fg_pct" && b.totals.fga !== a.totals.fga) {
+        return b.totals.fga - a.totals.fga;
+      }
       return b.gamesPlayed - a.gamesPlayed;
     })
     .slice(0, limit);
@@ -2311,6 +2461,11 @@ export const getBattleData = async (params: {
       fg_pct: line.fgPct,
       topg: line.perGame.topg,
     },
+    shotLoadPerGame: computeShootingLoadPerGame(
+      line.totals.fga,
+      line.totals.fta,
+      line.gamesPlayed
+    ),
     compositeScore: mvpByPlayer.get(line.playerId) ?? 0,
   }));
 
