@@ -4,6 +4,7 @@ import type {
   BattlePlayerResult,
   MostImprovedBreakdown,
   TournamentAnalyticsCacheKey,
+  TournamentAnalyticsPhase,
   TournamentAnalyticsKpi,
   TournamentAnalyticsPlayerGame,
   TournamentAnalyticsSnapshot,
@@ -3227,6 +3228,7 @@ const toMatchOverview = (row: Record<string, unknown>): TournamentResultMatchOve
   tournamentId: String(row.tournament_id ?? ""),
   matchDate: row.match_date ? String(row.match_date) : null,
   matchTime: row.match_time ? String(row.match_time) : null,
+  phase: "regular",
   teamA: String(row.team_a ?? ""),
   teamB: String(row.team_b ?? ""),
   winnerTeam: row.winner_team ? String(row.winner_team) : null,
@@ -3235,35 +3237,113 @@ const toMatchOverview = (row: Record<string, unknown>): TournamentResultMatchOve
   hasStats: Boolean(row.has_stats),
 });
 
+const resolveTournamentMatchPhase = (
+  roundOrder: number | null,
+  matchupKey: string | null
+): TournamentAnalyticsPhase => {
+  if ((matchupKey ?? "").trim().toLowerCase() === "finals") return "finals";
+  if ((roundOrder ?? 0) >= 2) return "finals";
+  return "playoffs";
+};
+
+export const getTournamentMatchPhaseMap = async (
+  tournamentId: string
+): Promise<Map<number, TournamentAnalyticsPhase>> => {
+  const [{ data: gamesData, error: gamesError }, { data: seriesData, error: seriesError }] = await Promise.all([
+    supabase
+      .from("playoff_games")
+      .select("match_id, series_id")
+      .eq("tournament_id", tournamentId),
+    supabase
+      .from("playoff_series")
+      .select("id, round_order, matchup_key")
+      .eq("tournament_id", tournamentId),
+  ]);
+
+  if (gamesError) {
+    throw new Error(gamesError.message);
+  }
+
+  if (seriesError) {
+    throw new Error(seriesError.message);
+  }
+
+  const phaseBySeriesId = new Map<number, TournamentAnalyticsPhase>();
+
+  ((seriesData as Array<{ id: number; round_order: number | null; matchup_key: string | null }> | null) ?? []).forEach(
+    (series) => {
+      phaseBySeriesId.set(
+        Number(series.id),
+        resolveTournamentMatchPhase(
+          series.round_order !== null ? Number(series.round_order) : null,
+          series.matchup_key
+        )
+      );
+    }
+  );
+
+  const phaseByMatchId = new Map<number, TournamentAnalyticsPhase>();
+
+  ((gamesData as Array<{ match_id: number | null; series_id: number | null }> | null) ?? []).forEach((game) => {
+    const matchId = Number(game.match_id);
+    if (!Number.isFinite(matchId) || matchId <= 0) return;
+
+    const seriesId = Number(game.series_id);
+    const phase =
+      (Number.isFinite(seriesId) && seriesId > 0 ? phaseBySeriesId.get(seriesId) : null) ?? "playoffs";
+    phaseByMatchId.set(matchId, phase);
+  });
+
+  return phaseByMatchId;
+};
+
+const applyTournamentMatchPhases = (
+  matches: TournamentResultMatchOverview[],
+  phaseByMatchId: Map<number, TournamentAnalyticsPhase>
+): TournamentResultMatchOverview[] =>
+  matches.map((match) => ({
+    ...match,
+    phase: phaseByMatchId.get(match.matchId) ?? "regular",
+  }));
+
 const loadResultsOverviewFromScoreboardView = async (
   tournamentId: string
 ): Promise<TournamentResultMatchOverview[] | null> => {
-  const { data, error } = await supabase
-    .from("tournament_match_scoreboard")
-    .select(
-      "tournament_id, match_id, match_date, match_time, team_a, team_b, winner_team, team_a_points, team_b_points, has_stats"
-    )
-    .eq("tournament_id", tournamentId)
-    .order("match_date", { ascending: false })
-    .order("match_time", { ascending: false });
+  const [phaseByMatchId, { data, error }] = await Promise.all([
+    getTournamentMatchPhaseMap(tournamentId).catch(() => new Map<number, TournamentAnalyticsPhase>()),
+    supabase
+      .from("tournament_match_scoreboard")
+      .select(
+        "tournament_id, match_id, match_date, match_time, team_a, team_b, winner_team, team_a_points, team_b_points, has_stats"
+      )
+      .eq("tournament_id", tournamentId)
+      .order("match_date", { ascending: false })
+      .order("match_time", { ascending: false }),
+  ]);
 
   if (error || !data) {
     return null;
   }
 
-  return (data as Record<string, unknown>[]).map((row) => toMatchOverview(row));
+  return applyTournamentMatchPhases(
+    (data as Record<string, unknown>[]).map((row) => toMatchOverview(row)),
+    phaseByMatchId
+  );
 };
 
 const loadResultsOverviewFallback = async (
   tournamentId: string
 ): Promise<TournamentResultMatchOverview[]> => {
-  const { data: matches, error: matchesError } = await supabase
-    .from("matches")
-    .select("id, tournament_id, match_date, match_time, team_a, team_b, winner_team")
-    .eq("tournament_id", tournamentId)
-    .not("winner_team", "is", null)
-    .order("match_date", { ascending: false })
-    .order("match_time", { ascending: false });
+  const [phaseByMatchId, { data: matches, error: matchesError }] = await Promise.all([
+    getTournamentMatchPhaseMap(tournamentId).catch(() => new Map<number, TournamentAnalyticsPhase>()),
+    supabase
+      .from("matches")
+      .select("id, tournament_id, match_date, match_time, team_a, team_b, winner_team")
+      .eq("tournament_id", tournamentId)
+      .not("winner_team", "is", null)
+      .order("match_date", { ascending: false })
+      .order("match_time", { ascending: false }),
+  ]);
 
   if (matchesError) {
     throw new Error(matchesError.message);
@@ -3323,22 +3403,26 @@ const loadResultsOverviewFallback = async (
     });
   }
 
-  return matches.map((match) => {
-    const score = scoresByMatch.get(match.id) ?? { teamA: 0, teamB: 0, hasStats: false };
+  return applyTournamentMatchPhases(
+    matches.map((match) => {
+      const score = scoresByMatch.get(match.id) ?? { teamA: 0, teamB: 0, hasStats: false };
 
-    return {
-      matchId: match.id,
-      tournamentId: String(match.tournament_id),
-      matchDate: match.match_date ? String(match.match_date) : null,
-      matchTime: match.match_time ? String(match.match_time) : null,
-      teamA: String(match.team_a ?? ""),
-      teamB: String(match.team_b ?? ""),
-      winnerTeam: match.winner_team ? String(match.winner_team) : null,
-      teamAPoints: score.teamA,
-      teamBPoints: score.teamB,
-      hasStats: score.hasStats,
-    };
-  });
+      return {
+        matchId: match.id,
+        tournamentId: String(match.tournament_id),
+        matchDate: match.match_date ? String(match.match_date) : null,
+        matchTime: match.match_time ? String(match.match_time) : null,
+        phase: "regular",
+        teamA: String(match.team_a ?? ""),
+        teamB: String(match.team_b ?? ""),
+        winnerTeam: match.winner_team ? String(match.winner_team) : null,
+        teamAPoints: score.teamA,
+        teamBPoints: score.teamB,
+        hasStats: score.hasStats,
+      };
+    }),
+    phaseByMatchId
+  );
 };
 
 export const getTournamentResultsOverview = async (
