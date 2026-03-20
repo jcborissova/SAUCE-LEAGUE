@@ -808,7 +808,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
       return "PRA por partido = puntos + rebotes + asistencias - pérdidas. Ajusta el volumen ofensivo por el costo de perder posesiones.";
     }
     if (focus === "most_improved") {
-      return "Más progreso usa solo temporada regular. Busca un salto real desde una base no élite: compara arranque vs cierre, tendencia de valoración, TS% ajustada por volumen, crecimiento de carga ofensiva y control de pérdidas. Penaliza perfiles ya consolidados y excluye la zona MVP del torneo.";
+      return "Más progreso usa solo temporada regular. Busca un salto real desde una base no élite: compara arranque vs cierre, tendencia de valoración, TS% ajustada por volumen, crecimiento de carga ofensiva validado por eficiencia y control de pérdidas. Penaliza perfiles ya consolidados y excluye la zona MVP del torneo.";
     }
     if (focus === "defensive") {
       return "D-Impact/PJ = (1.4 x ROB/PJ) + (1.8 x TAP/PJ) + (0.35 x REB/PJ) - (0.15 x FALTAS/PJ). Mide acciones defensivas directas y su consistencia.";
@@ -2227,7 +2227,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
                         ? "PRA/PJ = puntos + rebotes + asistencias - pérdidas por juego. Es la referencia usada para medir volumen productivo neto."
                         : focus === "defensive"
                           ? "D-Impact/PJ = (1.4 x ROB/PJ) + (1.8 x TAP/PJ) + (0.35 x REB/PJ) - (0.15 x FALTAS/PJ)."
-                          : "Más progreso usa solo temporada regular: premia salto real desde una base no élite con inicio vs cierre, tendencia por juego, TS% ajustada por volumen, crecimiento de carga ofensiva y control de pérdidas. Penaliza perfiles ya consolidados y excluye la zona MVP."}
+                          : "Más progreso usa solo temporada regular: premia salto real desde una base no élite con inicio vs cierre, tendencia por juego, TS% ajustada por volumen, crecimiento de carga ofensiva validado por eficiencia y control de pérdidas. Penaliza perfiles ya consolidados y excluye la zona MVP."}
                     </p>
                   ) : null}
                   {previewRows.length === 0 ? (
