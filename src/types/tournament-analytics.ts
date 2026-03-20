@@ -232,6 +232,7 @@ export type TournamentResultMatchOverview = {
   tournamentId: string;
   matchDate: string | null;
   matchTime: string | null;
+  phase: TournamentAnalyticsPhase;
   teamA: string;
   teamB: string;
   winnerTeam: string | null;

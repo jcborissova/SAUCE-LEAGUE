@@ -10,7 +10,11 @@ import {
   getMatchBoxscore,
   groupBoxscoreBySide,
 } from "../../services/tournamentAnalytics";
-import type { TournamentResultBoxscoreRow, TournamentResultMatchOverview } from "../../types/tournament-analytics";
+import type {
+  TournamentAnalyticsPhase,
+  TournamentResultBoxscoreRow,
+  TournamentResultMatchOverview,
+} from "../../types/tournament-analytics";
 import type { ViewerResultsFilters } from "../../utils/viewer-preferences";
 
 type MatchBoxscoreState = {
@@ -48,6 +52,31 @@ const computePra = (row: TournamentResultBoxscoreRow) =>
   row.points + row.rebounds + row.assists - row.turnovers;
 
 const formatPra = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1));
+
+const PHASE_META: Record<
+  TournamentAnalyticsPhase,
+  { label: string; className: string; cardClassName: string; headerClassName: string }
+> = {
+  regular: {
+    label: "Regular",
+    className: "border-[#38bdf8]/24 bg-[#0ea5e9]/10 text-[#0369a1] dark:text-[#7dd3fc]",
+    cardClassName: "border-[hsl(var(--border)/0.72)] bg-[hsl(var(--surface-1))]",
+    headerClassName:
+      "bg-[linear-gradient(115deg,hsl(var(--primary)/0.96),hsl(var(--primary)/0.78))] text-[hsl(var(--primary-foreground))]",
+  },
+  playoffs: {
+    label: "Playoffs",
+    className: "border-[#f59e0b]/24 bg-[#f59e0b]/10 text-[#b45309] dark:text-[#fcd34d]",
+    cardClassName: "border-[#f59e0b]/18 bg-[linear-gradient(180deg,rgba(245,158,11,0.08),rgba(245,158,11,0.02))]",
+    headerClassName: "bg-[linear-gradient(115deg,#d97706,#f59e0b)] text-white",
+  },
+  finals: {
+    label: "Finals",
+    className: "border-[#fb7185]/24 bg-[#fb7185]/10 text-[#be123c] dark:text-[#fda4af]",
+    cardClassName: "border-[#fb7185]/18 bg-[linear-gradient(180deg,rgba(251,113,133,0.08),rgba(251,113,133,0.02))]",
+    headerClassName: "bg-[linear-gradient(115deg,#be123c,#fb7185)] text-white",
+  },
+};
 
 const normalizeResultsFilters = (filters?: ViewerResultsFilters): ViewerResultsFilters => ({
   team: filters?.team?.trim() ? filters.team.trim() : null,
@@ -225,6 +254,18 @@ const TournamentResultsView = ({
   };
 
   const summary = useMemo(() => getTournamentResultsSummary(matches), [matches]);
+  const regularMatches = useMemo(
+    () => matches.filter((match) => match.phase === "regular").length,
+    [matches]
+  );
+  const playoffMatches = useMemo(
+    () => matches.filter((match) => match.phase === "playoffs").length,
+    [matches]
+  );
+  const finalsMatches = useMemo(
+    () => matches.filter((match) => match.phase === "finals").length,
+    [matches]
+  );
 
   const teams = useMemo(
     () =>
@@ -309,7 +350,7 @@ const TournamentResultsView = ({
         <p className="text-sm text-[hsl(var(--text-subtle))]">Resultados por juego, con acceso rápido a detalle completo.</p>
       )}
 
-      <div className="grid grid-cols-2 gap-2 text-center text-xs sm:max-w-2xl sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-4 xl:grid-cols-7">
         <div className="rounded-lg border bg-[hsl(var(--surface-1))] px-2 py-2">
           <p className="text-[hsl(var(--text-subtle))]">Partidos</p>
           <p className="text-sm font-semibold">{summary.playedMatches}</p>
@@ -325,6 +366,18 @@ const TournamentResultsView = ({
         <div className="rounded-lg border bg-[hsl(var(--surface-1))] px-2 py-2">
           <p className="text-[hsl(var(--text-subtle))]">Promedio por juego</p>
           <p className="text-sm font-semibold">{summary.avgPoints}</p>
+        </div>
+        <div className="rounded-lg border border-[#38bdf8]/18 bg-[linear-gradient(180deg,rgba(14,165,233,0.1),rgba(14,165,233,0.03))] px-2 py-2">
+          <p className="text-[#0369a1] dark:text-[#7dd3fc]">Regular</p>
+          <p className="text-sm font-semibold">{regularMatches}</p>
+        </div>
+        <div className="rounded-lg border border-[#f59e0b]/18 bg-[linear-gradient(180deg,rgba(245,158,11,0.1),rgba(245,158,11,0.03))] px-2 py-2">
+          <p className="text-[#b45309] dark:text-[#fcd34d]">Playoffs</p>
+          <p className="text-sm font-semibold">{playoffMatches}</p>
+        </div>
+        <div className="rounded-lg border border-[#fb7185]/18 bg-[linear-gradient(180deg,rgba(251,113,133,0.1),rgba(251,113,133,0.03))] px-2 py-2">
+          <p className="text-[#be123c] dark:text-[#fda4af]">Finals</p>
+          <p className="text-sm font-semibold">{finalsMatches}</p>
         </div>
       </div>
 
@@ -414,11 +467,19 @@ const TournamentResultsView = ({
                   const expanded = expandedMatchId === match.matchId;
                   const boxscoreState = boxscoreByMatch[match.matchId];
                   const groupedBox = boxscoreState?.rows ? groupBoxscoreBySide(boxscoreState.rows) : null;
+                  const phaseMeta = PHASE_META[match.phase];
 
                   return (
-                    <div key={match.matchId} className="px-3 py-3">
+                    <div key={match.matchId} className={`px-3 py-3 ${phaseMeta.cardClassName}`}>
                       <div className="flex items-center justify-between text-xs text-[hsl(var(--text-subtle))]">
-                        <span className="rounded-md border bg-[hsl(var(--surface-2))] px-2 py-1">{formatTime(match.matchTime)}</span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-md border bg-[hsl(var(--surface-2))] px-2 py-1">{formatTime(match.matchTime)}</span>
+                          <span
+                            className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${phaseMeta.className}`}
+                          >
+                            {phaseMeta.label}
+                          </span>
+                        </div>
                         <span>{match.winnerTeam ? "Finalizado" : "Programado"}</span>
                       </div>
 
@@ -547,12 +608,13 @@ const MatchDetailFullscreen = ({
   onReload: () => void;
 }) => {
   const grouped = boxscoreState?.rows ? groupBoxscoreBySide(boxscoreState.rows) : null;
+  const phaseMeta = PHASE_META[match.phase];
 
   return (
     <div className="fixed inset-0 z-[70] bg-[hsl(var(--background))]">
       <div className="flex h-full flex-col">
         <header className="sticky top-0 z-10 border-b bg-[hsl(var(--surface-1))]">
-          <div className="bg-[linear-gradient(115deg,hsl(var(--primary)/0.96),hsl(var(--primary)/0.78))] px-3 py-3 text-[hsl(var(--primary-foreground))] sm:px-5">
+          <div className={`${phaseMeta.headerClassName} px-3 py-3 sm:px-5`}>
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
               <p className="truncate text-sm font-semibold sm:text-base">{match.teamA}</p>
               <p className="text-lg font-black tabular-nums sm:text-2xl">
@@ -574,6 +636,13 @@ const MatchDetailFullscreen = ({
                 <p className="text-xs text-[hsl(var(--text-subtle))]">
                   {formatDateLabel(match.matchDate)} · {formatTime(match.matchTime)}
                 </p>
+                <div className="mt-1 flex justify-end">
+                  <span
+                    className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${phaseMeta.className}`}
+                  >
+                    {phaseMeta.label}
+                  </span>
+                </div>
               </div>
             </div>
           </div>

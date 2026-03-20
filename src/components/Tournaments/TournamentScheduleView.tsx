@@ -4,7 +4,8 @@ import dayjs from "dayjs";
 import "dayjs/locale/es";
 import LoadingSpinner from "../LoadingSpinner";
 import AppSelect from "../ui/AppSelect";
-import type { ViewerMatchFilters } from "../../types/tournament-analytics";
+import { getTournamentMatchPhaseMap } from "../../services/tournamentAnalytics";
+import type { TournamentAnalyticsPhase, ViewerMatchFilters } from "../../types/tournament-analytics";
 
 type Props = {
   tournamentId: string;
@@ -20,6 +21,7 @@ type MatchRow = {
   winner_team: string | null;
   match_date: string | null;
   match_time: string | null;
+  phase: TournamentAnalyticsPhase;
 };
 
 type MatchGroup = {
@@ -36,6 +38,27 @@ const DEFAULT_FILTERS: ViewerMatchFilters = {
 };
 
 dayjs.locale("es");
+
+const PHASE_META: Record<
+  TournamentAnalyticsPhase,
+  { label: string; className: string; rowClassName: string }
+> = {
+  regular: {
+    label: "Regular",
+    className: "border-[#38bdf8]/24 bg-[#0ea5e9]/10 text-[#0369a1] dark:text-[#7dd3fc]",
+    rowClassName: "border-[hsl(var(--border)/0.72)] bg-[hsl(var(--surface-1))]",
+  },
+  playoffs: {
+    label: "Playoffs",
+    className: "border-[#f59e0b]/24 bg-[#f59e0b]/10 text-[#b45309] dark:text-[#fcd34d]",
+    rowClassName: "border-[#f59e0b]/18 bg-[linear-gradient(180deg,rgba(245,158,11,0.08),rgba(245,158,11,0.02))]",
+  },
+  finals: {
+    label: "Finals",
+    className: "border-[#fb7185]/24 bg-[#fb7185]/10 text-[#be123c] dark:text-[#fda4af]",
+    rowClassName: "border-[#fb7185]/18 bg-[linear-gradient(180deg,rgba(251,113,133,0.08),rgba(251,113,133,0.02))]",
+  },
+};
 
 const formatDateLabel = (value: string | null) => {
   if (!value) return "Fecha por definir";
@@ -103,18 +126,26 @@ const TournamentScheduleView: React.FC<Props> = ({
   const fetchMatches = useCallback(async () => {
     setLoading(true);
 
-    const { data, error } = await supabase
-      .from("matches")
-      .select("id, team_a, team_b, winner_team, match_date, match_time")
-      .eq("tournament_id", tournamentId)
-      .order("match_date", { ascending: true })
-      .order("match_time", { ascending: true })
-      .order("id", { ascending: true });
+    const [phaseByMatchId, { data, error }] = await Promise.all([
+      getTournamentMatchPhaseMap(tournamentId).catch(() => new Map<number, TournamentAnalyticsPhase>()),
+      supabase
+        .from("matches")
+        .select("id, team_a, team_b, winner_team, match_date, match_time")
+        .eq("tournament_id", tournamentId)
+        .order("match_date", { ascending: true })
+        .order("match_time", { ascending: true })
+        .order("id", { ascending: true }),
+    ]);
 
     if (error) {
       setMatches([]);
     } else {
-      setMatches((data ?? []) as MatchRow[]);
+      setMatches(
+        ((data ?? []) as Array<Omit<MatchRow, "phase">>).map((match) => ({
+          ...match,
+          phase: phaseByMatchId.get(Number(match.id)) ?? "regular",
+        }))
+      );
     }
 
     setLoading(false);
@@ -214,6 +245,9 @@ const TournamentScheduleView: React.FC<Props> = ({
   const totalMatches = matches.length;
   const completedMatches = matches.filter((match) => Boolean(match.winner_team)).length;
   const pendingMatches = totalMatches - completedMatches;
+  const regularMatches = matches.filter((match) => match.phase === "regular").length;
+  const playoffMatches = matches.filter((match) => match.phase === "playoffs").length;
+  const finalsMatches = matches.filter((match) => match.phase === "finals").length;
 
   return (
     <section className="space-y-4">
@@ -226,7 +260,7 @@ const TournamentScheduleView: React.FC<Props> = ({
         <p className="text-sm text-[hsl(var(--text-subtle))]">Calendario general del torneo, sin vista por jornada.</p>
       )}
 
-      <div className="grid grid-cols-3 gap-2 text-center text-xs">
+      <div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-3 xl:grid-cols-6">
         <div className="rounded-lg border bg-[hsl(var(--surface-1))] px-2 py-2">
           <p className="text-[hsl(var(--text-subtle))]">Total</p>
           <p className="text-sm font-semibold">{totalMatches}</p>
@@ -238,6 +272,18 @@ const TournamentScheduleView: React.FC<Props> = ({
         <div className="rounded-lg border bg-[hsl(var(--surface-1))] px-2 py-2">
           <p className="text-[hsl(var(--text-subtle))]">Pendientes</p>
           <p className="text-sm font-semibold">{pendingMatches}</p>
+        </div>
+        <div className="rounded-lg border border-[#38bdf8]/18 bg-[linear-gradient(180deg,rgba(14,165,233,0.1),rgba(14,165,233,0.03))] px-2 py-2">
+          <p className="text-[#0369a1] dark:text-[#7dd3fc]">Regular</p>
+          <p className="text-sm font-semibold">{regularMatches}</p>
+        </div>
+        <div className="rounded-lg border border-[#f59e0b]/18 bg-[linear-gradient(180deg,rgba(245,158,11,0.1),rgba(245,158,11,0.03))] px-2 py-2">
+          <p className="text-[#b45309] dark:text-[#fcd34d]">Playoffs</p>
+          <p className="text-sm font-semibold">{playoffMatches}</p>
+        </div>
+        <div className="rounded-lg border border-[#fb7185]/18 bg-[linear-gradient(180deg,rgba(251,113,133,0.1),rgba(251,113,133,0.03))] px-2 py-2">
+          <p className="text-[#be123c] dark:text-[#fda4af]">Finals</p>
+          <p className="text-sm font-semibold">{finalsMatches}</p>
         </div>
       </div>
 
@@ -304,11 +350,19 @@ const TournamentScheduleView: React.FC<Props> = ({
                   const played = Boolean(match.winner_team);
                   const winnerIsA = played && match.winner_team === match.team_a;
                   const winnerIsB = played && match.winner_team === match.team_b;
+                  const phaseMeta = PHASE_META[match.phase];
 
                   return (
-                    <div key={match.id} className="px-3 py-3">
+                    <div key={match.id} className={`px-3 py-3 ${phaseMeta.rowClassName}`}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${phaseMeta.className}`}
+                            >
+                              {phaseMeta.label}
+                            </span>
+                          </div>
                           <p
                             className={`truncate text-sm font-semibold sm:text-base ${winnerIsA ? "text-[hsl(var(--primary))]" : ""}`}
                           >

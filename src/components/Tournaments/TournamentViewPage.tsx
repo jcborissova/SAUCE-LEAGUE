@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { Player } from "../../types/player";
-import { ArrowPathIcon } from "@heroicons/react/24/solid";
+import {
+  ArrowPathIcon,
+  BoltIcon,
+  ChartBarIcon,
+  SparklesIcon,
+  TrophyIcon,
+} from "@heroicons/react/24/solid";
 import {
   ArrowDownTrayIcon,
   ArrowLeftIcon,
@@ -55,11 +61,11 @@ type Team = {
   players: Player[];
 };
 
-const MAIN_TABS: Array<{ key: TournamentViewMainTab; label: string }> = [
-  { key: "matches", label: "Partidos" },
-  { key: "standings", label: "Posiciones" },
-  { key: "stats", label: "Estadísticas" },
-  { key: "players", label: "Equipos" },
+const MAIN_TABS: Array<{ key: TournamentViewMainTab; label: string; helper: string }> = [
+  { key: "matches", label: "Partidos", helper: "Calendario y resultados del torneo completo." },
+  { key: "standings", label: "Posiciones", helper: "La fase regular define la siembra oficial." },
+  { key: "stats", label: "Estadísticas", helper: "Analíticas por fase y lectura de cruces." },
+  { key: "players", label: "Equipos", helper: "Plantillas y seguimiento de jugadores del torneo." },
 ];
 
 const UUID_PATTERN =
@@ -341,6 +347,22 @@ const TournamentViewPage: React.FC = () => {
     [teams]
   );
   const resolvedRulesPdfUrl = rulesPdfUrl || TOURNAMENT_RULES_PDF_URL;
+  const activeMainTabMeta = useMemo(
+    () => MAIN_TABS.find((tab) => tab.key === activeTab) ?? MAIN_TABS[0],
+    [activeTab]
+  );
+  const competitionFocus = useMemo<"regular" | "playoffs" | "neutral">(() => {
+    if (activeTab === "standings") return "regular";
+    if (activeTab === "stats" && statsSubtab === "analytics") return "regular";
+    if (activeTab === "stats" && statsSubtab === "playoffs") return "playoffs";
+    return "neutral";
+  }, [activeTab, statsSubtab]);
+  const focusPillClassName =
+    competitionFocus === "regular"
+      ? "border-[#38bdf8]/28 bg-[#0ea5e9]/10 text-[#0369a1] dark:text-[#7dd3fc]"
+      : competitionFocus === "playoffs"
+        ? "border-[#f59e0b]/28 bg-[#f59e0b]/12 text-[#b45309] dark:text-[#fcd34d]"
+        : "border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] text-[hsl(var(--text-subtle))]";
 
   const togglePlayerFollow = (playerId: number) => {
     setViewerFollows((prev) => {
@@ -390,55 +412,132 @@ const TournamentViewPage: React.FC = () => {
   return (
     <div className="w-full space-y-4">
       <header className="w-full">
-        <div className="overflow-hidden border border-[hsl(var(--border)/0.92)] bg-[hsl(var(--surface-1))] shadow-[0_1px_0_hsl(var(--border)/0.35)]">
+        <div className="overflow-hidden rounded-[16px] border border-[hsl(var(--border)/0.92)] bg-[hsl(var(--surface-1))] shadow-[0_1px_0_hsl(var(--border)/0.35)]">
           <div className="h-0.5 bg-[linear-gradient(90deg,hsl(var(--primary)),hsl(var(--chart-2)))]" />
-          <div className="border-b bg-[hsl(var(--surface-1))]">
-            <div className="flex w-full flex-wrap items-center justify-between gap-3 px-3 py-4 sm:px-4 sm:py-5 lg:px-5">
-              <div className="min-w-0">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-[hsl(var(--text-subtle))]">
-                  Torneo
-                </p>
-                <h1 className="truncate text-2xl font-bold sm:text-3xl">
-                  {tournamentLoading ? "Cargando torneo..." : tournamentName}
-                </h1>
+          <div className="relative overflow-hidden border-b bg-[linear-gradient(180deg,hsl(var(--surface-1))_0%,hsl(var(--surface-2)/0.55)_100%)]">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.14),transparent_34%),radial-gradient(circle_at_top_right,rgba(245,158,11,0.12),transparent_28%)]" />
+            <div className="relative px-3 py-4 sm:px-4 sm:py-5 lg:px-5">
+              <div className="flex w-full flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-[hsl(var(--text-subtle))]">
+                      Torneo
+                    </p>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${focusPillClassName}`}
+                    >
+                      {competitionFocus === "regular"
+                        ? "Temporada regular"
+                        : competitionFocus === "playoffs"
+                          ? "Playoffs"
+                          : activeMainTabMeta.label}
+                    </span>
+                  </div>
+                  <h1 className="mt-1 truncate text-2xl font-bold sm:text-3xl">
+                    {tournamentLoading ? "Cargando torneo..." : tournamentName}
+                  </h1>
+                  <p className="mt-1 max-w-2xl text-sm text-[hsl(var(--muted-foreground))]">
+                    {activeMainTabMeta.helper}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <button
+                    type="button"
+                    onClick={handleShareView}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1)/0.94)] text-[hsl(var(--foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--surface-1))] sm:h-[40px] sm:w-auto sm:px-3"
+                    title="Compartir vista"
+                    aria-label="Compartir vista"
+                  >
+                    <ArrowUpOnSquareIcon className="h-4 w-4" />
+                    <span className="sr-only sm:not-sr-only sm:ml-2 sm:text-sm sm:font-semibold">
+                      Compartir
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRulesOpen(true)}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1)/0.94)] text-[hsl(var(--foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--surface-1))] sm:h-[40px] sm:w-auto sm:px-3"
+                    title="Reglamento"
+                    aria-label="Abrir reglamento"
+                  >
+                    <DocumentTextIcon className="h-4 w-4" />
+                    <span className="sr-only sm:not-sr-only sm:ml-2 sm:text-sm sm:font-semibold">
+                      Reglas
+                    </span>
+                  </button>
+                  <Link
+                    to="/tournaments"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1)/0.94)] text-[hsl(var(--foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--surface-1))] sm:h-[40px] sm:w-auto sm:px-3"
+                    title="Volver a torneos"
+                    aria-label="Volver a torneos"
+                  >
+                    <ArrowLeftIcon className="h-4 w-4" />
+                    <span className="sr-only sm:not-sr-only sm:ml-2 sm:text-sm sm:font-semibold">
+                      Volver
+                    </span>
+                  </Link>
+                </div>
               </div>
 
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <button
-                  type="button"
-                  onClick={handleShareView}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] text-[hsl(var(--foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--surface-2))] sm:h-[40px] sm:w-auto sm:px-3"
-                  title="Compartir vista"
-                  aria-label="Compartir vista"
-                >
-                  <ArrowUpOnSquareIcon className="h-4 w-4" />
-                  <span className="sr-only sm:not-sr-only sm:ml-2 sm:text-sm sm:font-semibold">
-                    Compartir
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRulesOpen(true)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] text-[hsl(var(--foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--surface-2))] sm:h-[40px] sm:w-auto sm:px-3"
-                  title="Reglamento"
-                  aria-label="Abrir reglamento"
-                >
-                  <DocumentTextIcon className="h-4 w-4" />
-                  <span className="sr-only sm:not-sr-only sm:ml-2 sm:text-sm sm:font-semibold">
-                    Reglas
-                  </span>
-                </button>
-                <Link
-                  to="/tournaments"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] text-[hsl(var(--foreground))] transition-colors duration-[var(--motion-hover)] hover:bg-[hsl(var(--surface-2))] sm:h-[40px] sm:w-auto sm:px-3"
-                  title="Volver a torneos"
-                  aria-label="Volver a torneos"
-                >
-                  <ArrowLeftIcon className="h-4 w-4" />
-                  <span className="sr-only sm:not-sr-only sm:ml-2 sm:text-sm sm:font-semibold">
-                    Volver
-                  </span>
-                </Link>
+              <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+                <div className="rounded-[14px] border border-[hsl(var(--border)/0.78)] bg-[hsl(var(--surface-1)/0.88)] px-4 py-3 shadow-[inset_0_1px_0_hsl(var(--surface-1)/0.7)]">
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-subtle))]">
+                    <SparklesIcon className="h-4 w-4 text-[hsl(var(--primary))]" />
+                    Lectura del torneo
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+                    La experiencia ahora distingue mejor entre la carrera de la
+                    <span className="font-semibold text-[hsl(var(--foreground))]"> temporada regular</span>,
+                    donde se define la siembra, y la tensión de los
+                    <span className="font-semibold text-[hsl(var(--foreground))]"> playoffs</span>,
+                    donde cada serie empuja el cierre del torneo.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div
+                    className={`rounded-[14px] border px-3.5 py-3 shadow-[0_8px_24px_-20px_rgba(14,165,233,0.45)] transition-colors ${
+                      competitionFocus === "regular"
+                        ? "border-[#38bdf8]/32 bg-[linear-gradient(180deg,rgba(14,165,233,0.14),rgba(14,165,233,0.04))]"
+                        : "border-[hsl(var(--border)/0.8)] bg-[hsl(var(--surface-1)/0.82)]"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] border border-[#38bdf8]/28 bg-[#0ea5e9]/12 text-[#0284c7] dark:text-[#7dd3fc]">
+                        <ChartBarIcon className="h-5 w-5" />
+                      </span>
+                      <div>
+                        <p className="text-sm font-semibold">Regular Season</p>
+                        <p className="text-[11px] text-[hsl(var(--text-subtle))]">Tabla y siembra</p>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
+                      Posiciones, consistencia y analíticas que ordenan el camino al Top 4.
+                    </p>
+                  </div>
+
+                  <div
+                    className={`rounded-[14px] border px-3.5 py-3 shadow-[0_8px_24px_-20px_rgba(245,158,11,0.45)] transition-colors ${
+                      competitionFocus === "playoffs"
+                        ? "border-[#f59e0b]/34 bg-[linear-gradient(180deg,rgba(245,158,11,0.16),rgba(251,191,36,0.05))]"
+                        : "border-[hsl(var(--border)/0.8)] bg-[hsl(var(--surface-1)/0.82)]"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] border border-[#f59e0b]/30 bg-[#f59e0b]/12 text-[#d97706] dark:text-[#fcd34d]">
+                        <TrophyIcon className="h-5 w-5" />
+                      </span>
+                      <div>
+                        <p className="text-sm font-semibold">Playoffs</p>
+                        <p className="text-[11px] text-[hsl(var(--text-subtle))]">Cruces y definición</p>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
+                      Series, avance por rondas y cierre del torneo con lectura de bracket.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -512,6 +611,50 @@ const TournamentViewPage: React.FC = () => {
 
         {activeTab === "stats" ? (
           <div className="space-y-3">
+            <div className="rounded-[14px] border border-[hsl(var(--border)/0.78)] bg-[linear-gradient(180deg,hsl(var(--surface-1))_0%,hsl(var(--surface-2)/0.44)_100%)] px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-subtle))]">
+                    Enfoque de lectura
+                  </p>
+                  <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                    Alterna entre regular season, playoffs y duelo directo sin perder contexto visual.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${
+                      statsSubtab === "analytics"
+                        ? "border-[#38bdf8]/28 bg-[#0ea5e9]/10 text-[#0369a1] dark:text-[#7dd3fc]"
+                        : "border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] text-[hsl(var(--text-subtle))]"
+                    }`}
+                  >
+                    <ChartBarIcon className="h-3.5 w-3.5" />
+                    Regular
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${
+                      statsSubtab === "playoffs"
+                        ? "border-[#f59e0b]/28 bg-[#f59e0b]/12 text-[#b45309] dark:text-[#fcd34d]"
+                        : "border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] text-[hsl(var(--text-subtle))]"
+                    }`}
+                  >
+                    <TrophyIcon className="h-3.5 w-3.5" />
+                    Playoffs
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${
+                      statsSubtab === "duel"
+                        ? "border-[#fb7185]/28 bg-[#fb7185]/10 text-[#be123c] dark:text-[#fda4af]"
+                        : "border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] text-[hsl(var(--text-subtle))]"
+                    }`}
+                  >
+                    <BoltIcon className="h-3.5 w-3.5" />
+                    Duelo
+                  </span>
+                </div>
+              </div>
+            </div>
             <SegmentedControl
               options={[
                 { value: "analytics", label: "Analíticas" },
