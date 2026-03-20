@@ -124,7 +124,7 @@ const LeadersPanel: React.FC<LeadersPanelProps> = ({
             Esta categoría usa solo temporada regular y premia salto real: compara el inicio vs el cierre del jugador.
           </p>
           <p className="mt-1 tabular-nums">
-            Score progreso (escala compacta) = salto de VAL + tendencia por juego + mejora de TS% ajustada por volumen + crecimiento de carga ofensiva + control de pérdidas
+            Score progreso (escala compacta) = salto de VAL + tendencia por juego + mejora de TS% ajustada por volumen + crecimiento de carga ofensiva validado por eficiencia + control de pérdidas
           </p>
           <p className="mt-1">
             También favorece a quienes arrancaron desde una base no élite y luego sostuvieron la mejora. Penaliza perfiles ya consolidados

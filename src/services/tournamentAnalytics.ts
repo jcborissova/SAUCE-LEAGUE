@@ -962,24 +962,40 @@ const buildMostImprovedLeaders = async (
           1
         )
       );
+      const efficiencyValidatedShotLoadDelta =
+        item.shotLoadDelta > 0
+          ? item.tsPctDelta > 0
+            ? round2(item.shotLoadDelta * clamp(item.tsPctDelta / 6, 0.35, 1))
+            : 0
+          : round2(item.shotLoadDelta * 0.15);
       const baseScore =
         item.valuationDelta * 4.2 +
         item.trendSlope * 10 +
-        item.tsPctDelta * 0.55 +
-        item.shotLoadDelta * 1.1 +
+        item.tsPctDelta * 0.9 +
+        efficiencyValidatedShotLoadDelta * 0.35 +
         item.turnoversDelta * 1.4 +
         item.praDelta * 0.8 +
         item.consistencyBonus;
       const improvementGate = clamp(
-        (item.valuationDelta * 0.8 + item.trendSlope * 4 + item.praDelta * 0.25) / 6,
+        (
+          item.valuationDelta * 0.75 +
+          item.trendSlope * 4 +
+          item.praDelta * 0.2 +
+          item.tsPctDelta * 0.18
+        ) / 6,
         0,
         1.25
       );
+      const efficiencyGate = clamp(0.85 + item.tsPctDelta / 20, 0.55, 1.2);
       const sampleMultiplier = clamp(0.75 + Math.min(1, item.gamesPlayed / 6) * 0.25, 0.75, 1);
       const breakoutMultiplier = clamp(1 + startBoost * 0.55 - baselinePenalty * 0.8, 0.18, 1.55);
 
       const rawScore = round2(
-        Math.max(0, baseScore) * improvementGate * sampleMultiplier * breakoutMultiplier
+        Math.max(0, baseScore) *
+          improvementGate *
+          efficiencyGate *
+          sampleMultiplier *
+          breakoutMultiplier
       );
       const score = compactMostImprovedScore(rawScore);
       const baselineLabel =
