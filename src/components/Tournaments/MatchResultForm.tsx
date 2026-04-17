@@ -2,7 +2,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TrophyIcon, XMarkIcon, ArrowPathIcon } from "@heroicons/react/24/solid";
 import { supabase } from "../../lib/supabase";
-import { saveMatchStats, syncMatchParticipantsFromCurrentTeams } from "../../services/tournamentAnalytics";
+import {
+  saveMatchScoreSummary,
+  saveMatchStats,
+  syncMatchParticipantsFromCurrentTeams,
+} from "../../services/tournamentAnalytics";
 import type { MatchPlayerStatsInput } from "../../types/tournament-analytics";
 import AppSelect from "../ui/AppSelect";
 
@@ -44,6 +48,9 @@ type MatchResultDraft = {
   matchId: number;
   winnerTeam: string;
   teams: { A: string; B: string };
+  summaryOnly?: boolean;
+  manualScores?: { A: string; B: string };
+  resultNote?: string;
   players: PlayerRow[];
   stats: Record<string, StatsLine>;
   playedByPlayer: Record<string, boolean>;
@@ -306,6 +313,12 @@ const readMatchResultDraft = (matchId: number): MatchResultDraft | null => {
         A: toStringSafe(parsed.teams?.A),
         B: toStringSafe(parsed.teams?.B),
       },
+      summaryOnly: Boolean(parsed.summaryOnly),
+      manualScores: {
+        A: toStringSafe(parsed.manualScores?.A),
+        B: toStringSafe(parsed.manualScores?.B),
+      },
+      resultNote: toStringSafe(parsed.resultNote),
       players,
       stats,
       playedByPlayer,
@@ -355,6 +368,9 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
   const [players, setPlayers] = useState<PlayerRow[]>([]);
   const [teams, setTeams] = useState<{ A: string; B: string }>({ A: "", B: "" });
   const [winnerTeam, setWinnerTeam] = useState("");
+  const [summaryOnly, setSummaryOnly] = useState(false);
+  const [manualScores, setManualScores] = useState<{ A: string; B: string }>({ A: "", B: "" });
+  const [resultNote, setResultNote] = useState("");
   const [stats, setStats] = useState<Record<number, StatsLine>>({});
   const [playedByPlayer, setPlayedByPlayer] = useState<Record<number, boolean>>({});
   const [loading, setLoading] = useState(true);
@@ -387,6 +403,12 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
         A: toStringSafe(teams.A),
         B: toStringSafe(teams.B),
       },
+      summaryOnly,
+      manualScores: {
+        A: toStringSafe(manualScores.A),
+        B: toStringSafe(manualScores.B),
+      },
+      resultNote: toStringSafe(resultNote),
       players: players.map((player) => ({
         playerId: player.playerId,
         teamSide: player.teamSide,
@@ -401,7 +423,20 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
 
     writeMatchResultDraft(matchId, payload);
     setDraftSavedAt(nowIso);
-  }, [draftReady, matchId, playedByPlayer, players, stats, teams.A, teams.B, winnerTeam]);
+  }, [
+    draftReady,
+    manualScores.A,
+    manualScores.B,
+    matchId,
+    playedByPlayer,
+    players,
+    resultNote,
+    stats,
+    summaryOnly,
+    teams.A,
+    teams.B,
+    winnerTeam,
+  ]);
 
   const loadData = useCallback(async () => {
     const requestId = loadRequestRef.current + 1;
@@ -415,19 +450,34 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
     const localDraft = readMatchResultDraft(matchId);
 
     try {
-      const matchResult = await runQueryWithRetry<{
+      type MatchRow = {
         id: number;
         tournament_id: string | null;
         team_a: string | null;
         team_b: string | null;
         winner_team: string | null;
-      }>(() =>
+        team_a_manual_points?: number | null;
+        team_b_manual_points?: number | null;
+        result_note?: string | null;
+      };
+
+      const matchResultWithSummary = await runQueryWithRetry<MatchRow>(() =>
         supabase
           .from("matches")
-          .select("id, tournament_id, team_a, team_b, winner_team")
+          .select("id, tournament_id, team_a, team_b, winner_team, team_a_manual_points, team_b_manual_points, result_note")
           .eq("id", matchId)
           .single()
       );
+
+      const matchResult = !matchResultWithSummary.error
+        ? matchResultWithSummary
+        : await runQueryWithRetry<MatchRow>(() =>
+            supabase
+              .from("matches")
+              .select("id, tournament_id, team_a, team_b, winner_team")
+              .eq("id", matchId)
+              .single()
+          );
 
       if (matchResult.error || !matchResult.data) {
         throw new Error(matchResult.error?.message ?? "No se encontró el partido.");
@@ -674,6 +724,22 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
       const mergedStats: Record<number, StatsLine> = { ...initialStats };
       const mergedPlayed: Record<number, boolean> = { ...initialPlayed };
       let mergedWinner = toStringSafe(match.winner_team);
+      let mergedSummaryOnly =
+        !hasPersistedRows &&
+        (match.team_a_manual_points !== null ||
+          match.team_b_manual_points !== null ||
+          Boolean(toStringSafe(match.result_note)));
+      let mergedManualScores = {
+        A:
+          match.team_a_manual_points === null || match.team_a_manual_points === undefined
+            ? ""
+            : String(toNonNegativeInt(match.team_a_manual_points)),
+        B:
+          match.team_b_manual_points === null || match.team_b_manual_points === undefined
+            ? ""
+            : String(toNonNegativeInt(match.team_b_manual_points)),
+      };
+      let mergedResultNote = toStringSafe(match.result_note);
 
       if (localDraft) {
         parsedParticipants.forEach((player) => {
@@ -693,12 +759,22 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
         if (draftWinner && (draftWinner === resolvedTeams.A || draftWinner === resolvedTeams.B)) {
           mergedWinner = draftWinner;
         }
+
+        mergedSummaryOnly = Boolean(localDraft.summaryOnly);
+        mergedManualScores = {
+          A: toStringSafe(localDraft.manualScores?.A),
+          B: toStringSafe(localDraft.manualScores?.B),
+        };
+        mergedResultNote = toStringSafe(localDraft.resultNote);
       }
 
       if (loadRequestRef.current !== requestId) return;
 
       setTeams(resolvedTeams);
       setWinnerTeam(mergedWinner);
+      setSummaryOnly(mergedSummaryOnly);
+      setManualScores(mergedManualScores);
+      setResultNote(mergedResultNote);
       setPlayers(parsedParticipants);
       setStats(mergedStats);
       setPlayedByPlayer(mergedPlayed);
@@ -735,6 +811,12 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
         setPlayers(localDraft.players);
         setStats(fallbackStats);
         setPlayedByPlayer(fallbackPlayed);
+        setSummaryOnly(Boolean(localDraft.summaryOnly));
+        setManualScores({
+          A: toStringSafe(localDraft.manualScores?.A),
+          B: toStringSafe(localDraft.manualScores?.B),
+        });
+        setResultNote(toStringSafe(localDraft.resultNote));
         setWinnerTeam(
           fallbackWinner && (fallbackWinner === fallbackTeams.A || fallbackWinner === fallbackTeams.B)
             ? fallbackWinner
@@ -768,7 +850,19 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [draftReady, loading, persistDraft, playedByPlayer, players, stats, winnerTeam]);
+  }, [
+    draftReady,
+    loading,
+    manualScores.A,
+    manualScores.B,
+    persistDraft,
+    playedByPlayer,
+    players,
+    resultNote,
+    stats,
+    summaryOnly,
+    winnerTeam,
+  ]);
 
   const groupedTeams = useMemo(
     () => ({
@@ -779,6 +873,16 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
   );
 
   const pointsTotals = useMemo(() => {
+    if (summaryOnly) {
+      const teamA = toNonNegativeInt(manualScores.A);
+      const teamB = toNonNegativeInt(manualScores.B);
+      return {
+        teamA,
+        teamB,
+        total: teamA + teamB,
+      };
+    }
+
     let teamA = 0;
     let teamB = 0;
 
@@ -798,7 +902,7 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
       teamB,
       total: teamA + teamB,
     };
-  }, [playedByPlayer, players, stats]);
+  }, [manualScores.A, manualScores.B, playedByPlayer, players, stats, summaryOnly]);
 
   const setValue = (playerId: number, key: keyof StatsLine, value: string) => {
     const parsed = Number(value || 0);
@@ -831,6 +935,48 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
   const handleSubmit = async () => {
     if (!winnerTeam) {
       setErrorMessage("Selecciona el equipo ganador.");
+      return;
+    }
+
+    if (summaryOnly) {
+      const rawTeamA = toStringSafe(manualScores.A);
+      const rawTeamB = toStringSafe(manualScores.B);
+
+      if (!rawTeamA || !rawTeamB) {
+        setErrorMessage("Completa los puntos de ambos equipos.");
+        return;
+      }
+
+      const teamAPoints = toNonNegativeInt(rawTeamA);
+      const teamBPoints = toNonNegativeInt(rawTeamB);
+      const winnerPoints = winnerTeam === teams.A ? teamAPoints : teamBPoints;
+      const loserPoints = winnerTeam === teams.A ? teamBPoints : teamAPoints;
+
+      if (winnerPoints <= loserPoints) {
+        setErrorMessage("El marcador total no coincide con el equipo ganador.");
+        return;
+      }
+
+      setSaving(true);
+      setErrorMessage(null);
+
+      try {
+        await saveMatchScoreSummary({
+          matchId,
+          winnerTeam,
+          teamAPoints,
+          teamBPoints,
+          resultNote: resultNote || "No hay boxscore registrado para este juego.",
+        });
+        clearMatchResultDraft(matchId);
+        setDraftSavedAt(null);
+        onSaved?.();
+        onClose();
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : "No se pudo guardar el resultado.");
+      } finally {
+        setSaving(false);
+      }
       return;
     }
 
@@ -950,12 +1096,70 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
               </AppSelect>
             </label>
 
-            <p className="text-xs text-[hsl(var(--muted-foreground))]">
-              Marca si el jugador participó. Solo los jugadores marcados como "Jugó" cuentan para promedios (PPP/RPP/APP) y totales.
-            </p>
-            <p className="text-xs text-[hsl(var(--text-subtle))]">
-              Reglas automáticas activas: 3PA sube FGA si hace falta, 3PM ajusta FGM/3PA, FTM ajusta FTA y los puntos se sincronizan con los tiros cargados.
-            </p>
+            <label className="flex items-center gap-3 border bg-[hsl(var(--surface-1))] px-3 py-2.5 text-sm">
+              <input
+                type="checkbox"
+                checked={summaryOnly}
+                onChange={(event) => setSummaryOnly(event.target.checked)}
+                className="h-4 w-4"
+              />
+              <span className="font-medium">Guardar solo marcador total</span>
+            </label>
+
+            {summaryOnly ? (
+              <section className="space-y-3 border bg-[hsl(var(--surface-1))] p-3 text-sm sm:p-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="space-y-1">
+                    <span className="text-xs font-medium text-[hsl(var(--muted-foreground))]">{teams.A || "Equipo A"}</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={manualScores.A}
+                      onChange={(event) =>
+                        setManualScores((prev) => ({
+                          ...prev,
+                          A: event.target.value,
+                        }))
+                      }
+                      className="input-base w-full"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-medium text-[hsl(var(--muted-foreground))]">{teams.B || "Equipo B"}</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={manualScores.B}
+                      onChange={(event) =>
+                        setManualScores((prev) => ({
+                          ...prev,
+                          B: event.target.value,
+                        }))
+                      }
+                      className="input-base w-full"
+                    />
+                  </label>
+                </div>
+                <label className="block space-y-1">
+                  <span className="text-xs font-medium text-[hsl(var(--muted-foreground))]">Nota del resultado</span>
+                  <textarea
+                    value={resultNote}
+                    onChange={(event) => setResultNote(event.target.value)}
+                    placeholder="No hay boxscore registrado para este juego."
+                    className="input-base min-h-[76px] w-full resize-y"
+                  />
+                </label>
+              </section>
+            ) : (
+              <>
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                  Marca si el jugador participó. Solo los jugadores marcados como "Jugó" cuentan para promedios (PPP/RPP/APP) y totales.
+                </p>
+                <p className="text-xs text-[hsl(var(--text-subtle))]">
+                  Reglas automáticas activas: 3PA sube FGA si hace falta, 3PM ajusta FGM/3PA, FTM ajusta FTA y los puntos se sincronizan con los tiros cargados.
+                </p>
+              </>
+            )}
 
             <p className="text-xs text-[hsl(var(--muted-foreground))]">{draftStatusText}</p>
 
@@ -974,7 +1178,7 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
               </div>
             </div>
 
-            {(["A", "B"] as const).map((side) => (
+            {!summaryOnly && (["A", "B"] as const).map((side) => (
               <section key={side} className="space-y-3 border bg-[hsl(var(--surface-1))] p-3 sm:p-4">
                 <h3 className="text-base font-semibold sm:text-lg">{teams[side]}</h3>
 
@@ -1071,7 +1275,7 @@ const MatchResultForm: React.FC<Props> = ({ matchId, onClose, onSaved }) => {
           Cerrar editor
         </button>
         <button type="button" disabled={saving || loading} onClick={handleSubmit} className="btn-primary disabled:opacity-60">
-          {saving ? "Guardando..." : "Guardar resultado"}
+          {saving ? "Guardando..." : summaryOnly ? "Guardar marcador" : "Guardar resultado"}
         </button>
       </div>
     </section>

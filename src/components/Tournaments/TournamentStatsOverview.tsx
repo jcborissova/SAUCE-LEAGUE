@@ -69,6 +69,7 @@ type FullLeaderItem = {
 const PHASE_OPTIONS: Array<{ value: TournamentPhaseFilter; label: string }> = [
   { value: "regular", label: "Temporada regular" },
   { value: "playoffs", label: "Playoffs" },
+  { value: "finals", label: "Finales" },
   { value: "all", label: "Todas las fases" },
 ];
 
@@ -378,6 +379,7 @@ const inlineShareCardImages = async (root: HTMLElement): Promise<() => void> => 
 const phaseLabel = (phase: TournamentPhaseFilter): string => {
   if (phase === "regular") return "Temporada regular";
   if (phase === "playoffs") return "Playoffs";
+  if (phase === "finals") return "Finales";
   return "Todas las fases";
 };
 
@@ -577,7 +579,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
           getLeaders({ tournamentId, phase, metric: "defensive_impact", limit: 10 }),
           getMvpRaceFast({
             tournamentId,
-            phase: phase === "all" ? "regular" : phase === "playoffs" ? "playoffs" : "regular",
+            phase: phase === "all" ? "regular" : phase,
           }),
         ]);
 
@@ -1372,7 +1374,7 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
     }
   };
 
-  const mvpDetailPhase: TournamentPhaseFilter = phase === "playoffs" ? "playoffs" : "regular";
+  const mvpDetailPhase: TournamentPhaseFilter = phase === "all" ? "regular" : phase;
   const detailPhaseForFocus: TournamentPhaseFilter = focus === "most_improved" ? "regular" : phase;
 
   const openPlayerDetail = async (
@@ -2504,6 +2506,12 @@ const TournamentStatsOverview: React.FC<{ tournamentId: string; embedded?: boole
         loading={playerDetailLoading}
         errorMessage={playerDetailError}
         detail={playerDetail}
+        selectedPhase={lastSelectedPlayer?.phase ?? playerDetail?.phase ?? phase}
+        onPhaseChange={(selectedPhase) => {
+          const playerId = lastSelectedPlayer?.playerId ?? playerDetail?.line.playerId;
+          if (!playerId) return;
+          void openPlayerDetail(playerId, selectedPhase);
+        }}
         onClose={() => setPlayerDetailOpen(false)}
         onRetry={retryPlayerDetail}
       />

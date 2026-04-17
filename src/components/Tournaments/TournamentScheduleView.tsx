@@ -54,7 +54,7 @@ const PHASE_META: Record<
     rowClassName: "border-[#f59e0b]/18 bg-[linear-gradient(180deg,rgba(245,158,11,0.08),rgba(245,158,11,0.02))]",
   },
   finals: {
-    label: "Finals",
+    label: "Finales",
     className: "border-[#fb7185]/24 bg-[#fb7185]/10 text-[#be123c] dark:text-[#fda4af]",
     rowClassName: "border-[#fb7185]/18 bg-[linear-gradient(180deg,rgba(251,113,133,0.08),rgba(251,113,133,0.02))]",
   },
@@ -282,7 +282,7 @@ const TournamentScheduleView: React.FC<Props> = ({
           <p className="text-sm font-semibold">{playoffMatches}</p>
         </div>
         <div className="rounded-lg border border-[#fb7185]/18 bg-[linear-gradient(180deg,rgba(251,113,133,0.1),rgba(251,113,133,0.03))] px-2 py-2">
-          <p className="text-[#be123c] dark:text-[#fda4af]">Finals</p>
+          <p className="text-[#be123c] dark:text-[#fda4af]">Finales</p>
           <p className="text-sm font-semibold">{finalsMatches}</p>
         </div>
       </div>

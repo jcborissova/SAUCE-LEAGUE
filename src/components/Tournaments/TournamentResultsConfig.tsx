@@ -30,7 +30,9 @@ type MatchConfigRow = {
   winnerTeam: string | null;
   teamAPoints: number;
   teamBPoints: number;
+  hasScore: boolean;
   hasStats: boolean;
+  resultNote: string | null;
 };
 
 const TournamentResultsConfig: React.FC<Props> = ({ tournamentId }) => {
@@ -73,7 +75,9 @@ const TournamentResultsConfig: React.FC<Props> = ({ tournamentId }) => {
             winnerTeam: match.winner_team ? String(match.winner_team) : null,
             teamAPoints: score?.teamAPoints ?? 0,
             teamBPoints: score?.teamBPoints ?? 0,
+            hasScore: score?.hasScore ?? score?.hasStats ?? false,
             hasStats: score?.hasStats ?? false,
+            resultNote: score?.resultNote ?? null,
           };
         });
 
@@ -122,7 +126,7 @@ const TournamentResultsConfig: React.FC<Props> = ({ tournamentId }) => {
   const resolvedMatches = useMemo(() => matches ?? [], [matches]);
   const completedMatches = useMemo(() => resolvedMatches.filter((match) => Boolean(match.winnerTeam)).length, [resolvedMatches]);
   const totalPoints = useMemo(
-    () => resolvedMatches.reduce((acc, match) => acc + match.teamAPoints + match.teamBPoints, 0),
+    () => resolvedMatches.reduce((acc, match) => (match.hasScore ? acc + match.teamAPoints + match.teamBPoints : acc), 0),
     [resolvedMatches]
   );
   const selectedMatchInfo = useMemo(
@@ -197,15 +201,21 @@ const TournamentResultsConfig: React.FC<Props> = ({ tournamentId }) => {
                 {match.matchTime ? String(match.matchTime).slice(0, 5) : "--:--"}
               </p>
 
-              {match.hasStats ? (
+              {match.hasScore ? (
                 <p className="mb-1 text-xs font-semibold text-[hsl(var(--primary))]">
                   Marcador: {match.teamAPoints} - {match.teamBPoints}
                 </p>
               ) : null}
 
-              {match.hasStats ? (
+              {match.hasScore ? (
                 <p className="mb-3 text-xs text-[hsl(var(--muted-foreground))]">
                   Total del partido: {match.teamAPoints + match.teamBPoints} pts
+                </p>
+              ) : null}
+
+              {match.winnerTeam && !match.hasStats ? (
+                <p className="mb-3 text-xs text-[hsl(var(--muted-foreground))]">
+                  {match.resultNote ?? "Sin boxscore registrado."}
                 </p>
               ) : null}
 

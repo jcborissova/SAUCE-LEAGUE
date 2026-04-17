@@ -36,6 +36,7 @@ const DEFAULT_RESULTS_FILTERS: ViewerResultsFilters = {
   team: null,
   status: "all",
   window: "all",
+  phase: "all",
   date: null,
   hasScore: "all",
 };
@@ -71,17 +72,23 @@ const PHASE_META: Record<
     headerClassName: "bg-[linear-gradient(115deg,#d97706,#f59e0b)] text-white",
   },
   finals: {
-    label: "Finals",
+    label: "Finales",
     className: "border-[#fb7185]/24 bg-[#fb7185]/10 text-[#be123c] dark:text-[#fda4af]",
     cardClassName: "border-[#fb7185]/18 bg-[linear-gradient(180deg,rgba(251,113,133,0.08),rgba(251,113,133,0.02))]",
     headerClassName: "bg-[linear-gradient(115deg,#be123c,#fb7185)] text-white",
   },
 };
 
+const PHASE_ORDER: TournamentAnalyticsPhase[] = ["regular", "playoffs", "finals"];
+
 const normalizeResultsFilters = (filters?: ViewerResultsFilters): ViewerResultsFilters => ({
   team: filters?.team?.trim() ? filters.team.trim() : null,
   status: filters?.status === "pending" || filters?.status === "completed" ? filters.status : "all",
   window: filters?.window === "today" || filters?.window === "next7" ? filters.window : "all",
+  phase:
+    filters?.phase === "regular" || filters?.phase === "playoffs" || filters?.phase === "finals"
+      ? filters.phase
+      : "all",
   date: filters?.date?.trim() ? filters.date.trim() : null,
   hasScore: filters?.hasScore === "with_score" ? "with_score" : "all",
 });
@@ -90,6 +97,7 @@ const sameResultsFilters = (a: ViewerResultsFilters, b: ViewerResultsFilters): b
   a.team === b.team &&
   a.status === b.status &&
   a.window === b.window &&
+  a.phase === b.phase &&
   a.date === b.date &&
   a.hasScore === b.hasScore;
 
@@ -174,6 +182,7 @@ const TournamentResultsView = ({
     initialFilters?.team,
     initialFilters?.status,
     initialFilters?.window,
+    initialFilters?.phase,
     initialFilters?.date,
     initialFilters?.hasScore,
   ]);
@@ -296,11 +305,15 @@ const TournamentResultsView = ({
         return false;
       }
 
+      if (filters.phase !== "all" && match.phase !== filters.phase) {
+        return false;
+      }
+
       if (filters.date && match.matchDate !== filters.date) {
         return false;
       }
 
-      if (filters.hasScore === "with_score" && !match.hasStats) {
+      if (filters.hasScore === "with_score" && !match.hasScore) {
         return false;
       }
 
@@ -317,26 +330,36 @@ const TournamentResultsView = ({
   }, [filters, matches]);
 
   const groupedResults = useMemo(() => {
-    const grouped = new Map<string, TournamentResultMatchOverview[]>();
+    return PHASE_ORDER.map((phase) => {
+      const phaseRows = filteredMatches.filter((match) => match.phase === phase);
+      const grouped = new Map<string, TournamentResultMatchOverview[]>();
 
-    filteredMatches.forEach((match) => {
-      const key = match.matchDate ?? "__sin_fecha__";
-      const rows = grouped.get(key) ?? [];
-      rows.push(match);
-      grouped.set(key, rows);
-    });
+      phaseRows.forEach((match) => {
+        const key = match.matchDate ?? "__sin_fecha__";
+        const rows = grouped.get(key) ?? [];
+        rows.push(match);
+        grouped.set(key, rows);
+      });
 
-    return Array.from(grouped.entries())
-      .sort((a, b) => {
-        if (a[0] === "__sin_fecha__") return 1;
-        if (b[0] === "__sin_fecha__") return -1;
-        return new Date(b[0]).getTime() - new Date(a[0]).getTime();
-      })
-      .map(([key, rows]) => ({
-        key,
-        label: formatDateLabel(key === "__sin_fecha__" ? null : key),
-        rows: rows.sort((a, b) => formatTime(b.matchTime).localeCompare(formatTime(a.matchTime))),
-      }));
+      const dateGroups = Array.from(grouped.entries())
+        .sort((a, b) => {
+          if (a[0] === "__sin_fecha__") return 1;
+          if (b[0] === "__sin_fecha__") return -1;
+          return new Date(b[0]).getTime() - new Date(a[0]).getTime();
+        })
+        .map(([key, rows]) => ({
+          key,
+          label: formatDateLabel(key === "__sin_fecha__" ? null : key),
+          rows: rows.sort((a, b) => formatTime(b.matchTime).localeCompare(formatTime(a.matchTime))),
+        }));
+
+      return {
+        phase,
+        meta: PHASE_META[phase],
+        count: phaseRows.length,
+        dateGroups,
+      };
+    }).filter((group) => group.count > 0);
   }, [filteredMatches]);
 
   return (
@@ -350,13 +373,17 @@ const TournamentResultsView = ({
         <p className="text-sm text-[hsl(var(--text-subtle))]">Resultados por juego, con acceso rápido a detalle completo.</p>
       )}
 
-      <div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-4 xl:grid-cols-7">
+      <div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-4 xl:grid-cols-8">
         <div className="rounded-lg border bg-[hsl(var(--surface-1))] px-2 py-2">
           <p className="text-[hsl(var(--text-subtle))]">Partidos</p>
           <p className="text-sm font-semibold">{summary.playedMatches}</p>
         </div>
         <div className="rounded-lg border bg-[hsl(var(--surface-1))] px-2 py-2">
           <p className="text-[hsl(var(--text-subtle))]">Con marcador</p>
+          <p className="text-sm font-semibold">{summary.matchesWithScore}</p>
+        </div>
+        <div className="rounded-lg border bg-[hsl(var(--surface-1))] px-2 py-2">
+          <p className="text-[hsl(var(--text-subtle))]">Boxscore</p>
           <p className="text-sm font-semibold">{summary.matchesWithStats}</p>
         </div>
         <div className="rounded-lg border bg-[hsl(var(--surface-1))] px-2 py-2">
@@ -376,12 +403,12 @@ const TournamentResultsView = ({
           <p className="text-sm font-semibold">{playoffMatches}</p>
         </div>
         <div className="rounded-lg border border-[#fb7185]/18 bg-[linear-gradient(180deg,rgba(251,113,133,0.1),rgba(251,113,133,0.03))] px-2 py-2">
-          <p className="text-[#be123c] dark:text-[#fda4af]">Finals</p>
+          <p className="text-[#be123c] dark:text-[#fda4af]">Finales</p>
           <p className="text-sm font-semibold">{finalsMatches}</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 rounded-lg border bg-[hsl(var(--surface-1))] p-2 sm:grid-cols-2 lg:grid-cols-5 sm:p-3">
+      <div className="grid grid-cols-1 gap-2 rounded-lg border bg-[hsl(var(--surface-1))] p-2 sm:grid-cols-2 lg:grid-cols-6 sm:p-3">
         <AppSelect
           value={filters.team ?? ""}
           onChange={(event) => setFilters((prev) => ({ ...prev, team: event.target.value || null }))}
@@ -419,6 +446,19 @@ const TournamentResultsView = ({
           <option value="next7">Próximos 7 días</option>
         </AppSelect>
 
+        <AppSelect
+          value={filters.phase}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, phase: event.target.value as ViewerResultsFilters["phase"] }))
+          }
+          className="input-base h-10"
+        >
+          <option value="all">Todas las fases</option>
+          <option value="regular">Regular</option>
+          <option value="playoffs">Playoffs</option>
+          <option value="finals">Finales</option>
+        </AppSelect>
+
         <input
           type="date"
           value={filters.date ?? ""}
@@ -452,16 +492,27 @@ const TournamentResultsView = ({
         </div>
       ) : (
         <div className="space-y-4">
-          {groupedResults.map((group) => (
-            <article key={group.key} className="app-card overflow-hidden">
-              <div className="flex items-center justify-between gap-2 border-b bg-[hsl(var(--surface-2))] px-3 py-2.5">
-                <h3 className="text-sm font-semibold capitalize">{group.label}</h3>
-                <span className="text-xs text-[hsl(var(--text-subtle))]">{group.rows.length} juego(s)</span>
+          {groupedResults.map((phaseGroup) => (
+            <section key={phaseGroup.phase} className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <span
+                  className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${phaseGroup.meta.className}`}
+                >
+                  {phaseGroup.meta.label}
+                </span>
+                <span className="text-xs text-[hsl(var(--text-subtle))]">{phaseGroup.count} juego(s)</span>
               </div>
 
-              <div className="divide-y">
-                {group.rows.map((match) => {
-                  const hasScore = match.hasStats;
+              {phaseGroup.dateGroups.map((group) => (
+                <article key={`${phaseGroup.phase}-${group.key}`} className="app-card overflow-hidden">
+                  <div className="flex items-center justify-between gap-2 border-b bg-[hsl(var(--surface-2))] px-3 py-2.5">
+                    <h3 className="text-sm font-semibold capitalize">{group.label}</h3>
+                    <span className="text-xs text-[hsl(var(--text-subtle))]">{group.rows.length} juego(s)</span>
+                  </div>
+
+                  <div className="divide-y">
+                    {group.rows.map((match) => {
+                      const hasScore = match.hasScore;
                   const winnerIsA = match.winnerTeam === match.teamA;
                   const winnerIsB = match.winnerTeam === match.teamB;
                   const expanded = expandedMatchId === match.matchId;
@@ -500,6 +551,12 @@ const TournamentResultsView = ({
                       {hasScore ? (
                         <p className="mt-1 text-xs text-[hsl(var(--text-subtle))]">
                           Total del partido: {match.teamAPoints + match.teamBPoints} pts
+                        </p>
+                      ) : null}
+
+                      {match.winnerTeam && !match.hasStats ? (
+                        <p className="mt-1 text-xs font-medium text-[hsl(var(--text-subtle))]">
+                          {match.resultNote ?? "Sin boxscore registrado."}
                         </p>
                       ) : null}
 
@@ -545,6 +602,11 @@ const TournamentResultsView = ({
                               <p className="text-[hsl(var(--text-subtle))]">
                                 Ganador: <span className="font-semibold text-[hsl(var(--foreground))]">{match.winnerTeam ?? "Por definir"}</span>
                               </p>
+                              {!match.hasStats ? (
+                                <p className="text-[hsl(var(--text-subtle))]">
+                                  {match.resultNote ?? "Sin boxscore registrado."}
+                                </p>
+                              ) : null}
 
                               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                 <div className="border bg-[hsl(var(--surface-1))] px-2 py-2">
@@ -579,7 +641,9 @@ const TournamentResultsView = ({
                   );
                 })}
               </div>
-            </article>
+                </article>
+              ))}
+            </section>
           ))}
         </div>
       )}
@@ -608,6 +672,7 @@ const MatchDetailFullscreen = ({
   onReload: () => void;
 }) => {
   const grouped = boxscoreState?.rows ? groupBoxscoreBySide(boxscoreState.rows) : null;
+  const hasBoxscoreRows = Boolean(grouped && (grouped.A.length > 0 || grouped.B.length > 0 || grouped.U.length > 0));
   const phaseMeta = PHASE_META[match.phase];
 
   return (
@@ -618,7 +683,7 @@ const MatchDetailFullscreen = ({
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
               <p className="truncate text-sm font-semibold sm:text-base">{match.teamA}</p>
               <p className="text-lg font-black tabular-nums sm:text-2xl">
-                {match.hasStats ? `${match.teamAPoints} - ${match.teamBPoints}` : "-- - --"}
+                {match.hasScore ? `${match.teamAPoints} - ${match.teamBPoints}` : "-- - --"}
               </p>
               <p className="truncate text-right text-sm font-semibold sm:text-base">{match.teamB}</p>
             </div>
@@ -653,9 +718,16 @@ const MatchDetailFullscreen = ({
             <p className="text-xs text-[hsl(var(--text-subtle))]">
               Ganador: <span className="font-semibold text-[hsl(var(--foreground))]">{match.winnerTeam ?? "Por definir"}</span>
             </p>
-            <p className="mt-1 text-xs text-[hsl(var(--text-subtle))]">
-              Total del partido: <span className="font-semibold text-[hsl(var(--foreground))]">{match.teamAPoints + match.teamBPoints}</span> pts
-            </p>
+            {match.hasScore ? (
+              <p className="mt-1 text-xs text-[hsl(var(--text-subtle))]">
+                Total del partido: <span className="font-semibold text-[hsl(var(--foreground))]">{match.teamAPoints + match.teamBPoints}</span> pts
+              </p>
+            ) : null}
+            {!match.hasStats ? (
+              <p className="mt-1 text-xs text-[hsl(var(--text-subtle))]">
+                {match.resultNote ?? "Sin boxscore registrado."}
+              </p>
+            ) : null}
           </section>
 
           {boxscoreState?.loading ? (
@@ -667,7 +739,7 @@ const MatchDetailFullscreen = ({
               </div>
               <button className="btn-secondary" onClick={onReload}>Reintentar</button>
             </div>
-          ) : grouped ? (
+          ) : hasBoxscoreRows && grouped ? (
             <div className="space-y-4">
               <TeamBoxscoreTable title={match.teamA} rows={grouped.A} />
               <TeamBoxscoreTable title={match.teamB} rows={grouped.B} />

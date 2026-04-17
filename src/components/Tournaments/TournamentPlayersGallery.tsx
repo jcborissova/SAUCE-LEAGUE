@@ -178,17 +178,18 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({
 
   const openPlayerDetail = async (
     playerId: number,
+    selectedPhase: TournamentPhaseFilter = statsPhase,
     options?: { forceRefresh?: boolean }
   ) => {
     const requestId = playerDetailRequestRef.current + 1;
     playerDetailRequestRef.current = requestId;
 
-    setLastSelectedPlayer({ playerId, phase: statsPhase });
+    setLastSelectedPlayer({ playerId, phase: selectedPhase });
     setPlayerDetailOpen(true);
     setPlayerDetailError(null);
     setPlayerDetailLoading(true);
 
-    const cacheKey = `${tournamentId}:${statsPhase}:${playerId}`;
+    const cacheKey = `${tournamentId}:${selectedPhase}:${playerId}`;
     const useCache = !options?.forceRefresh;
 
     if (useCache) {
@@ -205,12 +206,12 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({
         getTournamentPlayerDetailFast({
           tournamentId,
           playerId,
-          phase: statsPhase,
+          phase: selectedPhase,
           forceRefresh: Boolean(options?.forceRefresh),
         }),
-        phaseLines.length > 0 && !options?.forceRefresh
+        selectedPhase === statsPhase && phaseLines.length > 0 && !options?.forceRefresh
           ? Promise.resolve(phaseLines)
-          : getTournamentPlayerLinesFast(tournamentId, statsPhase),
+          : getTournamentPlayerLinesFast(tournamentId, selectedPhase),
       ]);
 
       const games = playerDetailData.games.map((item) => ({
@@ -219,7 +220,7 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({
       }));
 
       const nextDetail: PlayerAnalyticsDetail = {
-        phase: statsPhase,
+        phase: selectedPhase,
         line: playerDetailData.line,
         games,
         mvpRow: null,
@@ -229,7 +230,9 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({
       playerDetailCacheRef.current.set(cacheKey, nextDetail);
 
       if (playerDetailRequestRef.current !== requestId) return;
-      setPhaseLines(lines);
+      if (selectedPhase === statsPhase) {
+        setPhaseLines(lines);
+      }
       setPlayerDetail(nextDetail);
     } catch (error) {
       if (playerDetailRequestRef.current !== requestId) return;
@@ -246,7 +249,7 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({
 
   const retryPlayerDetail = () => {
     if (!lastSelectedPlayer) return;
-    void openPlayerDetail(lastSelectedPlayer.playerId, { forceRefresh: true });
+    void openPlayerDetail(lastSelectedPlayer.playerId, lastSelectedPlayer.phase, { forceRefresh: true });
   };
 
   const query = normalizeText(searchTerm);
@@ -504,6 +507,12 @@ const TournamentPlayersGallery: React.FC<TournamentPlayersGalleryProps> = ({
         loading={playerDetailLoading}
         errorMessage={playerDetailError}
         detail={playerDetail}
+        selectedPhase={lastSelectedPlayer?.phase ?? playerDetail?.phase ?? statsPhase}
+        onPhaseChange={(selectedPhase) => {
+          const playerId = lastSelectedPlayer?.playerId ?? playerDetail?.line.playerId;
+          if (!playerId) return;
+          void openPlayerDetail(playerId, selectedPhase);
+        }}
         onClose={() => setPlayerDetailOpen(false)}
         onRetry={retryPlayerDetail}
       />
