@@ -44,6 +44,203 @@ const readableDate = (date: string | null, time: string | null) => {
   return `${formattedDate} · ${time.slice(0, 5)}`;
 };
 
+const normalizeName = (value: string | null | undefined) => value?.trim().toLowerCase() ?? "";
+
+const roundDisplayName = (roundName: string) => {
+  if (normalizeName(roundName) === "finals") return "Finales";
+  if (normalizeName(roundName) === "round 1") return "Semifinales";
+  return roundName;
+};
+
+const matchupDisplayName = (seriesItem: PlayoffSeriesRow) => {
+  if (seriesItem.matchupKey === "finals") return "Finales";
+  if (seriesItem.matchupKey === "semi_1v4") return "Semi 1v4";
+  if (seriesItem.matchupKey === "semi_2v3") return "Semi 2v3";
+  return seriesItem.matchupKey
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+};
+
+const teamWinsForSide = (seriesItem: PlayoffSeriesRow, side: "A" | "B") =>
+  side === "A" ? seriesItem.winsA : seriesItem.winsB;
+
+const teamNameForSide = (seriesItem: PlayoffSeriesRow, side: "A" | "B") =>
+  side === "A" ? seriesItem.teamAName : seriesItem.teamBName;
+
+const teamIdForSide = (seriesItem: PlayoffSeriesRow, side: "A" | "B") =>
+  side === "A" ? seriesItem.teamAId : seriesItem.teamBId;
+
+const seedForSide = (seriesItem: PlayoffSeriesRow, side: "A" | "B") =>
+  side === "A" ? seriesItem.seedA : seriesItem.seedB;
+
+const getLeaderName = (seriesItem: PlayoffSeriesRow) => {
+  if (seriesItem.winnerName) return seriesItem.winnerName;
+  if (seriesItem.winsA === seriesItem.winsB) return null;
+  return seriesItem.winsA > seriesItem.winsB ? seriesItem.teamAName : seriesItem.teamBName;
+};
+
+const teamInitials = (name: string | null | undefined) => {
+  const parts = (name ?? "TBD").trim().split(/\s+/).filter(Boolean);
+  const usefulParts = parts[0]?.toLowerCase() === "team" ? parts.slice(1) : parts;
+  return (usefulParts.length > 0 ? usefulParts : parts)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+};
+
+const isWinnerSide = (seriesItem: PlayoffSeriesRow, side: "A" | "B") => {
+  const teamId = teamIdForSide(seriesItem, side);
+  const teamName = teamNameForSide(seriesItem, side);
+  if (seriesItem.winnerTeamId != null && teamId != null) return seriesItem.winnerTeamId === teamId;
+  return Boolean(seriesItem.winnerName && normalizeName(seriesItem.winnerName) === normalizeName(teamName));
+};
+
+const isLeaderSide = (seriesItem: PlayoffSeriesRow, side: "A" | "B") => {
+  if (seriesItem.winnerName) return false;
+  return side === "A" ? seriesItem.winsA > seriesItem.winsB : seriesItem.winsB > seriesItem.winsA;
+};
+
+type BracketTeamRowProps = {
+  seriesItem: PlayoffSeriesRow;
+  side: "A" | "B";
+};
+
+const BracketTeamRow: React.FC<BracketTeamRowProps> = ({ seriesItem, side }) => {
+  const teamName = teamNameForSide(seriesItem, side) ?? "Por definir";
+  const seed = seedForSide(seriesItem, side);
+  const wins = teamWinsForSide(seriesItem, side);
+  const isWinner = isWinnerSide(seriesItem, side);
+  const isLeader = isLeaderSide(seriesItem, side);
+  const isMuted = Boolean(seriesItem.winnerName && !isWinner);
+  const badgeClass = isWinner || isLeader
+    ? "border-[#111827]/10 bg-[#111827] text-white dark:border-white/10 dark:bg-white dark:text-[#111827]"
+    : "border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] text-[hsl(var(--text-subtle))]";
+
+  return (
+    <div className={`flex h-12 items-center gap-3 ${isMuted ? "opacity-50 grayscale" : ""}`}>
+      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-[11px] font-black ${badgeClass}`}>
+        {teamInitials(teamName)}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          {seed ? (
+            <span className="text-xs font-semibold tabular-nums text-[hsl(var(--text-subtle))]">{seed}</span>
+          ) : null}
+          <p className={`truncate text-base font-black tracking-tight ${isWinner || isLeader ? "text-[hsl(var(--foreground))]" : "text-[hsl(var(--text-subtle))]"}`}>
+            {teamName.replace(/^Team\s+/i, "")}
+          </p>
+        </div>
+      </div>
+      <span className={`shrink-0 text-xl font-black tabular-nums ${isWinner || isLeader ? "text-[hsl(var(--foreground))]" : "text-[hsl(var(--text-subtle))]"}`}>
+        {wins}
+      </span>
+    </div>
+  );
+};
+
+type BracketSeriesCardProps = {
+  seriesItem: PlayoffSeriesRow;
+};
+
+const BracketSeriesCard: React.FC<BracketSeriesCardProps> = ({ seriesItem }) => {
+  return (
+    <article className="rounded-[16px] border-[3px] border-[#e5e7eb] bg-[hsl(var(--surface-1))] px-4 py-3 shadow-[0_8px_24px_-22px_rgba(15,23,42,0.48)] dark:border-white/10">
+      <div className="mb-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-subtle))]">
+          {matchupDisplayName(seriesItem)}
+        </p>
+      </div>
+
+      <div className="space-y-1">
+        <BracketTeamRow seriesItem={seriesItem} side="A" />
+        <BracketTeamRow seriesItem={seriesItem} side="B" />
+      </div>
+    </article>
+  );
+};
+
+const BracketConnector: React.FC<{ sourceCount: number }> = ({ sourceCount }) => (
+  <div className="relative hidden w-16 shrink-0 xl:block" aria-hidden="true">
+    {sourceCount > 1 ? (
+      <>
+        <span className="absolute left-0 top-[30%] h-px w-1/2 bg-[hsl(var(--border))]" />
+        <span className="absolute left-0 top-[70%] h-px w-1/2 bg-[hsl(var(--border))]" />
+        <span className="absolute left-1/2 top-[30%] h-[40%] w-px bg-[hsl(var(--border))]" />
+        <span className="absolute left-1/2 top-1/2 h-px w-1/2 bg-[hsl(var(--border))]" />
+      </>
+    ) : (
+      <span className="absolute left-0 right-0 top-1/2 h-px bg-[hsl(var(--border))]" />
+    )}
+    <span className="absolute right-0 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[#f59e0b]" />
+  </div>
+);
+
+const MobileBracketConnector: React.FC = () => (
+  <div className="flex justify-center py-1" aria-hidden="true">
+    <div className="flex h-9 flex-col items-center">
+      <span className="h-7 w-px bg-[hsl(var(--border))]" />
+      <span className="h-2 w-2 rounded-full bg-[#f59e0b]" />
+    </div>
+  </div>
+);
+
+const ChampionLane: React.FC<{ finalSeries: PlayoffSeriesRow | null }> = ({ finalSeries }) => {
+  const championName = finalSeries?.winnerName ?? null;
+  const leaderName = finalSeries ? getLeaderName(finalSeries) : null;
+
+  return (
+    <div className="w-[220px] shrink-0 xl:flex xl:min-h-[440px] xl:items-center">
+      <article className="rounded-[16px] border border-[#f59e0b]/26 bg-[linear-gradient(180deg,rgba(245,158,11,0.14),rgba(245,158,11,0.04))] px-4 py-4">
+        <div className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#f59e0b]/24 bg-[#f59e0b]/12 text-[#b45309] dark:text-[#fcd34d]">
+          <TrophyIcon className="h-5 w-5" />
+        </div>
+        <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#b45309] dark:text-[#fcd34d]">
+          {championName ? "Campeón" : "Camino al título"}
+        </p>
+        <p className="mt-1 text-lg font-semibold">
+          {championName ?? leaderName ?? "Por definir"}
+        </p>
+        {finalSeries ? (
+          <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
+            Finales · parcial {finalSeries.winsA}-{finalSeries.winsB}
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">Esperando clasificados.</p>
+        )}
+      </article>
+    </div>
+  );
+};
+
+const MobileChampionCard: React.FC<{ finalSeries: PlayoffSeriesRow | null }> = ({ finalSeries }) => {
+  const championName = finalSeries?.winnerName ?? null;
+  const leaderName = finalSeries ? getLeaderName(finalSeries) : null;
+
+  return (
+    <article className="rounded-[16px] border border-[#f59e0b]/26 bg-[linear-gradient(180deg,rgba(245,158,11,0.14),rgba(245,158,11,0.04))] px-4 py-4">
+      <div className="flex items-center gap-3">
+        <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#f59e0b]/24 bg-[#f59e0b]/12 text-[#b45309] dark:text-[#fcd34d]">
+          <TrophyIcon className="h-5 w-5" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#b45309] dark:text-[#fcd34d]">
+            {championName ? "Campeón" : "Camino al título"}
+          </p>
+          <p className="truncate text-lg font-semibold">{championName ?? leaderName ?? "Por definir"}</p>
+          {finalSeries ? (
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">
+              Finales · parcial {finalSeries.winsA}-{finalSeries.winsB}
+            </p>
+          ) : (
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">Esperando clasificados.</p>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+};
+
 const TournamentPlayoffOverview: React.FC<Props> = ({ tournamentId, embedded = false }) => {
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<TournamentSettings | null>(null);
@@ -93,6 +290,22 @@ const TournamentPlayoffOverview: React.FC<Props> = ({ tournamentId, embedded = f
     () => series.filter((item) => item.winnerName).length,
     [series]
   );
+  const roundColumns = useMemo(
+    () =>
+      Object.entries(groupedSeries)
+        .sort((a, b) => Number(a[0]) - Number(b[0]))
+        .map(([, roundSeries]) => ({
+          roundOrder: roundSeries[0].roundOrder,
+          roundName: roundDisplayName(roundSeries[0].roundName),
+          series: roundSeries,
+        })),
+    [groupedSeries]
+  );
+  const finalSeries = useMemo(() => {
+    if (roundColumns.length === 0) return null;
+    const lastRound = roundColumns[roundColumns.length - 1];
+    return lastRound.series[0] ?? null;
+  }, [roundColumns]);
 
   if (loading) {
     return (
@@ -186,6 +399,109 @@ const TournamentPlayoffOverview: React.FC<Props> = ({ tournamentId, embedded = f
         </div>
       )}
 
+      {!error && series.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-subtle))]">
+                Bracket
+              </p>
+              <h4 className="text-lg font-semibold">Camino a la final</h4>
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] px-3 py-1 text-xs font-semibold text-[hsl(var(--text-subtle))]">
+              <TrophyIcon className="h-3.5 w-3.5 text-[#f59e0b]" />
+              {finalSeries?.winnerName ? `Campeón: ${finalSeries.winnerName}` : "Final en progreso"}
+            </div>
+          </div>
+
+          <div className="space-y-4 rounded-[18px] border border-[hsl(var(--border)/0.82)] bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.12),transparent_32%),hsl(var(--surface-2)/0.5)] p-3 sm:p-4 xl:hidden">
+            {roundColumns.map((round, index) => {
+              return (
+                <React.Fragment key={round.roundOrder}>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-subtle))]">
+                          Ronda {round.roundOrder}
+                        </p>
+                        <h5 className="truncate text-base font-semibold">{round.roundName}</h5>
+                      </div>
+                      <span className="shrink-0 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] px-2.5 py-1 text-[11px] font-semibold text-[hsl(var(--text-subtle))]">
+                        {round.series.length} {round.series.length === 1 ? "serie" : "series"}
+                      </span>
+                    </div>
+                    <div className="space-y-3">
+                      {round.series.map((item) => (
+                        <BracketSeriesCard
+                          key={item.id}
+                          seriesItem={item}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  {index < roundColumns.length - 1 ? <MobileBracketConnector /> : null}
+                </React.Fragment>
+              );
+            })}
+            <MobileBracketConnector />
+            <MobileChampionCard finalSeries={finalSeries} />
+          </div>
+
+          <div className="hidden overflow-x-auto rounded-[18px] border border-[hsl(var(--border)/0.82)] bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.12),transparent_32%),hsl(var(--surface-2)/0.5)] xl:block">
+            <div
+              className="p-4 sm:p-5"
+              style={{ minWidth: `${Math.max(920, roundColumns.length * 380 + 260)}px` }}
+            >
+              <div className="flex items-stretch">
+                {roundColumns.map((round, index) => {
+                  return (
+                    <React.Fragment key={round.roundOrder}>
+                      <div className="w-[340px] shrink-0">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-subtle))]">
+                              Ronda {round.roundOrder}
+                            </p>
+                            <h5 className="text-base font-semibold">{round.roundName}</h5>
+                          </div>
+                          <span className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] px-2.5 py-1 text-[11px] font-semibold text-[hsl(var(--text-subtle))]">
+                            {round.series.length} {round.series.length === 1 ? "serie" : "series"}
+                          </span>
+                        </div>
+                        <div className={`flex min-h-[440px] flex-col ${round.series.length === 1 ? "justify-center" : "justify-between gap-6"}`}>
+                          {round.series.map((item) => (
+                            <BracketSeriesCard
+                              key={item.id}
+                              seriesItem={item}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      {index < roundColumns.length - 1 ? (
+                        <BracketConnector sourceCount={round.series.length} />
+                      ) : null}
+                    </React.Fragment>
+                  );
+                })}
+                <BracketConnector sourceCount={1} />
+                <ChampionLane finalSeries={finalSeries} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!error && series.length > 0 && (
+        <div className="flex flex-wrap items-end justify-between gap-3 pt-2">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-subtle))]">
+              Detalle
+            </p>
+            <h4 className="text-lg font-semibold">Juegos por serie</h4>
+          </div>
+        </div>
+      )}
+
       {Object.entries(groupedSeries)
         .sort((a, b) => Number(a[0]) - Number(b[0]))
         .map(([, roundSeries]) => (
@@ -195,7 +511,7 @@ const TournamentPlayoffOverview: React.FC<Props> = ({ tournamentId, embedded = f
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-subtle))]">
                   Ronda {roundSeries[0].roundOrder}
                 </p>
-                <h4 className="text-lg font-semibold">{roundSeries[0].roundName}</h4>
+                <h4 className="text-lg font-semibold">{roundDisplayName(roundSeries[0].roundName)}</h4>
               </div>
               <div className="inline-flex items-center gap-2 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-1))] px-3 py-1 text-xs font-semibold text-[hsl(var(--text-subtle))]">
                 <BoltIcon className="h-3.5 w-3.5 text-[#f59e0b]" />
@@ -213,7 +529,7 @@ const TournamentPlayoffOverview: React.FC<Props> = ({ tournamentId, embedded = f
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-subtle))]">
-                          {item.matchupKey.split("_").join(" ")}
+                          {matchupDisplayName(item)}
                         </p>
                         <p className="mt-1 text-base font-semibold">
                           {item.teamAName ?? "Por definir"} vs {item.teamBName ?? "Por definir"}
@@ -315,9 +631,19 @@ const TournamentPlayoffOverview: React.FC<Props> = ({ tournamentId, embedded = f
                               game.scheduledTime ?? game.match?.matchTime ?? null
                             )}
                           </p>
+                          {game.match?.hasScore ? (
+                            <p className="mt-1 text-xs font-semibold text-[hsl(var(--foreground))]">
+                              Marcador: {game.match.teamAPoints} - {game.match.teamBPoints}
+                            </p>
+                          ) : null}
                           {game.match?.winnerTeam ? (
                             <p className="mt-1 text-xs font-semibold text-[#15803d] dark:text-[#86efac]">
                               Ganador: {game.match.winnerTeam}
+                            </p>
+                          ) : null}
+                          {game.match?.winnerTeam && !game.match.hasStats ? (
+                            <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
+                              {game.match.resultNote ?? "Sin boxscore registrado."}
                             </p>
                           ) : null}
                         </div>

@@ -331,6 +331,7 @@ const loadTopScorersQuick = async (tournamentId: string): Promise<TournamentHome
 const isCompletedResult = (match: TournamentResultMatchOverview) => Boolean(match.winnerTeam);
 
 const hasScoredResult = (match: TournamentResultMatchOverview) =>
+  match.hasScore ||
   Number.isFinite(match.teamAPoints) &&
   Number.isFinite(match.teamBPoints) &&
   (match.teamAPoints > 0 || match.teamBPoints > 0);
@@ -1445,10 +1446,7 @@ const buildDailySpotlight = (
   });
 
   if (latestResult) {
-    const hasScore =
-      Number.isFinite(latestResult.teamAPoints) &&
-      Number.isFinite(latestResult.teamBPoints) &&
-      (latestResult.teamAPoints > 0 || latestResult.teamBPoints > 0);
+    const hasScore = hasScoredResult(latestResult);
     const margin = hasScore ? Math.abs(latestResult.teamAPoints - latestResult.teamBPoints) : 0;
     const winningTeam = hasScore
       ? latestResult.teamAPoints > latestResult.teamBPoints

@@ -137,6 +137,8 @@ const toSafeText = (value: unknown): string => {
   return String(value).trim();
 };
 
+const DEFAULT_NO_BOXSCORE_NOTE = "No hay boxscore registrado para este juego.";
+
 const toTournamentActivityType = (value: unknown): TournamentActivityType => {
   if (
     value === "match_result_updated" ||
@@ -165,6 +167,16 @@ const isStatementTimeoutError = (message: string): boolean =>
 const isMissingTeamPlayersTournamentColumnError = (message: string): boolean => {
   const normalized = message.toLowerCase();
   return normalized.includes("team_players") && normalized.includes("tournament_id");
+};
+
+const isMissingManualScoreColumnError = (message: string): boolean => {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("team_a_manual_points") ||
+    normalized.includes("team_b_manual_points") ||
+    normalized.includes("result_note") ||
+    normalized.includes("has_score")
+  );
 };
 
 type QueryError = { message: string } | null;
@@ -2621,18 +2633,43 @@ export const getPlayoffState = async (
   }
 
   const matchIds = (gamesData ?? []).map((game) => game.match_id);
-  const { data: matchesData } = await supabase
-    .from("matches")
-    .select("id, team_a, team_b, winner_team, match_date, match_time")
-    .in("id", matchIds.length > 0 ? matchIds : [0]);
+  const [{ data: matchesData }, scoreRows] = await Promise.all([
+    supabase
+      .from("matches")
+      .select("id, team_a, team_b, winner_team, match_date, match_time")
+      .in("id", matchIds.length > 0 ? matchIds : [0]),
+    (async () => {
+      const { data, error } = await supabase
+        .from("tournament_match_scoreboard")
+        .select("match_id, team_a_points, team_b_points, has_score, has_stats, result_note")
+        .in("match_id", matchIds.length > 0 ? matchIds : [0]);
+
+      if (!error && data) return data as Array<Record<string, unknown>>;
+
+      if (error && isMissingManualScoreColumnError(error.message)) {
+        const { data: legacyData, error: legacyError } = await supabase
+          .from("tournament_match_scoreboard")
+          .select("match_id, team_a_points, team_b_points, has_stats")
+          .in("match_id", matchIds.length > 0 ? matchIds : [0]);
+
+        if (!legacyError && legacyData) return legacyData as Array<Record<string, unknown>>;
+      }
+
+      return [] as Array<Record<string, unknown>>;
+    })(),
+  ]);
 
   const teamNameById = new Map((teamsData ?? []).map((team) => [team.id, team.name]));
   const matchById = new Map((matchesData ?? []).map((match) => [match.id, match]));
+  const scoreByMatchId = new Map<number, Record<string, unknown>>(
+    (scoreRows ?? []).map((row) => [toNumber(row.match_id), row])
+  );
 
   const gamesBySeries = new Map<number, PlayoffGameRow[]>();
   for (const game of gamesData ?? []) {
     const list = gamesBySeries.get(game.series_id) ?? [];
     const match = matchById.get(game.match_id);
+    const score = scoreByMatchId.get(toNumber(game.match_id));
 
     list.push({
       id: game.id,
@@ -2649,6 +2686,11 @@ export const getPlayoffState = async (
             teamA: match.team_a,
             teamB: match.team_b,
             winnerTeam: match.winner_team,
+            teamAPoints: toNumber(score?.team_a_points),
+            teamBPoints: toNumber(score?.team_b_points),
+            hasScore: score ? ("has_score" in score ? Boolean(score.has_score) : Boolean(score.has_stats)) : false,
+            hasStats: score ? Boolean(score.has_stats) : false,
+            resultNote: score ? toSafeText(score.result_note) || null : null,
             matchDate: match.match_date,
             matchTime: match.match_time,
           }
@@ -3017,6 +3059,109 @@ export const saveMatchStats = async (payload: {
   clearTournamentAnalyticsCache(match.tournament_id);
 };
 
+export const saveMatchScoreSummary = async (payload: {
+  matchId: number;
+  winnerTeam: string;
+  teamAPoints: number | null;
+  teamBPoints: number | null;
+  resultNote?: string | null;
+}): Promise<void> => {
+  const { data: match, error: matchError } = await supabase
+    .from("matches")
+    .select("id, tournament_id, team_a, team_b")
+    .eq("id", payload.matchId)
+    .single();
+
+  if (matchError || !match) {
+    throw new Error(matchError?.message ?? "No se encontró el partido.");
+  }
+
+  const teamA = toSafeText(match.team_a);
+  const teamB = toSafeText(match.team_b);
+  const winnerTeam = toSafeText(payload.winnerTeam);
+
+  if (!winnerTeam || (winnerTeam !== teamA && winnerTeam !== teamB)) {
+    throw new Error("Selecciona un ganador válido para este partido.");
+  }
+
+  const hasScore = payload.teamAPoints !== null || payload.teamBPoints !== null;
+  if (hasScore && (payload.teamAPoints === null || payload.teamBPoints === null)) {
+    throw new Error("Para guardar totales, completa los puntos de ambos equipos.");
+  }
+
+  const teamAPoints =
+    payload.teamAPoints === null ? null : Math.max(0, Math.floor(toNumber(payload.teamAPoints)));
+  const teamBPoints =
+    payload.teamBPoints === null ? null : Math.max(0, Math.floor(toNumber(payload.teamBPoints)));
+
+  if (teamAPoints !== null && teamBPoints !== null) {
+    const winnerPoints = winnerTeam === teamA ? teamAPoints : teamBPoints;
+    const loserPoints = winnerTeam === teamA ? teamBPoints : teamAPoints;
+
+    if (winnerPoints <= loserPoints) {
+      throw new Error("El marcador total no coincide con el equipo ganador.");
+    }
+  }
+
+  const note = toSafeText(payload.resultNote) || DEFAULT_NO_BOXSCORE_NOTE;
+
+  const { error: updateError } = await supabase
+    .from("matches")
+    .update({
+      winner_team: winnerTeam,
+      team_a_manual_points: teamAPoints,
+      team_b_manual_points: teamBPoints,
+      result_note: note,
+    })
+    .eq("id", payload.matchId);
+
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
+
+  const { error: clearPlayedError } = await supabase
+    .from("match_players")
+    .update({ played: false })
+    .eq("match_id", payload.matchId);
+
+  if (clearPlayedError) {
+    throw new Error(clearPlayedError.message);
+  }
+
+  const { error: deleteStatsError } = await supabase
+    .from("player_stats")
+    .delete()
+    .eq("match_id", payload.matchId);
+
+  if (deleteStatsError) {
+    throw new Error(deleteStatsError.message);
+  }
+
+  const { error: syncError } = await supabase.rpc("sync_playoff_series_from_match", {
+    p_match_id: payload.matchId,
+  });
+
+  if (syncError && syncError.code !== "PGRST202") {
+    throw new Error(syncError.message);
+  }
+
+  const tournamentId = toSafeText(match.tournament_id);
+  if (tournamentId) {
+    const { error: refreshTotalsCacheError } = await supabase.rpc(
+      "refresh_tournament_player_totals_cache",
+      {
+        p_tournament_id: tournamentId,
+      }
+    );
+
+    if (refreshTotalsCacheError && refreshTotalsCacheError.code !== "PGRST202") {
+      console.warn("No se pudo refrescar el cache SQL de totales de jugadores.", refreshTotalsCacheError);
+    }
+
+    clearTournamentAnalyticsCache(tournamentId);
+  }
+};
+
 export const listTournamentPlayers = async (
   tournamentId: string,
   phase: TournamentPhaseFilter = "all"
@@ -3234,7 +3379,9 @@ const toMatchOverview = (row: Record<string, unknown>): TournamentResultMatchOve
   winnerTeam: row.winner_team ? String(row.winner_team) : null,
   teamAPoints: toNumber(row.team_a_points),
   teamBPoints: toNumber(row.team_b_points),
+  hasScore: "has_score" in row ? Boolean(row.has_score) : Boolean(row.has_stats),
   hasStats: Boolean(row.has_stats),
+  resultNote: toSafeText(row.result_note) || null,
 });
 
 const resolveTournamentMatchPhase = (
@@ -3314,7 +3461,7 @@ const loadResultsOverviewFromScoreboardView = async (
     supabase
       .from("tournament_match_scoreboard")
       .select(
-        "tournament_id, match_id, match_date, match_time, team_a, team_b, winner_team, team_a_points, team_b_points, has_stats"
+        "tournament_id, match_id, match_date, match_time, team_a, team_b, winner_team, team_a_points, team_b_points, has_score, has_stats, result_note"
       )
       .eq("tournament_id", tournamentId)
       .order("match_date", { ascending: false })
@@ -3322,6 +3469,24 @@ const loadResultsOverviewFromScoreboardView = async (
   ]);
 
   if (error || !data) {
+    if (error && isMissingManualScoreColumnError(error.message)) {
+      const { data: legacyData, error: legacyError } = await supabase
+        .from("tournament_match_scoreboard")
+        .select(
+          "tournament_id, match_id, match_date, match_time, team_a, team_b, winner_team, team_a_points, team_b_points, has_stats"
+        )
+        .eq("tournament_id", tournamentId)
+        .order("match_date", { ascending: false })
+        .order("match_time", { ascending: false });
+
+      if (!legacyError && legacyData) {
+        return applyTournamentMatchPhases(
+          (legacyData as Record<string, unknown>[]).map((row) => toMatchOverview(row)),
+          phaseByMatchId
+        );
+      }
+    }
+
     return null;
   }
 
@@ -3418,7 +3583,9 @@ const loadResultsOverviewFallback = async (
         winnerTeam: match.winner_team ? String(match.winner_team) : null,
         teamAPoints: score.teamA,
         teamBPoints: score.teamB,
+        hasScore: score.hasStats,
         hasStats: score.hasStats,
+        resultNote: null,
       };
     }),
     phaseByMatchId
@@ -3701,12 +3868,17 @@ export const getTournamentResultsSummary = (
   matches: TournamentResultMatchOverview[]
 ): TournamentResultSummary => {
   const playedMatches = matches.length;
+  const matchesWithScore = matches.filter((match) => match.hasScore ?? match.hasStats).length;
   const matchesWithStats = matches.filter((match) => match.hasStats).length;
-  const totalPoints = matches.reduce((sum, match) => sum + match.teamAPoints + match.teamBPoints, 0);
-  const avgPoints = playedMatches > 0 ? round2(totalPoints / playedMatches) : 0;
+  const totalPoints = matches.reduce(
+    (sum, match) => (match.hasScore ?? match.hasStats ? sum + match.teamAPoints + match.teamBPoints : sum),
+    0
+  );
+  const avgPoints = matchesWithScore > 0 ? round2(totalPoints / matchesWithScore) : 0;
 
   return {
     playedMatches,
+    matchesWithScore,
     matchesWithStats,
     totalPoints,
     avgPoints,

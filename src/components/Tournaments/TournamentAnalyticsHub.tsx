@@ -817,6 +817,12 @@ const TournamentAnalyticsHub: React.FC<{ tournamentId: string; embedded?: boolea
         loading={playerDetailLoading}
         errorMessage={playerDetailError}
         detail={playerDetail}
+        selectedPhase={lastSelectedPlayer?.phase ?? playerDetail?.phase ?? globalPhase}
+        onPhaseChange={(phase) => {
+          const playerId = lastSelectedPlayer?.playerId ?? playerDetail?.line.playerId;
+          if (!playerId) return;
+          void openPlayerDetail(playerId, phase);
+        }}
         onClose={() => setPlayerDetailOpen(false)}
         onRetry={handleRetryPlayerDetail}
       />

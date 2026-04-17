@@ -1,4 +1,5 @@
 import type {
+  TournamentPhaseFilter,
   ViewerFollowState,
   ViewerMatchFilters,
   ViewerMatchStatusFilter,
@@ -12,6 +13,7 @@ export const VIEWER_SELECTED_PLAYER_BY_TOURNAMENT_KEY =
   "sauce-league:viewer:selected-player-by-tournament:v1";
 
 export type ViewerResultsFilters = ViewerMatchFilters & {
+  phase: TournamentPhaseFilter;
   date: string | null;
   hasScore: "all" | "with_score";
 };
@@ -29,6 +31,7 @@ const DEFAULT_MATCH_FILTERS: ViewerMatchFilters = {
 
 const DEFAULT_RESULTS_FILTERS: ViewerResultsFilters = {
   ...DEFAULT_MATCH_FILTERS,
+  phase: "all",
   date: null,
   hasScore: "all",
 };
@@ -48,6 +51,9 @@ const sanitizeDate = (value: unknown): string | null => {
   const date = typeof value === "string" ? value.trim() : "";
   return date.length > 0 ? date : null;
 };
+
+const sanitizePhase = (value: unknown): TournamentPhaseFilter =>
+  value === "regular" || value === "playoffs" || value === "finals" ? value : "all";
 
 const readLocalStorage = (key: string): string | null => {
   if (typeof window === "undefined") return null;
@@ -201,6 +207,7 @@ const sanitizeResultsFilters = (value: unknown): ViewerResultsFilters => {
     team: sanitizeTeam(source.team),
     status: sanitizeStatus(source.status),
     window: sanitizeWindow(source.window),
+    phase: sanitizePhase(source.phase),
     date: sanitizeDate(source.date),
     hasScore: source.hasScore === "with_score" ? "with_score" : "all",
   };

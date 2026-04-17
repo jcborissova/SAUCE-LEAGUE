@@ -97,6 +97,7 @@ const TournamentViewPage: React.FC = () => {
     team: null,
     status: "all",
     window: "all",
+    phase: "all",
     date: null,
     hasScore: "all",
   });

@@ -169,6 +169,11 @@ export type PlayoffGameRow = {
     teamA: string | null;
     teamB: string | null;
     winnerTeam: string | null;
+    teamAPoints: number;
+    teamBPoints: number;
+    hasScore: boolean;
+    hasStats: boolean;
+    resultNote: string | null;
     matchDate: string | null;
     matchTime: string | null;
   } | null;
@@ -238,7 +243,9 @@ export type TournamentResultMatchOverview = {
   winnerTeam: string | null;
   teamAPoints: number;
   teamBPoints: number;
+  hasScore: boolean;
   hasStats: boolean;
+  resultNote: string | null;
 };
 
 export type TournamentResultBoxscoreRow = {
@@ -266,6 +273,7 @@ export type TournamentResultBoxscoreRow = {
 
 export type TournamentResultSummary = {
   playedMatches: number;
+  matchesWithScore: number;
   matchesWithStats: number;
   totalPoints: number;
   avgPoints: number;

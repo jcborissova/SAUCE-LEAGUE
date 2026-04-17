@@ -36,11 +36,20 @@ type PlayerAnalyticsModalProps = {
   loading: boolean;
   errorMessage: string | null;
   detail: PlayerAnalyticsDetail | null;
+  selectedPhase?: TournamentPhaseFilter;
+  onPhaseChange?: (phase: TournamentPhaseFilter) => void;
   onClose: () => void;
   onRetry: () => void;
 };
 
 type TabKey = "summary" | "games";
+
+const PLAYER_DETAIL_PHASE_OPTIONS: Array<{ value: TournamentPhaseFilter; label: string }> = [
+  { value: "regular", label: "Regular" },
+  { value: "playoffs", label: "Semis" },
+  { value: "finals", label: "Finales" },
+  { value: "all", label: "Todos" },
+];
 
 const metricCardClassName =
   "player-analytics-metric-enter rounded-[10px] border border-[hsl(var(--border)/0.84)] bg-[linear-gradient(180deg,hsl(var(--surface-1)),hsl(var(--surface-2)/0.58))] px-2.5 py-2 shadow-[inset_0_1px_0_hsl(var(--surface-1)/0.86),0_12px_22px_-18px_hsl(var(--background)/0.8)]";
@@ -159,7 +168,7 @@ const formatDate = (value: string | null) => {
 
 const phaseLabel = (phase: TournamentPhaseFilter) => {
   if (phase === "regular") return "Temporada regular";
-  if (phase === "playoffs") return "Playoffs";
+  if (phase === "playoffs") return "Semis";
   if (phase === "finals") return "Finales";
   return "Todas las fases";
 };
@@ -175,6 +184,8 @@ const PlayerAnalyticsModal: React.FC<PlayerAnalyticsModalProps> = ({
   loading,
   errorMessage,
   detail,
+  selectedPhase,
+  onPhaseChange,
   onClose,
   onRetry,
 }) => {
@@ -313,6 +324,7 @@ const PlayerAnalyticsModal: React.FC<PlayerAnalyticsModalProps> = ({
   }, [detail]);
 
   const modalTitle = detail?.line.name ?? "Detalle del jugador";
+  const activePhase = selectedPhase ?? detail?.phase ?? "all";
   const modalSubtitle = detail
     ? `${detail.line.teamName ?? "Sin equipo"} • ${phaseLabel(detail.phase)}`
     : "Analítica individual";
@@ -400,6 +412,35 @@ const PlayerAnalyticsModal: React.FC<PlayerAnalyticsModalProps> = ({
           </button>
         }
       >
+        {onPhaseChange ? (
+          <div className="mb-4 rounded-[12px] border border-[hsl(var(--border)/0.86)] bg-[hsl(var(--surface-2)/0.66)] p-2">
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              {PLAYER_DETAIL_PHASE_OPTIONS.map((option) => {
+                const isActive = activePhase === option.value;
+
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      if (!isActive) onPhaseChange(option.value);
+                    }}
+                    disabled={loading && isActive}
+                    className={`min-h-[38px] rounded-[9px] px-3 py-2 text-xs font-bold transition ${
+                      isActive
+                        ? "bg-[hsl(var(--foreground))] text-[hsl(var(--background))] shadow-[0_10px_18px_-16px_hsl(var(--background)/0.9)]"
+                        : "border border-transparent text-[hsl(var(--text-subtle))] hover:border-[hsl(var(--border))] hover:bg-[hsl(var(--surface-1))] hover:text-[hsl(var(--text-strong))]"
+                    } ${loading && isActive ? "cursor-wait opacity-80" : ""}`.trim()}
+                    aria-pressed={isActive}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
         {loading ? (
           <div className="rounded-[10px] border bg-[hsl(var(--surface-2)/0.45)] p-4 text-sm text-[hsl(var(--muted-foreground))]">
             Cargando detalle del jugador...
